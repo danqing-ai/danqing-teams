@@ -1,0 +1,514 @@
+/*
+ * Apple 原生暗黑 — 全站最终层（色板 / 控件 / 布局气质 / 交互）
+ * 目标：观感接近 macOS / iOS 内置 App（设置、照片、音乐）
+ */
+
+html.dark {
+ --bg-primary: var(--dq-bg-page);
+ --bg-secondary: var(--dq-bg-base);
+ --bg-tertiary: var(--dq-fill-tertiary);
+ --bg-card: var(--dq-bg-elevated);
+ --text-primary: var(--dq-label-primary);
+ --text-secondary: var(--dq-label-secondary);
+ --text-muted: var(--dq-label-tertiary);
+ --border-color: var(--dq-border);
+ --primary: var(--dq-accent);
+}
+
+/* —— 壳层 —— */
+html.dark,
+html.dark body {
+ background-color: var(--dq-bg-page);
+}
+
+html.dark .main-container {
+ height: 100vh;
+ background: var(--dq-bg-page);
+}
+
+html.dark .app-main {
+ background-color: var(--dq-bg-page) !important;
+ background-image: none !important;
+ padding: 12px 16px 20px;
+ width: 100%;
+ max-width: none;
+ box-sizing: border-box;
+}
+
+@media (min-width: 1440px) {
+ html.dark .app-main {
+ padding-left: 24px;
+ padding-right: 24px;
+ }
+}
+
+html.dark .app-header {
+ padding-top: env(safe-area-inset-top, 0px);
+ background: var(--dq-glass-bar-bg-strong) !important;
+ border-bottom: 0.5px solid var(--dq-separator);
+ -webkit-backdrop-filter: var(--dq-glass-blur);
+ backdrop-filter: var(--dq-glass-blur);
+}
+
+html.dark .dq-top-nav-queue-btn.dq-btn {
+ border-radius: 10px;
+ font-weight: 500;
+}
+
+html.dark .brand-subtitle {
+ background: var(--dq-fill-control-hover);
+ color: var(--dq-label-secondary);
+}
+
+html.dark .dq-top-nav-brand-icon {
+ color: var(--dq-label-primary);
+}
+
+/* —— 业务页铺满 —— */
+html.dark .create-page,
+html.dark .gallery-page,
+html.dark .settings-page,
+html.dark .models-page {
+ width: 100%;
+ max-width: none;
+ margin: 0;
+ background-image: none !important;
+}
+
+/* —— 分组卡片（Settings / 创作） —— */
+html.dark .studio-surface-card.dq-surface-card,
+html.dark .settings-overview-card.dq-surface-card,
+html.dark .settings-side-card.dq-surface-card,
+html.dark .preview-panel .studio-surface-card.dq-surface-card {
+ background: var(--dq-bg-base) !important;
+ border: 0.5px solid var(--dq-separator) !important;
+ border-radius: var(--dq-radius-group) !important;
+ box-shadow: none !important;
+}
+
+html.dark .studio-surface-card.dq-surface-card:hover,
+html.dark .settings-overview-card.dq-surface-card:hover,
+html.dark .settings-side-card.dq-surface-card:hover {
+ border-color: var(--dq-separator) !important;
+ transform: none !important;
+ box-shadow: none !important;
+}
+
+html.dark .studio-surface-card .dq-surface-card__header {
+ border-bottom: 0.5px solid var(--dq-separator);
+ padding-bottom: 12px;
+}
+
+html.dark .settings-tab-panel.studio-surface-card.dq-surface-card {
+ background: transparent !important;
+ border: none !important;
+}
+
+html.dark .settings-tab-panel.studio-surface-card > .dq-surface-card__header {
+ padding-left: 0;
+ padding-right: 0;
+ border-bottom: none;
+}
+
+html.dark .dq-input-number__btn {
+ background: var(--dq-fill-control-hover) !important;
+ color: var(--dq-label-secondary) !important;
+}
+
+html.dark .dq-input-number__btn:not(:disabled):hover {
+ background: var(--dq-fill-control-strong) !important;
+ color: var(--dq-color-white) !important;
+}
+
+html.dark .param-display-value {
+ color: var(--dq-label-secondary) !important;
+ font-weight: 500;
+}
+
+html.dark .dq-segmented,
+html.dark .dq-work-segmented.dq-segmented {
+ padding: 2px;
+ border-radius: 10px;
+}
+
+html.dark .dq-work-segmented.dq-segmented .dq-segmented__item:not(.is-active) {
+ color: var(--dq-label-secondary);
+}
+
+html.dark .dq-work-segmented.dq-segmented .dq-segmented__item.is-active {
+ color: var(--dq-color-white);
+ font-weight: 600;
+}
+
+/* —— 按钮层级 —— */
+html.dark .dq-btn {
+ border-radius: 10px;
+ font-weight: 500;
+ transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+html.dark .studio-primary-cta.dq-btn--primary,
+html.dark .studio-primary-cta--simple.dq-btn--primary {
+ box-shadow: none !important;
+ border-radius: 12px;
+}
+
+html.dark .recent-actions .action-btn .dq-icon {
+ color: var(--dq-label-secondary);
+}
+
+/* —— 标签 / 提示 —— */
+html.dark .dq-tag {
+ border: none;
+ font-weight: 500;
+}
+
+html.dark .dq-tag.dq-tag--info.dq-tag--plain,
+html.dark .dq-tag.dq-tag--info {
+ background: var(--dq-tag-neutral-bg);
+ color: var(--dq-label-secondary);
+}
+
+html.dark .dq-tag.dq-tag--success {
+ background: var(--dq-success-surface-strong);
+ color: #5de070;
+}
+
+html.dark .dq-tag.dq-tag--warning {
+ background: var(--dq-warning-surface);
+ color: #ffb340;
+}
+
+html.dark .dq-tag.dq-tag--danger {
+ background: var(--dq-danger-surface);
+ color: #ff6b63;
+}
+
+html.dark .dq-tag.dq-tag--primary {
+ background: var(--dq-tag-neutral-bg);
+ color: var(--dq-label-secondary);
+}
+
+html.dark .dq-alert {
+ border-radius: var(--dq-radius-group);
+}
+
+html.dark .dq-alert--info.is-light {
+ background: var(--dq-fill-muted-surface-hover) !important;
+ border: 0.5px solid var(--dq-separator) !important;
+}
+
+html.dark .dq-alert--success.is-light {
+ background: var(--dq-success-surface) !important;
+ border: 0.5px solid var(--dq-success-surface-border) !important;
+}
+
+html.dark .dq-alert--warning.is-light {
+ background: var(--dq-warning-surface) !important;
+ border: 0.5px solid var(--dq-warning-surface-border) !important;
+}
+
+html.dark .dq-alert--error.is-light {
+ background: var(--dq-danger-surface) !important;
+ border: 0.5px solid var(--dq-danger-surface-border) !important;
+}
+
+/* —— Tabs —— */
+
+/* —— 设置页：分组列表 —— */
+html.dark .settings-overview__avatar {
+ background: var(--dq-fill-control-hover) !important;
+ color: var(--dq-color-white) !important;
+ border: none !important;
+ border-radius: 14px;
+}
+
+html.dark .settings-version-item.is-selected {
+ background: var(--dq-fill-muted-control-hover) !important;
+ box-shadow: none !important;
+ border-left: none !important;
+ padding-left: 14px !important;
+}
+
+html.dark .settings-version-derived,
+html.dark .settings-version-recommended {
+ color: var(--dq-label-tertiary);
+}
+
+html.dark .settings-version-option-rec {
+ color: var(--dq-label-tertiary) !important;
+}
+
+html.dark .settings-grouped-form {
+ overflow: hidden;
+}
+
+html.dark .settings-action-row {
+ border-bottom-color: var(--dq-separator);
+}
+
+html.dark .settings-action-row:hover:not(:disabled) {
+ background: var(--dq-fill-muted-surface-hover);
+}
+
+html.dark .settings-action-row:active:not(:disabled) {
+ background: var(--dq-fill-muted-surface-hover);
+}
+
+html.dark .settings-action-row--destructive {
+ color: #ff453a;
+}
+
+html.dark .settings-action-row__chevron {
+ color: var(--dq-label-chevron);
+}
+
+html.dark .settings-action-row--destructive .settings-action-row__chevron {
+ color: var(--dq-danger-icon-muted);
+}
+
+html.dark .settings-group-footnote {
+ color: var(--dq-label-footnote);
+}
+
+html.dark .settings-link-destructive.dq-btn.is-text {
+ color: #ff453a;
+}
+
+html.dark .settings-link-destructive.dq-btn.is-text:hover,
+html.dark .settings-link-destructive.dq-btn.is-text:focus-visible {
+ color: #ff6961;
+ background: var(--dq-danger-surface);
+}
+
+html.dark .settings-cap-cell.is-active {
+ background: var(--dq-success-surface);
+}
+
+html.dark .settings-cap-cell.is-inactive {
+ background: var(--dq-fill-muted-surface-hover);
+}
+
+html.dark .settings-preset-tag {
+ cursor: pointer;
+}
+
+html.dark .gallery-audio-tile,
+html.dark .gallery-audio-thumb-sm,
+html.dark .dq-audio-recent-cover {
+ background: var(--dq-fill-muted-surface-hover);
+ border: 0.5px solid var(--dq-separator);
+ color: var(--dq-label-tertiary);
+}
+
+/* —— 模型页 —— */
+html.dark .models-page {
+ height: calc(100vh - 76px);
+}
+
+/* —— 折叠 / 空状态 / 进度 —— */
+html.dark .create-page .studio-collapse-plain .dq-collapse-item__header {
+ font-size: 15px;
+ font-weight: 600;
+}
+
+html.dark .dq-progress-bar__outer {
+ background-color: var(--dq-fill-control-hover);
+}
+
+html.dark .dq-progress-bar__inner {
+ background-color: var(--dq-accent);
+}
+
+/* —— 交互：禁止卡片上浮、轻按反馈 —— */
+html.dark .dq-surface-card:hover,
+html.dark .gallery-card:hover,
+html.dark .model-card:hover {
+ transform: none !important;
+}
+
+/* 按压态：Apple 式微缩反馈 */
+html.dark .dq-btn:active {
+ transform: scale(0.97);
+ transition: transform 0.1s ease;
+}
+
+html.dark .gallery-card:active,
+html.dark .model-card:active {
+ filter: brightness(0.92);
+}
+
+html.dark .dq-segmented .dq-segmented__item:active {
+ transform: scale(0.96);
+}
+
+/* 全局焦点环 */
+html.dark :focus-visible {
+ outline: 2px solid var(--dq-accent-glow-strong);
+ outline-offset: 2px;
+ border-radius: 4px;
+}
+
+/* 主内容平滑滚动 */
+html.dark .app-main,
+html.dark .gallery-page,
+html.dark .models-page,
+html.dark .settings-page {
+ scroll-behavior: smooth;
+}
+
+/* 底部安全区 */
+html.dark .gallery-batch-bar {
+ padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html.dark .download-queue {
+ bottom: max(20px, env(safe-area-inset-bottom, 0px));
+ right: max(20px, env(safe-area-inset-right, 0px));
+}
+
+/* —— 模型配置：macOS 桌面偏好设置（非 iOS / iPadOS 分组列表） —— */
+html.dark .settings-model-tab--macos {
+ max-width: none;
+}
+
+html.dark .settings-page--macos .settings-model-tab--macos .settings-group-block-title,
+html.dark .settings-page--macos .settings-model-tab--macos .settings-group-block-title-row .settings-group-block-title {
+ font-size: 11px;
+ font-weight: 600;
+ letter-spacing: 0;
+ text-transform: none;
+ color: var(--dq-label-block-title);
+}
+
+html.dark .settings-grouped-form--model {
+ background: var(--dq-fill-muted-surface);
+ border: 0.5px solid var(--dq-separator);
+}
+
+html.dark .settings-model-hero-panel.settings-grouped-form--model {
+ background: var(--dq-fill-muted-surface-medium);
+}
+
+html.dark .settings-page--macos .settings-model-tab--macos .settings-overview--inset .settings-overview__title {
+ font-size: 17px;
+ font-weight: 600;
+ letter-spacing: -0.02em;
+}
+
+html.dark .settings-page--macos .settings-model-tab--macos .settings-overview--inset .settings-overview__desc {
+ color: var(--dq-label-desc);
+ font-size: 12px;
+ line-height: 1.45;
+}
+
+html.dark .settings-preset-tags--inset {
+ background: var(--dq-fill-muted-surface);
+ border: 0.5px solid var(--dq-separator);
+}
+
+html.dark .settings-grouped-form--version-list .settings-list-row.is-selected {
+ background: var(--dq-fill-muted-control-hover) !important;
+ box-shadow: inset 3px 0 0 var(--dq-accent);
+}
+
+/* 版本状态只读：无选区蓝底，仅默认版本小标签 */
+html.dark .settings-page--macos .settings-grouped-form--version-list--readonly .settings-list-row,
+html.dark .settings-page--macos .settings-grouped-form--version-list--readonly .settings-list-row.is-default {
+ background: transparent !important;
+ box-shadow: none !important;
+}
+
+html.dark .settings-page--macos .settings-grouped-form--version-list--readonly .settings-version-item--pickable:hover {
+ background: transparent;
+}
+
+html.dark .settings-grouped-form--version-list .settings-list-row {
+ border-bottom-color: var(--dq-separator);
+}
+
+html.dark .settings-cap-panel .settings-cap-cell.is-active {
+ background: var(--dq-success-surface-strong);
+}
+
+html.dark .settings-cap-panel .settings-cap-cell.is-inactive {
+ background: var(--dq-fill-muted-surface-hover);
+}
+
+html.dark .settings-hardware-panel .settings-list-row {
+ border-bottom-color: var(--dq-separator);
+}
+
+html.dark .settings-page--macos .settings-model-tab--macos .settings-model-save-btn.dq-btn--primary {
+ box-shadow: none;
+}
+
+html.dark .settings-restore-btn.dq-btn.is-text {
+ color: var(--dq-accent);
+}
+
+html.dark .settings-model-sidebar {
+ top: 8px;
+}
+
+@media (max-width: 991px) {
+ html.dark .settings-model-sidebar {
+ position: static;
+ margin-top: 8px;
+ }
+}
+
+html.dark .settings-page--macos .settings-inspector-section {
+ border-bottom-color: var(--dq-separator);
+}
+
+html.dark .settings-page--macos .settings-inspector-section-title {
+ color: var(--dq-label-muted-strong);
+}
+
+html.dark .settings-page--macos .settings-inspector-list-item {
+ border-bottom-color: var(--dq-separator);
+}
+
+html.dark .settings-page--macos .settings-inspector-callout--success {
+ background: var(--dq-success-surface);
+ border-color: var(--dq-success-surface-border);
+}
+
+html.dark .settings-page--macos .settings-inspector-callout--warn {
+ background: var(--dq-danger-surface);
+ border-color: var(--dq-danger-surface-border);
+}
+
+html.dark .settings-page--macos .settings-model-tab--macos .settings-mac-row--slider .param-control-row {
+ gap: 10px;
+}
+
+html.dark .settings-pref-pane-form .param-input-number.dq-input-number--controls-right .dq-input-number__btn,
+html.dark .settings-model-params-form .param-input-number.dq-input-number--controls-right .dq-input-number__btn,
+html.dark .create-page .studio-create-pref-pane .param-input-number.dq-input-number--controls-right .dq-input-number__btn {
+ width: 24px !important;
+ min-width: 24px !important;
+}
+
+html.dark .settings-pref-pane-form .settings-pref-slider-row,
+html.dark .settings-model-params-form .param-control-row,
+html.dark .create-page .studio-create-pref-pane .settings-pref-slider-row {
+ align-items: center;
+}
+
+html.dark .settings-page--macos .settings-model-tab--macos .settings-param-label-row {
+ white-space: nowrap;
+}
+
+html.dark .settings-version-item--pickable:hover {
+ background: var(--dq-fill-muted-row);
+}
+
+html.dark .settings-version-item--pickable:active {
+ background: var(--dq-tag-neutral-bg);
+}
+
+html.dark .settings-inset-alert.dq-alert {
+ border-radius: 10px;
+}

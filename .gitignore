@@ -1,0 +1,33 @@
+# Build
+/web/dist/
+/frontend/dist/
+/bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go
+/vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Env
+.env
+.env.local
+
+# Tauri
+/desktop/src-tauri/target/
+
+# SQLite data
+/data/
+
+# Logs
+*.log
+
+# Node (frontend, added later)
+node_modules/

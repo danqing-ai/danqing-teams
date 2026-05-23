@@ -1,0 +1,24 @@
+{
+  "name": "danqing-teams-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@danqing/dq-shell": "file:../../dq-ui/packages/shell",
+    "@danqing/dq-tokens": "file:../../dq-ui/packages/tokens",
+    "@danqing/dq-ui": "file:../../dq-ui/packages/ui",
+    "pinia": "^2.3.0",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "typescript": "~5.6.2",
+    "vite": "^6.0.3",
+    "vue-tsc": "^2.1.10"
+  }
+}

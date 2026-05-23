@@ -1,0 +1,529 @@
+/*
+ * DanQing Teams — macOS 原生气质层
+ * 目标：接近 Messages / Reminders / 系统设置 的扁平分组、0.5px 分隔与中性色阶
+ */
+
+html.dark.dq-mac-ui .teams-app {
+  gap: 10px;
+  background-color: var(--dq-bg-page);
+  background-image: none;
+}
+
+html.dark.dq-mac-ui .teams-app__main {
+  padding: 0 12px 12px;
+}
+
+/* —— 顶栏：与窗口工具栏一致 —— */
+html.dark.dq-mac-ui .teams-top-nav {
+  margin: 8px 12px 0 0;
+  padding: 0 14px;
+  min-height: 44px;
+  border: 0.5px solid var(--dq-separator);
+  border-radius: 10px;
+  background: var(--dq-glass-bar-bg-strong);
+  backdrop-filter: var(--dq-glass-blur);
+  -webkit-backdrop-filter: var(--dq-glass-blur);
+  box-shadow: none;
+}
+
+html.dark.dq-mac-ui .teams-top-nav .brand-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+html.dark.dq-mac-ui .teams-top-nav .dq-top-nav-menu__item {
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+html.dark.dq-mac-ui .teams-top-nav .dq-top-nav-menu__item.is-active {
+  background: var(--dq-fill-control-hover);
+  color: var(--dq-label-primary);
+}
+
+/* —— 侧栏浮岛：系统设置式分组面板 —— */
+html.dark.dq-mac-ui .float-island,
+html.dark.dq-mac-ui .teams-left-panel.float-island,
+html.dark.dq-mac-ui .teams-right-panel.float-island,
+html.dark.dq-mac-ui .teams-left-rail__strip,
+html.dark.dq-mac-ui .teams-right-rail__strip {
+  border: 0.5px solid var(--dq-separator);
+  border-radius: 10px;
+  background: var(--dq-bg-base);
+  backdrop-filter: var(--dq-glass-blur);
+  -webkit-backdrop-filter: var(--dq-glass-blur);
+  box-shadow: none;
+}
+
+html.dark.dq-mac-ui .teams-left-panel__title,
+html.dark.dq-mac-ui .teams-right-panel__title,
+html.dark.dq-mac-ui .teams-left-rail__strip-label,
+html.dark.dq-mac-ui .teams-right-rail__strip-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--dq-label-tertiary);
+}
+
+html.dark.dq-mac-ui .teams-shell {
+  gap: 10px;
+}
+
+/* —— 任务筛选：macOS Segmented Control —— */
+html.dark.dq-mac-ui .task-list__toolbar {
+  gap: 8px;
+}
+
+html.dark.dq-mac-ui .task-list__filters {
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--dq-fill-tertiary);
+}
+
+html.dark.dq-mac-ui .task-list__filter {
+  padding: 4px 9px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dq-label-secondary);
+}
+
+html.dark.dq-mac-ui .task-list__filter:hover {
+  background: transparent;
+  color: var(--dq-label-primary);
+}
+
+html.dark.dq-mac-ui .task-list__filter.is-active {
+  background: var(--dq-bg-elevated);
+  color: var(--dq-label-primary);
+  box-shadow: 0 0.5px 1px color-mix(in srgb, var(--dq-shadow) 12%, transparent);
+}
+
+html.dark.dq-mac-ui .task-list__new.dq-btn {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+html.dark.dq-mac-ui .task-list__group-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--dq-label-tertiary);
+}
+
+html.dark.dq-mac-ui .teams-nav__item.is-active,
+html.dark.dq-mac-ui .task-list__item.is-active {
+  background: var(--dq-fill-muted-control-hover);
+  box-shadow: inset 3px 0 0 var(--dq-accent);
+  color: var(--dq-label-primary);
+}
+
+html.dark.dq-mac-ui .task-list__title {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+html.dark.dq-mac-ui .task-list__meta {
+  font-size: 11px;
+  color: var(--dq-label-quaternary);
+}
+
+/* —— 中间画布：统一内容区 —— */
+html.dark.dq-mac-ui .float-island--center {
+  border-radius: 10px;
+  border: 0.5px solid var(--dq-separator);
+  background: var(--dq-bg-base);
+}
+
+html.dark.dq-mac-ui .task-goal-bar {
+  padding: 12px 16px;
+  border-bottom: 0.5px solid var(--dq-separator);
+  background: color-mix(in srgb, var(--dq-bg-base) 92%, var(--dq-fill-tertiary));
+  backdrop-filter: none;
+}
+
+html.dark.dq-mac-ui .task-goal-bar__eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--dq-label-tertiary);
+}
+
+html.dark.dq-mac-ui .task-goal-bar__title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.022em;
+}
+
+html.dark.dq-mac-ui .task-stream {
+  padding: 16px 16px 120px;
+}
+
+html.dark.dq-mac-ui .task-stream__list {
+  max-width: 680px;
+  gap: 12px;
+}
+
+/* —— 消息流：Messages 式气泡 —— */
+html.dark.dq-mac-ui .stream-row {
+  gap: 8px;
+}
+
+html.dark.dq-mac-ui .stream-row__avatar {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: var(--dq-fill-control-hover);
+}
+
+html.dark.dq-mac-ui .stream-row__avatar--user {
+  background: color-mix(in srgb, var(--dq-accent) 18%, var(--dq-fill-control-hover));
+}
+
+html.dark.dq-mac-ui .stream-row__main {
+  gap: 4px;
+}
+
+html.dark.dq-mac-ui .stream-row__sender--worker .stream-row__sender-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--dq-success) 65%, var(--dq-label-primary));
+}
+
+html.dark.dq-mac-ui .stream-row__sender--controller .stream-row__sender-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--dq-info) 65%, var(--dq-label-primary));
+}
+
+html.dark.dq-mac-ui .stream-row__bubble {
+  padding: 9px 12px;
+  border-radius: 16px;
+  border: none;
+  background: var(--dq-fill-tertiary);
+  box-shadow: none;
+}
+
+html.dark.dq-mac-ui .stream-row__bubble--dispatch {
+  padding: 6px 10px;
+  background: var(--dq-fill-control-hover);
+}
+
+html.dark.dq-mac-ui .stream-row--user .stream-row__bubble {
+  background: color-mix(in srgb, var(--dq-accent) 82%, #000);
+  color: var(--dq-color-white);
+}
+
+html.dark.dq-mac-ui .stream-row--user .stream-row__body {
+  color: var(--dq-color-white);
+}
+
+html.dark.dq-mac-ui .stream-row--controller .stream-row__bubble,
+html.dark.dq-mac-ui .stream-row--worker .stream-row__bubble,
+html.dark.dq-mac-ui .stream-row--policy .stream-row__bubble {
+  border: none;
+  background: var(--dq-fill-tertiary);
+}
+
+html.dark.dq-mac-ui .stream-row__body {
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+}
+
+html.dark.dq-mac-ui .stream-row__dispatch {
+  margin-bottom: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+html.dark.dq-mac-ui .stream-row__bubble:not(.stream-row__bubble--dispatch) .stream-row__dispatch {
+  margin-bottom: 8px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--dq-fill-control-hover);
+}
+
+html.dark.dq-mac-ui .stream-row__dispatch-target {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dq-label-primary);
+}
+
+html.dark.dq-mac-ui .stream-row__dispatch-chip {
+  background: color-mix(in srgb, var(--dq-success) 12%, var(--dq-fill-control-hover));
+  border-color: color-mix(in srgb, var(--dq-success) 24%, var(--dq-separator));
+}
+
+html.dark.dq-mac-ui .stream-row--dispatch-only .stream-row__bubble {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+html.dark.dq-mac-ui .stream-row__dispatch.is-solo {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--dq-fill-control-hover);
+  border: 0.5px solid color-mix(in srgb, var(--dq-separator) 80%, transparent);
+}
+
+html.dark.dq-mac-ui .stream-row__sender--worker .stream-row__sender-name {
+  font-size: 12px;
+}
+
+html.dark.dq-mac-ui .stream-row__sender-chip {
+  min-width: 16px;
+  height: 16px;
+  font-size: 7px;
+}
+
+/* —— Composer：底部输入条 —— */
+html.dark.dq-mac-ui .center-stage__composer {
+  bottom: 12px;
+  width: min(640px, calc(100% - 32px));
+}
+
+html.dark.dq-mac-ui .composer-float {
+  padding: 10px 12px 8px;
+  border-radius: 12px;
+  border: 0.5px solid var(--dq-separator);
+  background: var(--dq-glass-bar-bg-strong);
+  backdrop-filter: var(--dq-glass-blur-heavy);
+  -webkit-backdrop-filter: var(--dq-glass-blur-heavy);
+  box-shadow: none;
+}
+
+html.dark.dq-mac-ui .composer-float:focus-within {
+  border-color: color-mix(in srgb, var(--dq-accent) 35%, var(--dq-separator));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dq-accent) 12%, transparent);
+  transform: none;
+}
+
+html.dark.dq-mac-ui .composer-float.is-locked {
+  padding: 10px 14px;
+  background: var(--dq-fill-muted-surface);
+  border-color: var(--dq-separator);
+}
+
+html.dark.dq-mac-ui .composer-float__status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 36px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--dq-label-tertiary);
+  text-align: center;
+}
+
+html.dark.dq-mac-ui .composer-float__status.is-minimal {
+  min-height: 32px;
+}
+
+html.dark.dq-mac-ui .composer-float__status-text {
+  color: var(--dq-label-secondary);
+}
+
+html.dark.dq-mac-ui .composer-float__status-sep {
+  opacity: 0.45;
+}
+
+html.dark.dq-mac-ui .composer-float__status-action {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--dq-accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+html.dark.dq-mac-ui .composer-float__status-action:hover {
+  text-decoration: underline;
+}
+
+/* —— 消息流 Markdown 紧凑排版 —— */
+html.dark.dq-mac-ui .stream-row__body--md.markdown-body {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+html.dark.dq-mac-ui .stream-row__body--md.markdown-body h3 {
+  margin-top: 1em;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--dq-label-tertiary);
+}
+
+html.dark.dq-mac-ui .stream-row__body--md.markdown-body p > strong:first-child {
+  color: var(--dq-label-tertiary);
+}
+
+html.dark.dq-mac-ui .stream-row__body--md.markdown-body h1,
+html.dark.dq-mac-ui .stream-row__body--md.markdown-body h2,
+html.dark.dq-mac-ui .stream-row__body--md.markdown-body h3 {
+  margin: 0.65em 0 0.35em;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dq-label-primary);
+}
+
+html.dark.dq-mac-ui .stream-row__body--md.markdown-body p,
+html.dark.dq-mac-ui .stream-row__body--md.markdown-body li {
+  margin: 0.35em 0;
+  font-size: 13px;
+  color: var(--dq-label-secondary);
+}
+
+html.dark.dq-mac-ui .stream-row__body--md.markdown-body ul,
+html.dark.dq-mac-ui .stream-row__body--md.markdown-body ol {
+  margin: 0.35em 0;
+  padding-left: 1.2em;
+}
+
+html.dark.dq-mac-ui .stream-row__body--md.markdown-body strong {
+  color: var(--dq-label-primary);
+  font-weight: 600;
+}
+
+html.dark.dq-mac-ui .stream-row__body--md.markdown-body code {
+  font-size: 12px;
+  background: var(--dq-fill-control-hover);
+}
+
+html.dark.dq-mac-ui .composer-float__footer {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--dq-label-quaternary);
+}
+
+html.dark.dq-mac-ui .composer-float__keys {
+  font-variant-numeric: tabular-nums;
+}
+
+/* —— Inspector：分组列表 —— */
+html.dark.dq-mac-ui .teams-right-section__title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--dq-label-tertiary);
+}
+
+html.dark.dq-mac-ui .teams-todo-group__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+html.dark.dq-mac-ui .teams-right-section + .teams-right-section {
+  border-top: 0.5px solid var(--dq-separator);
+}
+
+html.dark.dq-mac-ui .agent-member-card {
+  border: none;
+  border-radius: 8px;
+  background: var(--dq-fill-muted-surface);
+}
+
+html.dark.dq-mac-ui .agent-member-card--static {
+  cursor: default;
+}
+
+html.dark.dq-mac-ui .agent-member-card__persona {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--dq-label-tertiary);
+}
+
+/* —— Tags：系统胶囊 —— */
+html.dark.dq-mac-ui .task-goal-bar__live {
+  width: 5px;
+  height: 5px;
+}
+
+html.dark.dq-mac-ui .stream-row--worker .stream-row__bubble {
+  background: color-mix(in srgb, var(--dq-success) 4%, var(--dq-fill-tertiary));
+}
+
+html.dark.dq-mac-ui .task-goal-bar__actions {
+  gap: 6px;
+}
+
+html.dark.dq-mac-ui .task-goal-bar__sep {
+  height: 16px;
+  background: var(--dq-separator);
+  opacity: 1;
+}
+
+html.dark.dq-mac-ui .task-goal-refresh {
+  width: 26px;
+  height: 26px;
+}
+
+html.dark.dq-mac-ui .task-goal-refresh:hover:not(:disabled) {
+  background: var(--dq-fill-control-hover);
+}
+
+html.dark.dq-mac-ui .task-goal-refresh.is-live .task-goal-refresh__progress {
+  stroke: color-mix(in srgb, var(--dq-accent) 70%, white);
+}
+
+html.dark.dq-mac-ui .task-goal-refresh__track {
+  stroke: color-mix(in srgb, var(--dq-label-tertiary) 18%, transparent);
+}
+
+html.dark.dq-mac-ui .task-goal-refresh__count {
+  font-size: 8px;
+  color: var(--dq-label-tertiary);
+}
+
+html.dark.dq-mac-ui .task-goal-bar .dq-tag,
+html.dark.dq-mac-ui .task-list__item .dq-tag {
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* —— Teams 区域滚动条 —— */
+html.dark.dq-mac-ui .teams-app ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+html.dark.dq-mac-ui .teams-app ::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: var(--dq-scrollbar-thumb);
+}
+
+html.dark.dq-mac-ui .teams-app ::-webkit-scrollbar-thumb:hover {
+  background: var(--dq-scrollbar-thumb-hover);
+}
+
+html.dark.dq-mac-ui .teams-app ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* —— 按压反馈 —— */
+html.dark.dq-mac-ui .teams-app .dq-btn:active,
+html.dark.dq-mac-ui .teams-app .teams-nav__item:active,
+html.dark.dq-mac-ui .teams-app .task-list__filter:active {
+  transform: scale(0.98);
+}
