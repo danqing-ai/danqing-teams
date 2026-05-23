@@ -60,6 +60,17 @@ out/
 | `make pack-linux-server` | Linux server tar.gz |
 | `make clean` | 删除 `out/` |
 
+## CI / 发布
+
+GitHub Actions：`.github/workflows/release.yml`
+
+| 触发 | 说明 |
+|------|------|
+| 推送 tag `v*` | 构建 macOS 桌面、Linux server、Windows 桌面，并附加到 GitHub Release |
+| `workflow_dispatch` | 手动构建（可填 `version`） |
+
+依赖同级 checkout `danqing-ai/dq-ui`（与本地开发布局一致）。
+
 Contributor 指南见 [AGENTS.md](AGENTS.md)。
 
 ## 环境变量

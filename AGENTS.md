@@ -53,6 +53,16 @@ out/run/             # dev PIDs, logs, wrappers (DQ_DEV markers)
 
 Thin shell — backend must run separately (`make dev`). Then `cd desktop && npm run tauri dev`.
 
+## CI
+
+`.github/workflows/release.yml` builds on tag `v*` or `workflow_dispatch`:
+
+- macOS desktop → `out/desktop/bundle/` (.app / .dmg)
+- Linux server → `out/dist/danqing-teams-linux-*.tar.gz`
+- Windows desktop → `out/desktop/bundle/**/*.exe`
+
+Checks out `danqing-ai/dq-ui` alongside the repo (same layout as local dev).
+
 ## Notes
 
 - Static UI served from `./out/frontend/dist` at `/app/` when built
