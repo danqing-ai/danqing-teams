@@ -5,9 +5,9 @@
   "identifier": "com.danqing.teams",
   "build": {
     "beforeDevCommand": "cd ../frontend && npm run dev",
-    "devUrl": "http://localhost:5173",
+    "devUrl": "http://localhost:5801",
     "beforeBuildCommand": "cd ../frontend && npm run build",
-    "frontendDist": "../web/dist"
+    "frontendDist": "../../out/frontend/dist"
   },
   "app": {
     "windows": [
@@ -19,7 +19,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://localhost:8080 http://127.0.0.1:8080"
+      "csp": "default-src 'self'; connect-src 'self' http://localhost:7801 http://127.0.0.1:7801"
     }
   }
 }

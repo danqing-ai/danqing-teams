@@ -1,6 +1,6 @@
 # Build
-/web/dist/
-/frontend/dist/
+/out/
+/web/
 /bin/
 *.exe
 *.dll

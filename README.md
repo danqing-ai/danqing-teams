@@ -15,23 +15,60 @@ api/rest + api/mcp → service → contract ← persistence/sqlite|memory
 ## 快速开始
 
 ```bash
-# 后端测试
-make test
+# 开发（后端 + Vite HMR，一键启停）
+make dev
+# 或 make start / make stop
+# → 前端 http://localhost:5801/app/  后端 http://127.0.0.1:7801
 
-# 构建前端并启动（浏览器访问 http://127.0.0.1:8080/app/）
-make build-ui
-make run
-
-# 开发：前端热更（5173）+ API（8080）
-# 终端 1: make run
-# 终端 2: cd frontend && npm run dev
+# 发布
+make pack-linux-server      # Linux server tar.gz → out/dist/
+make pack-macos-desktop     # macOS 桌面安装包 → out/desktop/bundle/
 ```
 
-环境变量：
+## 开发端口
+
+DanQing 系列统一规则：**后端 `78xx`，前端 `58xx`，末两位相同即同一项目**。
+
+| 项目 | 后端 | 前端 (Vite) |
+|------|------|-------------|
+| Studio | 7800 | 5800 |
+| **Teams** | **7801** | **5801** |
+| Mail | 7802 | 5802 |
+
+三项目可同时 `make dev`。覆盖端口：`DQ_BACKEND_PORT` / `DQ_FRONTEND_PORT`。
+
+## 构建输出 (`out/`)
+
+```
+out/
+  frontend/dist/     # Vite 生产构建
+  server/            # Go 二进制
+  desktop/bundle/    # Tauri 安装包
+  desktop/cargo/     # Cargo 中间产物
+  dist/              # pack-linux-server 发布包
+  run/               # dev pid / log / wrappers
+```
+
+## Makefile 命令
+
+| 命令 | 说明 |
+|------|------|
+| `make dev` / `start` / `stop` | 本地开发（带项目标记的启停脚本） |
+| `make test` / `test-integration` | 单元 / 集成测试 |
+| `make build-all` | 构建 UI + server 二进制 |
+| `make pack-macos-desktop` | macOS 桌面发布 |
+| `make pack-linux-server` | Linux server tar.gz |
+| `make clean` | 删除 `out/` |
+
+Contributor 指南见 [AGENTS.md](AGENTS.md)。
+
+## 环境变量
 
 | 变量 | 默认 | 说明 |
 |------|------|------|
-| `TEAMS_ADDR` | `0.0.0.0:8080` | API 监听地址 |
+| `TEAMS_ADDR` | `0.0.0.0:7801` | API 监听地址 |
+| `DQ_BACKEND_PORT` | `7801` | dev 后端端口（`make dev` 注入） |
+| `DQ_FRONTEND_PORT` | `5801` | dev 前端 Vite 端口 |
 | `TEAMS_STORE` | `sqlite` | 持久化后端：`sqlite` 或 `memory` |
 | `TEAMS_DB_PATH` | `./data/teams.db` | SQLite 数据库路径（多实例需挂载同一文件或共享存储） |
 | `TEAMS_INSTANCE_ID` | hostname | 实例标识，用于 job lease 认领 |
@@ -62,15 +99,15 @@ go run ./cmd/mcp   # 每行 JSON: {"name":"teams_list","arguments":{}}
 
 ```bash
 cd desktop && npm install
-# 需先启动后端 make run
+# 需先 make dev 启动后端
 npm run tauri dev
 ```
 
 ## 演示
 
 ```bash
-TEAM=$(curl -s http://127.0.0.1:8080/api/v1/teams | jq -r '.[0].id')
-curl -s -X POST "http://127.0.0.1:8080/api/v1/teams/$TEAM/tasks" \
+TEAM=$(curl -s http://127.0.0.1:7801/api/v1/teams | jq -r '.[0].id')
+curl -s -X POST "http://127.0.0.1:7801/api/v1/teams/$TEAM/tasks" \
   -H 'Content-Type: application/json' \
   -d '{"content":"线上 CPU 飙高且有多条 P1 告警"}'
 ```

@@ -2,58 +2,36 @@ package sqlstore
 
 import (
 	"context"
-	"database/sql"
 	"errors"
-	"time"
 
 	"danqing-teams/internal/contract"
 	"danqing-teams/pkg/errs"
 	"danqing-teams/pkg/id"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 func (s *Store) ListTeams(ctx context.Context) ([]contract.Team, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, description, created_at, updated_at FROM teams ORDER BY created_at`)
-	if err != nil {
+	var rows []teamRow
+	if err := s.dbWithCtx(ctx).Order("created_at").Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []contract.Team
-	for rows.Next() {
-		var t contract.Team
-		var created, updated string
-		if err := rows.Scan(&t.ID, &t.Name, &t.Description, &created, &updated); err != nil {
-			return nil, err
-		}
-		t.CreatedAt, _ = parseTime(created)
-		t.UpdatedAt, _ = parseTime(updated)
-		out = append(out, t)
+	out := make([]contract.Team, len(rows))
+	for i, r := range rows {
+		out[i] = teamFromRow(r)
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (s *Store) GetTeam(ctx context.Context, teamID string) (*contract.TeamDetail, error) {
-	var t contract.Team
-	var created, updated string
-	err := s.db.QueryRowContext(ctx,
-		`SELECT id, name, description, created_at, updated_at FROM teams WHERE id = ?`, teamID,
-	).Scan(&t.ID, &t.Name, &t.Description, &created, &updated)
-	if err == sql.ErrNoRows {
-		return nil, errs.NotFound("team not found")
-	}
+	t, err := s.getTeamRow(ctx, teamID)
 	if err != nil {
 		return nil, err
 	}
-	t.CreatedAt, _ = parseTime(created)
-	t.UpdatedAt, _ = parseTime(updated)
-
-	var ctrl contract.TeamController
-	err = s.db.QueryRowContext(ctx,
-		`SELECT persona, system_prompt FROM team_controllers WHERE team_id = ?`, teamID,
-	).Scan(&ctrl.Persona, &ctrl.SystemPrompt)
-	if err != nil && err != sql.ErrNoRows {
+	var ctrl teamControllerRow
+	if err := s.dbWithCtx(ctx).First(&ctrl, "team_id = ?", teamID).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
-
 	workers, err := s.ListWorkers(ctx, teamID)
 	if err != nil {
 		return nil, err
@@ -62,29 +40,28 @@ func (s *Store) GetTeam(ctx context.Context, teamID string) (*contract.TeamDetai
 	if err != nil {
 		return nil, err
 	}
-	return &contract.TeamDetail{Team: t, Controller: ctrl, Workers: workers, Humans: humans}, nil
+	return &contract.TeamDetail{
+		Team: *t,
+		Controller: contract.TeamController{Persona: ctrl.Persona, SystemPrompt: ctrl.SystemPrompt},
+		Workers: workers, Humans: humans,
+	}, nil
 }
 
 func (s *Store) CreateTeam(ctx context.Context, req contract.CreateTeamRequest) (*contract.TeamDetail, error) {
 	tid := id.New()
-	now := formatTime(nowUTC())
-	t := contract.Team{ID: tid, Name: req.Name, Description: req.Description, CreatedAt: nowUTC(), UpdatedAt: nowUTC()}
+	now := nowUTC()
+	t := contract.Team{ID: tid, Name: req.Name, Description: req.Description, CreatedAt: now, UpdatedAt: now}
 	ctrl := contract.TeamController{
 		Persona:      "负责理解用户意图，按 Worker 人设分派任务，汇总报告并规划 follow-up。",
 		SystemPrompt: "你是 Team Controller，仅依据 Worker 人设匹配，不知道 Worker 的技能与 MCP Tool。",
 	}
-	err := withTx(ctx, s.db, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO teams (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
-			tid, req.Name, req.Description, now, now,
-		); err != nil {
+	err := s.dbWithCtx(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&teamRow{
+			ID: tid, Name: req.Name, Description: req.Description, CreatedAt: now, UpdatedAt: now,
+		}).Error; err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx,
-			`INSERT INTO team_controllers (team_id, persona, system_prompt) VALUES (?, ?, ?)`,
-			tid, ctrl.Persona, ctrl.SystemPrompt,
-		)
-		return err
+		return tx.Create(&teamControllerRow{TeamID: tid, Persona: ctrl.Persona, SystemPrompt: ctrl.SystemPrompt}).Error
 	})
 	if err != nil {
 		return nil, err
@@ -104,42 +81,35 @@ func (s *Store) UpdateTeam(ctx context.Context, teamID string, req contract.Upda
 		t.Description = *req.Description
 	}
 	t.UpdatedAt = nowUTC()
-	_, err = s.db.ExecContext(ctx,
-		`UPDATE teams SET name = ?, description = ?, updated_at = ? WHERE id = ?`,
-		t.Name, t.Description, formatTime(t.UpdatedAt), teamID,
-	)
-	if err != nil {
-		return nil, err
+	res := s.dbWithCtx(ctx).Model(&teamRow{}).Where("id = ?", teamID).Updates(map[string]any{
+		"name": t.Name, "description": t.Description, "updated_at": t.UpdatedAt,
+	})
+	if res.Error != nil {
+		return nil, res.Error
 	}
 	return t, nil
 }
 
 func (s *Store) DeleteTeam(ctx context.Context, teamID string) error {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM teams WHERE id = ?`, teamID)
-	if err != nil {
-		return err
+	res := s.dbWithCtx(ctx).Delete(&teamRow{}, "id = ?", teamID)
+	if res.Error != nil {
+		return res.Error
 	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
+	if res.RowsAffected == 0 {
 		return errs.NotFound("team not found")
 	}
 	return nil
 }
 
 func (s *Store) getTeamRow(ctx context.Context, teamID string) (*contract.Team, error) {
-	var t contract.Team
-	var created, updated string
-	err := s.db.QueryRowContext(ctx,
-		`SELECT id, name, description, created_at, updated_at FROM teams WHERE id = ?`, teamID,
-	).Scan(&t.ID, &t.Name, &t.Description, &created, &updated)
-	if err == sql.ErrNoRows {
-		return nil, errs.NotFound("team not found")
-	}
-	if err != nil {
+	var r teamRow
+	if err := s.dbWithCtx(ctx).First(&r, "id = ?", teamID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errs.NotFound("team not found")
+		}
 		return nil, err
 	}
-	t.CreatedAt, _ = parseTime(created)
-	t.UpdatedAt, _ = parseTime(updated)
+	t := teamFromRow(r)
 	return &t, nil
 }
 
@@ -159,29 +129,25 @@ func (s *Store) GetController(ctx context.Context, teamID string) (*contract.Tea
 	if _, err := s.getTeamRow(ctx, teamID); err != nil {
 		return nil, err
 	}
-	var c contract.TeamController
-	err := s.db.QueryRowContext(ctx,
-		`SELECT persona, system_prompt FROM team_controllers WHERE team_id = ?`, teamID,
-	).Scan(&c.Persona, &c.SystemPrompt)
-	if err == sql.ErrNoRows {
-		return &contract.TeamController{}, nil
-	}
-	if err != nil {
+	var ctrl teamControllerRow
+	if err := s.dbWithCtx(ctx).First(&ctrl, "team_id = ?", teamID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return &contract.TeamController{}, nil
+		}
 		return nil, err
 	}
-	return &c, nil
+	return &contract.TeamController{Persona: ctrl.Persona, SystemPrompt: ctrl.SystemPrompt}, nil
 }
 
 func (s *Store) UpdateController(ctx context.Context, teamID string, c contract.TeamController) error {
 	if _, err := s.getTeamRow(ctx, teamID); err != nil {
 		return err
 	}
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO team_controllers (team_id, persona, system_prompt) VALUES (?, ?, ?)
-		 ON CONFLICT(team_id) DO UPDATE SET persona = excluded.persona, system_prompt = excluded.system_prompt`,
-		teamID, c.Persona, c.SystemPrompt,
-	)
-	return err
+	row := teamControllerRow{TeamID: teamID, Persona: c.Persona, SystemPrompt: c.SystemPrompt}
+	return s.dbWithCtx(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "team_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"persona", "system_prompt"}),
+	}).Create(&row).Error
 }
 
 func (s *Store) ListWorkers(ctx context.Context, teamID string) ([]contract.WorkerAgent, error) {
@@ -190,22 +156,15 @@ func (s *Store) ListWorkers(ctx context.Context, teamID string) ([]contract.Work
 	} else if len(workers) > 0 {
 		return workers, nil
 	}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, persona, skills_json, tools_json, kb_json FROM workers WHERE team_id = ?`, teamID,
-	)
-	if err != nil {
+	var rows []workerRow
+	if err := s.dbWithCtx(ctx).Where("team_id = ?", teamID).Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []contract.WorkerAgent
-	for rows.Next() {
-		w, err := scanWorker(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, w)
+	out := make([]contract.WorkerAgent, len(rows))
+	for i, r := range rows {
+		out[i] = workerFromRow(r)
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (s *Store) GetWorker(ctx context.Context, teamID, workerID string) (*contract.WorkerAgent, error) {
@@ -214,17 +173,14 @@ func (s *Store) GetWorker(ctx context.Context, teamID, workerID string) (*contra
 	} else if !errors.Is(err, errs.ErrNotFound) {
 		return nil, err
 	}
-	row := s.db.QueryRowContext(ctx,
-		`SELECT id, name, persona, skills_json, tools_json, kb_json FROM workers WHERE team_id = ? AND id = ?`,
-		teamID, workerID,
-	)
-	w, err := scanWorkerRow(row)
-	if err == sql.ErrNoRows {
-		return nil, errs.NotFound("worker not found")
-	}
-	if err != nil {
+	var r workerRow
+	if err := s.dbWithCtx(ctx).Where("team_id = ? AND id = ?", teamID, workerID).First(&r).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errs.NotFound("worker not found")
+		}
 		return nil, err
 	}
+	w := workerFromRow(r)
 	return &w, nil
 }
 
@@ -235,17 +191,14 @@ func (s *Store) UpsertWorker(ctx context.Context, teamID string, worker *contrac
 	if worker.ID == "" {
 		worker.ID = id.New()
 	}
-	skills, _ := encodeJSON(worker.Skills)
-	tools, _ := encodeJSON(worker.Tools)
-	kb, _ := encodeJSON(worker.KnowledgeBase)
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO workers (id, team_id, name, persona, skills_json, tools_json, kb_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)
-		 ON CONFLICT(id) DO UPDATE SET name=excluded.name, persona=excluded.persona,
-		   skills_json=excluded.skills_json, tools_json=excluded.tools_json, kb_json=excluded.kb_json`,
-		worker.ID, teamID, worker.Name, worker.Persona, skills, tools, kb,
-	)
-	return err
+	row := workerRow{
+		ID: worker.ID, TeamID: teamID, Name: worker.Name, Persona: worker.Persona,
+		Skills: worker.Skills, Tools: worker.Tools, KB: worker.KnowledgeBase,
+	}
+	return s.dbWithCtx(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"name", "persona", "skills_json", "tools_json", "kb_json"}),
+	}).Create(&row).Error
 }
 
 func (s *Store) DeleteWorker(ctx context.Context, teamID, workerID string) error {
@@ -254,12 +207,11 @@ func (s *Store) DeleteWorker(ctx context.Context, teamID, workerID string) error
 	} else if !errors.Is(err, errs.ErrNotFound) {
 		return err
 	}
-	res, err := s.db.ExecContext(ctx, `DELETE FROM workers WHERE team_id = ? AND id = ?`, teamID, workerID)
-	if err != nil {
-		return err
+	res := s.dbWithCtx(ctx).Where("team_id = ? AND id = ?", teamID, workerID).Delete(&workerRow{})
+	if res.Error != nil {
+		return res.Error
 	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
+	if res.RowsAffected == 0 {
 		return errs.NotFound("worker not found")
 	}
 	return nil
@@ -276,22 +228,15 @@ func (s *Store) GetWorkerPrivateProfile(ctx context.Context, teamID, workerID st
 }
 
 func (s *Store) ListHumans(ctx context.Context, teamID string) ([]contract.HumanMember, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, display_name, email, role FROM humans WHERE team_id = ?`, teamID,
-	)
-	if err != nil {
+	var rows []humanRow
+	if err := s.dbWithCtx(ctx).Where("team_id = ?", teamID).Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []contract.HumanMember
-	for rows.Next() {
-		var h contract.HumanMember
-		if err := rows.Scan(&h.ID, &h.DisplayName, &h.Email, &h.Role); err != nil {
-			return nil, err
-		}
-		out = append(out, h)
+	out := make([]contract.HumanMember, len(rows))
+	for i, r := range rows {
+		out[i] = contract.HumanMember{ID: r.ID, DisplayName: r.DisplayName, Email: r.Email, Role: r.Role}
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (s *Store) AddHuman(ctx context.Context, teamID string, h contract.HumanMember) error {
@@ -301,35 +246,7 @@ func (s *Store) AddHuman(ctx context.Context, teamID string, h contract.HumanMem
 	if h.ID == "" {
 		h.ID = id.New()
 	}
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO humans (id, team_id, display_name, email, role) VALUES (?, ?, ?, ?, ?)`,
-		h.ID, teamID, h.DisplayName, h.Email, h.Role,
-	)
-	return err
+	return s.dbWithCtx(ctx).Create(&humanRow{
+		ID: h.ID, TeamID: teamID, DisplayName: h.DisplayName, Email: h.Email, Role: h.Role,
+	}).Error
 }
-
-func scanWorker(rows *sql.Rows) (contract.WorkerAgent, error) {
-	var w contract.WorkerAgent
-	var skills, tools, kb string
-	if err := rows.Scan(&w.ID, &w.Name, &w.Persona, &skills, &tools, &kb); err != nil {
-		return w, err
-	}
-	_ = decodeJSON(skills, &w.Skills)
-	_ = decodeJSON(tools, &w.Tools)
-	_ = decodeJSON(kb, &w.KnowledgeBase)
-	return w, nil
-}
-
-func scanWorkerRow(row *sql.Row) (contract.WorkerAgent, error) {
-	var w contract.WorkerAgent
-	var skills, tools, kb string
-	if err := row.Scan(&w.ID, &w.Name, &w.Persona, &skills, &tools, &kb); err != nil {
-		return w, err
-	}
-	_ = decodeJSON(skills, &w.Skills)
-	_ = decodeJSON(tools, &w.Tools)
-	_ = decodeJSON(kb, &w.KnowledgeBase)
-	return w, nil
-}
-
-func nowUTC() time.Time { return time.Now().UTC() }

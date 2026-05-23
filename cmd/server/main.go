@@ -64,7 +64,7 @@ func main() {
 	}
 	mcpTools := &mcp.Tools{Teams: teamSvc, Tasks: taskSvc, Approvals: approvalSvc}
 
-	addr := env("TEAMS_ADDR", "0.0.0.0:8080")
+	addr := env("TEAMS_ADDR", "0.0.0.0:7801")
 	log.Printf("danqing-teams listening on %s (store=%s llm=mock auto_approve=%v instance=%s)",
 		addr, kind, autoApprove, workerInstanceID(instanceID))
 

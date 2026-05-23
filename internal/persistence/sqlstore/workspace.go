@@ -2,32 +2,25 @@ package sqlstore
 
 import (
 	"context"
-	"database/sql"
 
 	"danqing-teams/internal/contract"
 	"danqing-teams/pkg/id"
+	"gorm.io/gorm"
 )
 
 func (s *Store) ListArtifacts(ctx context.Context, teamID string) ([]contract.WorkspaceArtifact, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, team_id, task_id, title, kind, content, created_at FROM artifacts WHERE team_id = ? ORDER BY created_at DESC`,
-		teamID,
-	)
-	if err != nil {
+	var rows []artifactRow
+	if err := s.dbWithCtx(ctx).Where("team_id = ?", teamID).Order("created_at DESC").Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []contract.WorkspaceArtifact
-	for rows.Next() {
-		var a contract.WorkspaceArtifact
-		var created string
-		if err := rows.Scan(&a.ID, &a.TeamID, &a.TaskID, &a.Title, &a.Kind, &a.Content, &created); err != nil {
-			return nil, err
+	out := make([]contract.WorkspaceArtifact, len(rows))
+	for i, r := range rows {
+		out[i] = contract.WorkspaceArtifact{
+			ID: r.ID, TeamID: r.TeamID, TaskID: r.TaskID,
+			Title: r.Title, Kind: r.Kind, Content: r.Content, CreatedAt: r.CreatedAt,
 		}
-		a.CreatedAt, _ = parseTime(created)
-		out = append(out, a)
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (s *Store) CreateArtifact(ctx context.Context, teamID string, a contract.WorkspaceArtifact) (*contract.WorkspaceArtifact, error) {
@@ -36,45 +29,36 @@ func (s *Store) CreateArtifact(ctx context.Context, teamID string, a contract.Wo
 	}
 	a.TeamID = teamID
 	a.CreatedAt = nowUTC()
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO artifacts (id, team_id, task_id, title, kind, content, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		a.ID, teamID, a.TaskID, a.Title, a.Kind, a.Content, formatTime(a.CreatedAt),
-	)
-	if err != nil {
+	if err := s.dbWithCtx(ctx).Create(&artifactRow{
+		ID: a.ID, TeamID: teamID, TaskID: a.TaskID,
+		Title: a.Title, Kind: a.Kind, Content: a.Content, CreatedAt: a.CreatedAt,
+	}).Error; err != nil {
 		return nil, err
 	}
 	return &a, nil
 }
 
 func (s *Store) ListKnowledgeDocs(ctx context.Context, teamID, workerID string) ([]contract.KnowledgeDoc, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, title, size FROM knowledge_docs WHERE team_id = ? AND worker_id = ?`, teamID, workerID,
-	)
-	if err != nil {
+	var rows []knowledgeDocRow
+	if err := s.dbWithCtx(ctx).Where("team_id = ? AND worker_id = ?", teamID, workerID).Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []contract.KnowledgeDoc
-	for rows.Next() {
-		var d contract.KnowledgeDoc
-		if err := rows.Scan(&d.ID, &d.Title, &d.Size); err != nil {
-			return nil, err
-		}
-		out = append(out, d)
+	out := make([]contract.KnowledgeDoc, len(rows))
+	for i, r := range rows {
+		out[i] = contract.KnowledgeDoc{ID: r.ID, Title: r.Title, Size: r.Size}
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (s *Store) SaveKnowledgeDocs(ctx context.Context, teamID, workerID string, docs []contract.KnowledgeDoc) error {
-	return withTx(ctx, s.db, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM knowledge_docs WHERE team_id = ? AND worker_id = ?`, teamID, workerID); err != nil {
+	return s.dbWithCtx(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("team_id = ? AND worker_id = ?", teamID, workerID).Delete(&knowledgeDocRow{}).Error; err != nil {
 			return err
 		}
 		for _, d := range docs {
-			if _, err := tx.ExecContext(ctx,
-				`INSERT INTO knowledge_docs (team_id, worker_id, id, title, size) VALUES (?, ?, ?, ?, ?)`,
-				teamID, workerID, d.ID, d.Title, d.Size,
-			); err != nil {
+			if err := tx.Create(&knowledgeDocRow{
+				TeamID: teamID, WorkerID: workerID, ID: d.ID, Title: d.Title, Size: d.Size,
+			}).Error; err != nil {
 				return err
 			}
 		}

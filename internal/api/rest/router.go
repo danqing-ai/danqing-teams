@@ -76,7 +76,10 @@ func NewRouter(h *handlers.Handlers, mcpTools *mcp.Tools) *gin.Engine {
 		}
 	}
 
-	staticDir := "./web/dist"
+	staticDir := os.Getenv("DQ_STATIC_DIR")
+	if staticDir == "" {
+		staticDir = "./out/frontend/dist"
+	}
 	if _, err := os.Stat(staticDir); err == nil {
 		r.Static("/app", staticDir)
 		r.GET("/", func(c *gin.Context) {

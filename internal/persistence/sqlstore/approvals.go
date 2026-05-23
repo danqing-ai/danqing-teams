@@ -2,11 +2,12 @@ package sqlstore
 
 import (
 	"context"
-	"database/sql"
+	"errors"
 
 	"danqing-teams/internal/contract"
 	"danqing-teams/pkg/errs"
 	"danqing-teams/pkg/id"
+	"gorm.io/gorm"
 )
 
 func (s *Store) Create(ctx context.Context, req *contract.ApprovalRequest) error {
@@ -14,14 +15,12 @@ func (s *Store) Create(ctx context.Context, req *contract.ApprovalRequest) error
 }
 
 func (s *Store) createApproval(ctx context.Context, req *contract.ApprovalRequest) error {
-	high, _ := encodeJSON(req.HighRiskItems)
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO approvals (id, team_id, task_id, run_id, summary, high_risk_json, status, comment, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		req.ID, req.TeamID, req.TaskID, req.RunID, req.Summary, high, string(req.Status), req.Comment,
-		formatTime(req.CreatedAt), formatTime(req.UpdatedAt),
-	)
-	return err
+	return s.dbWithCtx(ctx).Create(&approvalRow{
+		ID: req.ID, TeamID: req.TeamID, TaskID: req.TaskID, RunID: req.RunID,
+		Summary: req.Summary, HighRiskItems: req.HighRiskItems,
+		Status: req.Status, Comment: req.Comment,
+		CreatedAt: req.CreatedAt, UpdatedAt: req.UpdatedAt,
+	}).Error
 }
 
 func (s *Store) Get(ctx context.Context, teamID, approvalID string) (*contract.ApprovalRequest, error) {
@@ -29,16 +28,14 @@ func (s *Store) Get(ctx context.Context, teamID, approvalID string) (*contract.A
 }
 
 func (s *Store) GetApproval(ctx context.Context, _, approvalID string) (*contract.ApprovalRequest, error) {
-	a, err := scanApproval(s.db.QueryRowContext(ctx,
-		`SELECT id, team_id, task_id, run_id, summary, high_risk_json, status, comment, created_at, updated_at
-		 FROM approvals WHERE id = ?`, approvalID,
-	))
-	if err == sql.ErrNoRows {
-		return nil, errs.NotFound("approval not found")
-	}
-	if err != nil {
+	var r approvalRow
+	if err := s.dbWithCtx(ctx).First(&r, "id = ?", approvalID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errs.NotFound("approval not found")
+		}
 		return nil, err
 	}
+	a := approvalFromRow(r)
 	return &a, nil
 }
 
@@ -47,16 +44,14 @@ func (s *Store) Update(ctx context.Context, req *contract.ApprovalRequest) error
 }
 
 func (s *Store) UpdateApproval(ctx context.Context, req *contract.ApprovalRequest) error {
-	high, _ := encodeJSON(req.HighRiskItems)
-	res, err := s.db.ExecContext(ctx,
-		`UPDATE approvals SET status = ?, comment = ?, high_risk_json = ?, summary = ?, updated_at = ? WHERE id = ?`,
-		string(req.Status), req.Comment, high, req.Summary, formatTime(req.UpdatedAt), req.ID,
-	)
-	if err != nil {
-		return err
+	res := s.dbWithCtx(ctx).Model(&approvalRow{}).Where("id = ?", req.ID).Updates(map[string]any{
+		"status": req.Status, "comment": req.Comment,
+		"high_risk_json": req.HighRiskItems, "summary": req.Summary, "updated_at": req.UpdatedAt,
+	})
+	if res.Error != nil {
+		return res.Error
 	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
+	if res.RowsAffected == 0 {
 		return errs.NotFound("approval not found")
 	}
 	return nil
@@ -67,26 +62,19 @@ func (s *Store) List(ctx context.Context, teamID string, status contract.Approva
 }
 
 func (s *Store) ListApprovals(ctx context.Context, teamID string, status contract.ApprovalStatus) ([]contract.ApprovalRequest, error) {
-	q := `SELECT id, team_id, task_id, run_id, summary, high_risk_json, status, comment, created_at, updated_at FROM approvals WHERE team_id = ?`
-	args := []any{teamID}
+	q := s.dbWithCtx(ctx).Where("team_id = ?", teamID)
 	if status != "" {
-		q += ` AND status = ?`
-		args = append(args, string(status))
+		q = q.Where("status = ?", status)
 	}
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
+	var rows []approvalRow
+	if err := q.Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []contract.ApprovalRequest
-	for rows.Next() {
-		a, err := scanApproval(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, a)
+	out := make([]contract.ApprovalRequest, len(rows))
+	for i, r := range rows {
+		out[i] = approvalFromRow(r)
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (s *Store) GetByRunID(ctx context.Context, runID string) (*contract.ApprovalRequest, error) {
@@ -94,61 +82,34 @@ func (s *Store) GetByRunID(ctx context.Context, runID string) (*contract.Approva
 }
 
 func (s *Store) GetApprovalByRunID(ctx context.Context, runID string) (*contract.ApprovalRequest, error) {
-	a, err := scanApproval(s.db.QueryRowContext(ctx,
-		`SELECT id, team_id, task_id, run_id, summary, high_risk_json, status, comment, created_at, updated_at
-		 FROM approvals WHERE run_id = ?`, runID,
-	))
-	if err == sql.ErrNoRows {
-		return nil, errs.NotFound("approval not found")
-	}
-	if err != nil {
+	var r approvalRow
+	if err := s.dbWithCtx(ctx).First(&r, "run_id = ?", runID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errs.NotFound("approval not found")
+		}
 		return nil, err
 	}
+	a := approvalFromRow(r)
 	return &a, nil
 }
 
-func scanApproval(scanner interface {
-	Scan(dest ...any) error
-}) (contract.ApprovalRequest, error) {
-	var a contract.ApprovalRequest
-	var high, status, created, updated string
-	if err := scanner.Scan(
-		&a.ID, &a.TeamID, &a.TaskID, &a.RunID, &a.Summary, &high, &status, &a.Comment, &created, &updated,
-	); err != nil {
-		return a, err
-	}
-	a.Status = contract.ApprovalStatus(status)
-	a.CreatedAt, _ = parseTime(created)
-	a.UpdatedAt, _ = parseTime(updated)
-	_ = decodeJSON(high, &a.HighRiskItems)
-	return a, nil
-}
-
 func (s *Store) ListTodos(ctx context.Context, teamID, taskID string) ([]contract.TodoItem, error) {
-	q := `SELECT id, team_id, task_id, title, done, created_at FROM todos WHERE team_id = ?`
-	args := []any{teamID}
+	q := s.dbWithCtx(ctx).Where("team_id = ?", teamID)
 	if taskID != "" {
-		q += ` AND task_id = ?`
-		args = append(args, taskID)
+		q = q.Where("task_id = ?", taskID)
 	}
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
+	var rows []todoRow
+	if err := q.Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []contract.TodoItem
-	for rows.Next() {
-		var it contract.TodoItem
-		var done int
-		var created string
-		if err := rows.Scan(&it.ID, &it.TeamID, &it.TaskID, &it.Title, &done, &created); err != nil {
-			return nil, err
+	out := make([]contract.TodoItem, len(rows))
+	for i, r := range rows {
+		out[i] = contract.TodoItem{
+			ID: r.ID, TeamID: r.TeamID, TaskID: r.TaskID,
+			Title: r.Title, Done: r.Done, CreatedAt: r.CreatedAt,
 		}
-		it.Done = done != 0
-		it.CreatedAt, _ = parseTime(created)
-		out = append(out, it)
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (s *Store) CreateTodo(ctx context.Context, teamID string, item contract.TodoItem) (*contract.TodoItem, error) {
@@ -157,33 +118,21 @@ func (s *Store) CreateTodo(ctx context.Context, teamID string, item contract.Tod
 	}
 	item.TeamID = teamID
 	item.CreatedAt = nowUTC()
-	done := 0
-	if item.Done {
-		done = 1
-	}
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO todos (id, team_id, task_id, title, done, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		item.ID, teamID, item.TaskID, item.Title, done, formatTime(item.CreatedAt),
-	)
-	if err != nil {
+	if err := s.dbWithCtx(ctx).Create(&todoRow{
+		ID: item.ID, TeamID: teamID, TaskID: item.TaskID,
+		Title: item.Title, Done: item.Done, CreatedAt: item.CreatedAt,
+	}).Error; err != nil {
 		return nil, err
 	}
 	return &item, nil
 }
 
 func (s *Store) UpdateTodo(ctx context.Context, teamID, todoID string, done bool) (*contract.TodoItem, error) {
-	doneInt := 0
-	if done {
-		doneInt = 1
+	res := s.dbWithCtx(ctx).Model(&todoRow{}).Where("team_id = ? AND id = ?", teamID, todoID).Update("done", done)
+	if res.Error != nil {
+		return nil, res.Error
 	}
-	res, err := s.db.ExecContext(ctx,
-		`UPDATE todos SET done = ? WHERE team_id = ? AND id = ?`, doneInt, teamID, todoID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
+	if res.RowsAffected == 0 {
 		return nil, errs.NotFound("todo not found")
 	}
 	items, err := s.ListTodos(ctx, teamID, "")
