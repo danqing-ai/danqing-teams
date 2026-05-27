@@ -5,13 +5,13 @@ import (
 	"strings"
 	"testing"
 
-	"danqing-teams/internal/contract"
+	"danqing-teams/internal/domain/model"
 )
 
 func TestProvider_WorkerReply_Alert(t *testing.T) {
 	p := New()
-	resp, err := p.Complete(context.Background(), contract.CompletionRequest{
-		Role: contract.LLMRoleWorker,
+	resp, err := p.Complete(context.Background(), model.CompletionRequest{
+		Role: model.LLMRoleWorker,
 		Context: map[string]string{
 			"worker_name": "AlertAnalyst",
 			"intent":      "分析 P1 告警",
@@ -29,8 +29,8 @@ func TestProvider_WorkerReply_Alert(t *testing.T) {
 
 func TestProvider_WorkerReply_Scale(t *testing.T) {
 	p := New()
-	resp, err := p.Complete(context.Background(), contract.CompletionRequest{
-		Role: contract.LLMRoleWorker,
+	resp, err := p.Complete(context.Background(), model.CompletionRequest{
+		Role: model.LLMRoleWorker,
 		Context: map[string]string{
 			"worker_name": "ClusterOperator",
 			"intent":      "对 prod 执行扩容",

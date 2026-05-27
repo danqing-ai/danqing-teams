@@ -7,23 +7,24 @@ import (
 
 	"danqing-teams/internal/persistence/memory"
 	"danqing-teams/internal/provider/llm/mock"
-	"danqing-teams/internal/service"
-	"danqing-teams/internal/service/events"
+	"danqing-teams/internal/application/service"
+	"danqing-teams/internal/application/service/events"
 )
 
 func setupTools(t *testing.T) (*Tools, string) {
 	t.Helper()
 	store := memory.NewStore()
 	_ = memory.SeedDemoTeam(context.Background(), store)
+	reg := store.Registry()
 	hub := events.NewNoop()
-	orch := service.NewOrchestrationService(store, store, store, store, mock.New(), hub, true)
-	worker := service.NewOrchestrationWorker(orch, store, store, "test")
+	orch := service.NewOrchestrationService(reg.Teams, reg.Tasks, reg.Approvals, reg.Jobs, mock.New(), hub, true)
+	worker := service.NewOrchestrationWorker(orch, reg.Jobs, reg.Recover, "test")
 	worker.Start(context.Background())
-	teams, _ := store.ListTeams(context.Background())
+	teams, _ := reg.Teams.ListTeams(context.Background())
 	return &Tools{
-		Teams:     service.NewTeamService(store),
-		Tasks:     service.NewTaskService(store, orch),
-		Approvals: service.NewApprovalService(store, store, store, hub, orch),
+		Teams:     service.NewTeamService(reg.Teams),
+		Tasks:     service.NewTaskService(reg.Tasks, orch),
+		Approvals: service.NewApprovalService(reg.Teams, reg.Tasks, reg.Approvals, hub, orch),
 	}, teams[0].ID
 }
 

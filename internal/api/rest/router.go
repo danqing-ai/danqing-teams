@@ -7,11 +7,11 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"danqing-teams/internal/api/mcp"
-	"danqing-teams/internal/api/rest/handlers"
+	"danqing-teams/internal/api/rest/controller"
 	"danqing-teams/internal/api/rest/middleware"
 )
 
-func NewRouter(h *handlers.Handlers, mcpTools *mcp.Tools) *gin.Engine {
+func NewRouter(h *controller.Controller, mcpTools *mcp.Tools) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(middleware.Recovery(), middleware.Logging(), middleware.CORS())

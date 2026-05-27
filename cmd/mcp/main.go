@@ -9,24 +9,25 @@ import (
 	"os"
 
 	"danqing-teams/internal/api/mcp"
+	"danqing-teams/internal/application/service"
+	"danqing-teams/internal/application/service/events"
 	"danqing-teams/internal/persistence/memory"
 	"danqing-teams/internal/provider/llm/mock"
-	"danqing-teams/internal/service"
-	"danqing-teams/internal/service/events"
 )
 
 func main() {
 	log.SetOutput(os.Stderr)
 	store := memory.NewStore()
 	_ = memory.SeedDemoTeam(context.Background(), store)
+	reg := store.Registry()
 	hub := events.NewNoop()
-	orch := service.NewOrchestrationService(store, store, store, store, mock.New(), hub, true)
-	worker := service.NewOrchestrationWorker(orch, store, store, "test")
+	orch := service.NewOrchestrationService(reg.Teams, reg.Tasks, reg.Approvals, reg.Jobs, mock.New(), hub, true)
+	worker := service.NewOrchestrationWorker(orch, reg.Jobs, reg.Recover, "test")
 	worker.Start(context.Background())
 	tools := &mcp.Tools{
-		Teams:     service.NewTeamService(store),
-		Tasks:     service.NewTaskService(store, orch),
-		Approvals: service.NewApprovalService(store, store, store, hub, orch),
+		Teams:     service.NewTeamService(reg.Teams),
+		Tasks:     service.NewTaskService(reg.Tasks, orch),
+		Approvals: service.NewApprovalService(reg.Teams, reg.Tasks, reg.Approvals, hub, orch),
 	}
 
 	sc := bufio.NewScanner(os.Stdin)
@@ -42,6 +43,6 @@ func main() {
 			_ = enc.Encode(map[string]string{"error": err.Error()})
 			continue
 		}
-		_ = enc.Encode(resp)
+			_ = enc.Encode(resp)
 	}
 }

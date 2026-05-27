@@ -5,27 +5,27 @@ import (
 	"errors"
 	"strings"
 
-	"danqing-teams/internal/contract"
+	"danqing-teams/internal/domain/model"
 	"danqing-teams/pkg/errs"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
-func agentToWorker(a contract.Agent) contract.WorkerAgent {
-	return contract.WorkerAgent{
+func agentToWorker(a model.Agent) model.WorkerAgent {
+	return model.WorkerAgent{
 		ID: a.ID, Name: a.Name, Persona: a.Description,
 		Skills: a.Skills, Tools: a.Tools, KnowledgeBase: a.KnowledgeBase,
 	}
 }
 
-func sanitizeAgentForResponse(a *contract.Agent) {
+func sanitizeAgentForResponse(a *model.Agent) {
 	if a.LLM.APIKey != "" {
 		a.LLM.HasAPIKey = true
 		a.LLM.APIKey = ""
 	}
 }
 
-func (s *Store) ListAgents(ctx context.Context, role contract.AgentRole) ([]contract.Agent, error) {
+func (s *Store) ListAgents(ctx context.Context, role model.AgentRole) ([]model.Agent, error) {
 	q := s.dbWithCtx(ctx)
 	if role != "" {
 		q = q.Where("role = ?", role)
@@ -34,7 +34,7 @@ func (s *Store) ListAgents(ctx context.Context, role contract.AgentRole) ([]cont
 	if err := q.Order("name").Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	out := make([]contract.Agent, len(rows))
+	out := make([]model.Agent, len(rows))
 	for i, r := range rows {
 		out[i] = agentFromRow(r)
 		sanitizeAgentForResponse(&out[i])
@@ -42,7 +42,7 @@ func (s *Store) ListAgents(ctx context.Context, role contract.AgentRole) ([]cont
 	return out, nil
 }
 
-func (s *Store) GetAgent(ctx context.Context, agentID string) (*contract.Agent, error) {
+func (s *Store) GetAgent(ctx context.Context, agentID string) (*model.Agent, error) {
 	a, err := s.getAgentRow(ctx, agentID)
 	if err != nil {
 		return nil, err
@@ -51,16 +51,16 @@ func (s *Store) GetAgent(ctx context.Context, agentID string) (*contract.Agent, 
 	return a, nil
 }
 
-func (s *Store) CreateAgent(ctx context.Context, req contract.CreateAgentRequest) (*contract.Agent, error) {
+func (s *Store) CreateAgent(ctx context.Context, req model.CreateAgentRequest) (*model.Agent, error) {
 	if strings.TrimSpace(req.Name) == "" {
 		return nil, errs.BadRequest("agent name required")
 	}
-	agentID, err := contract.ParseAgentID(req.ID)
+	agentID, err := model.ParseAgentID(req.ID)
 	if err != nil {
 		return nil, err
 	}
 	if req.Role == "" {
-		req.Role = contract.AgentRoleTeamWorker
+		req.Role = model.AgentRoleTeamWorker
 	}
 	if _, err := s.getAgentRow(ctx, agentID); err == nil {
 		return nil, errs.BadRequest("agent id already exists")
@@ -68,7 +68,7 @@ func (s *Store) CreateAgent(ctx context.Context, req contract.CreateAgentRequest
 		return nil, err
 	}
 	now := nowUTC()
-	a := contract.Agent{
+	a := model.Agent{
 		ID: agentID, Name: strings.TrimSpace(req.Name), Description: req.Description, Role: req.Role,
 		LLM: req.LLM, SystemPrompt: req.SystemPrompt, MinFunctionCallingRounds: req.MinFunctionCallingRounds,
 		Skills: req.Skills, Tools: req.Tools, KnowledgeBase: req.KnowledgeBase,
@@ -85,7 +85,7 @@ func (s *Store) CreateAgent(ctx context.Context, req contract.CreateAgentRequest
 	return &a, nil
 }
 
-func (s *Store) UpdateAgent(ctx context.Context, agentID string, req contract.UpdateAgentRequest) (*contract.Agent, error) {
+func (s *Store) UpdateAgent(ctx context.Context, agentID string, req model.UpdateAgentRequest) (*model.Agent, error) {
 	a, err := s.getAgentRow(ctx, agentID)
 	if err != nil {
 		return nil, err
@@ -144,7 +144,7 @@ func (s *Store) DeleteAgent(ctx context.Context, agentID string) error {
 	return nil
 }
 
-func (s *Store) ListTeamAgentMembers(ctx context.Context, teamID string) ([]contract.Agent, error) {
+func (s *Store) ListTeamAgentMembers(ctx context.Context, teamID string) ([]model.Agent, error) {
 	if _, err := s.getTeamRow(ctx, teamID); err != nil {
 		return nil, err
 	}
@@ -153,13 +153,13 @@ func (s *Store) ListTeamAgentMembers(ctx context.Context, teamID string) ([]cont
 		Table("team_agents ta").
 		Select("a.*").
 		Joins("JOIN agents a ON a.id = ta.agent_id").
-		Where("ta.team_id = ? AND a.role = ?", teamID, contract.AgentRoleTeamWorker).
+		Where("ta.team_id = ? AND a.role = ?", teamID, model.AgentRoleTeamWorker).
 		Order("a.name").
 		Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
-	out := make([]contract.Agent, len(rows))
+	out := make([]model.Agent, len(rows))
 	for i, r := range rows {
 		out[i] = agentFromRow(r)
 		sanitizeAgentForResponse(&out[i])
@@ -175,7 +175,7 @@ func (s *Store) AddTeamAgent(ctx context.Context, teamID, agentID string) error 
 	if err != nil {
 		return err
 	}
-	if a.Role != contract.AgentRoleTeamWorker {
+	if a.Role != model.AgentRoleTeamWorker {
 		return errs.BadRequest("only team-worker agents can join a team")
 	}
 	return s.dbWithCtx(ctx).Clauses(clause.Insert{Modifier: "OR IGNORE"}).Create(&teamAgentRow{
@@ -204,19 +204,19 @@ func (s *Store) IsTeamAgentMember(ctx context.Context, teamID, agentID string) (
 	return n > 0, err
 }
 
-func (s *Store) listWorkersFromAgents(ctx context.Context, teamID string) ([]contract.WorkerAgent, error) {
+func (s *Store) listWorkersFromAgents(ctx context.Context, teamID string) ([]model.WorkerAgent, error) {
 	members, err := s.ListTeamAgentMembers(ctx, teamID)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]contract.WorkerAgent, len(members))
+	out := make([]model.WorkerAgent, len(members))
 	for i, a := range members {
 		out[i] = agentToWorker(a)
 	}
 	return out, nil
 }
 
-func (s *Store) getWorkerFromAgents(ctx context.Context, teamID, workerID string) (*contract.WorkerAgent, error) {
+func (s *Store) getWorkerFromAgents(ctx context.Context, teamID, workerID string) (*model.WorkerAgent, error) {
 	ok, err := s.IsTeamAgentMember(ctx, teamID, workerID)
 	if err != nil {
 		return nil, err
@@ -232,7 +232,7 @@ func (s *Store) getWorkerFromAgents(ctx context.Context, teamID, workerID string
 	return &w, nil
 }
 
-func (s *Store) getAgentRow(ctx context.Context, agentID string) (*contract.Agent, error) {
+func (s *Store) getAgentRow(ctx context.Context, agentID string) (*model.Agent, error) {
 	var r agentRow
 	if err := s.dbWithCtx(ctx).First(&r, "id = ?", agentID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -258,8 +258,8 @@ func (s *Store) MigrateLegacyWorkersToAgents(ctx context.Context) error {
 	}
 	now := nowUTC()
 	for _, w := range workers {
-		a := contract.Agent{
-			ID: w.ID, Name: w.Name, Description: w.Persona, Role: contract.AgentRoleTeamWorker,
+		a := model.Agent{
+			ID: w.ID, Name: w.Name, Description: w.Persona, Role: model.AgentRoleTeamWorker,
 			Skills: w.Skills, Tools: w.Tools, KnowledgeBase: w.KB,
 			CreatedAt: now, UpdatedAt: now,
 		}

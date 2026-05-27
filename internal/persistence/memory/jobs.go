@@ -5,18 +5,18 @@ import (
 	"sort"
 	"time"
 
-	"danqing-teams/internal/contract"
+	"danqing-teams/internal/domain/model"
 	"danqing-teams/pkg/errs"
 )
 
-func (s *Store) Enqueue(_ context.Context, job *contract.OrchestrationJob) error {
+func (s *Store) Enqueue(_ context.Context, job *model.OrchestrationJob) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.jobs == nil {
-		s.jobs = make(map[string]*contract.OrchestrationJob)
+		s.jobs = make(map[string]*model.OrchestrationJob)
 	}
 	for _, j := range s.jobs {
-		if j.DedupKey == job.DedupKey && (j.Status == contract.JobPending || j.Status == contract.JobProcessing) {
+		if j.DedupKey == job.DedupKey && (j.Status == model.JobPending || j.Status == model.JobProcessing) {
 			return nil
 		}
 	}
@@ -24,17 +24,17 @@ func (s *Store) Enqueue(_ context.Context, job *contract.OrchestrationJob) error
 	return nil
 }
 
-func (s *Store) ClaimNext(_ context.Context, instanceID string, leaseUntil time.Time) (*contract.OrchestrationJob, error) {
+func (s *Store) ClaimNext(_ context.Context, instanceID string, leaseUntil time.Time) (*model.OrchestrationJob, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now().UTC()
-	var candidates []*contract.OrchestrationJob
+	var candidates []*model.OrchestrationJob
 	for _, j := range s.jobs {
-		if j.Status == contract.JobPending {
+		if j.Status == model.JobPending {
 			candidates = append(candidates, j)
 			continue
 		}
-		if j.Status == contract.JobProcessing && !j.LeaseUntil.IsZero() && j.LeaseUntil.Before(now) {
+		if j.Status == model.JobProcessing && !j.LeaseUntil.IsZero() && j.LeaseUntil.Before(now) {
 			candidates = append(candidates, j)
 		}
 	}
@@ -45,7 +45,7 @@ func (s *Store) ClaimNext(_ context.Context, instanceID string, leaseUntil time.
 		return candidates[i].CreatedAt.Before(candidates[j].CreatedAt)
 	})
 	job := candidates[0]
-	job.Status = contract.JobProcessing
+	job.Status = model.JobProcessing
 	job.LeaseOwner = instanceID
 	job.LeaseUntil = leaseUntil
 	job.UpdatedAt = now
@@ -59,7 +59,7 @@ func (s *Store) Complete(_ context.Context, jobID string) error {
 	if !ok {
 		return errs.NotFound("job not found")
 	}
-	j.Status = contract.JobCompleted
+	j.Status = model.JobCompleted
 	j.UpdatedAt = time.Now().UTC()
 	return nil
 }
@@ -71,7 +71,7 @@ func (s *Store) Fail(_ context.Context, jobID string, errMsg string) error {
 	if !ok {
 		return errs.NotFound("job not found")
 	}
-	j.Status = contract.JobFailed
+	j.Status = model.JobFailed
 	j.LastError = errMsg
 	j.UpdatedAt = time.Now().UTC()
 	return nil
@@ -83,8 +83,8 @@ func (s *Store) ReleaseExpiredLeases(_ context.Context) (int, error) {
 	now := time.Now().UTC()
 	n := 0
 	for _, j := range s.jobs {
-		if j.Status == contract.JobProcessing && !j.LeaseUntil.IsZero() && j.LeaseUntil.Before(now) {
-			j.Status = contract.JobPending
+		if j.Status == model.JobProcessing && !j.LeaseUntil.IsZero() && j.LeaseUntil.Before(now) {
+			j.Status = model.JobPending
 			j.LeaseOwner = ""
 			j.LeaseUntil = time.Time{}
 			j.UpdatedAt = now
@@ -101,7 +101,7 @@ func (s *Store) HasActiveJobForTask(_ context.Context, taskID string) (bool, err
 		if j.TaskID != taskID {
 			continue
 		}
-		if j.Status == contract.JobPending || j.Status == contract.JobProcessing {
+		if j.Status == model.JobPending || j.Status == model.JobProcessing {
 			return true, nil
 		}
 	}

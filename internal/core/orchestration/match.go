@@ -3,13 +3,13 @@ package orchestration
 import (
 	"strings"
 
-	"danqing-teams/internal/contract"
+	"danqing-teams/internal/domain/model"
 )
 
 // MatchWorker picks a worker using persona text only (no skills/tools).
-func MatchWorker(taskContent string, personas []contract.WorkerPersonaCatalog) (contract.WorkerPersonaCatalog, bool) {
+func MatchWorker(taskContent string, personas []model.WorkerPersonaCatalog) (model.WorkerPersonaCatalog, bool) {
 	if len(personas) == 0 {
-		return contract.WorkerPersonaCatalog{}, false
+		return model.WorkerPersonaCatalog{}, false
 	}
 	task := strings.ToLower(taskContent)
 	best := personas[0]
@@ -56,22 +56,22 @@ func scorePersona(task, persona, name string) int {
 }
 
 // MatchFollowUpWorker uses targetPersonaHint from report.
-func MatchFollowUpWorker(hint string, personas []contract.WorkerPersonaCatalog) (contract.WorkerPersonaCatalog, bool) {
+func MatchFollowUpWorker(hint string, personas []model.WorkerPersonaCatalog) (model.WorkerPersonaCatalog, bool) {
 	return MatchWorker(hint, personas)
 }
 
 // AnalyzeReportIntent derives follow-up from mock report patterns (conservative to avoid loops).
-func AnalyzeReportIntent(reportMarkdown string) (contract.ReportIntent, []contract.SuggestedAction) {
+func AnalyzeReportIntent(reportMarkdown string) (model.ReportIntent, []model.SuggestedAction) {
 	lower := strings.ToLower(reportMarkdown)
 	// Only explicit handoff phrases trigger follow-up, not mere mentions in narrative.
 	if strings.Contains(lower, "handoff: cluster_operator") ||
 		strings.Contains(lower, "建议由集群运维") {
-		return contract.ReportNeedsFollowUp, []contract.SuggestedAction{{
+		return model.ReportNeedsFollowUp, []model.SuggestedAction{{
 			Description:       "评估 prod 扩容",
 			TargetPersonaHint: "Kubernetes 集群运维 扩容",
 		}}
 	}
-	return contract.ReportFinal, nil
+	return model.ReportFinal, nil
 }
 
 // BuildContextSummary produces controller-safe summary without other workers' private data.

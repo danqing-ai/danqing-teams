@@ -10,30 +10,32 @@ import (
 	"time"
 
 	"danqing-teams/internal/api/rest"
-	"danqing-teams/internal/api/rest/handlers"
-	"danqing-teams/internal/contract"
+	"danqing-teams/internal/api/rest/controller"
+	"danqing-teams/internal/api/rest/dto"
+	"danqing-teams/internal/application/service"
+	"danqing-teams/internal/application/service/events"
+	"danqing-teams/internal/domain/model"
 	"danqing-teams/internal/persistence/memory"
 	"danqing-teams/internal/provider/llm/mock"
-	"danqing-teams/internal/service"
-	"danqing-teams/internal/service/events"
 )
 
-func setupRouter(t *testing.T, autoApprove bool) (*handlers.Handlers, string) {
+func setupRouter(t *testing.T, autoApprove bool) (*controller.Controller, string) {
 	t.Helper()
 	store := memory.NewStore()
 	if err := memory.SeedDemoTeam(context.Background(), store); err != nil {
 		t.Fatal(err)
 	}
+	reg := store.Registry()
 	hub := events.NewNoop()
-	orch := service.NewOrchestrationService(store, store, store, store, mock.New(), hub, autoApprove)
-	worker := service.NewOrchestrationWorker(orch, store, store, "test")
+	orch := service.NewOrchestrationService(reg.Teams, reg.Tasks, reg.Approvals, reg.Jobs, mock.New(), hub, autoApprove)
+	worker := service.NewOrchestrationWorker(orch, reg.Jobs, reg.Recover, "test")
 	worker.Start(context.Background())
-	h := &handlers.Handlers{
-		Teams:     service.NewTeamService(store),
-		Tasks:     service.NewTaskService(store, orch),
-		Approvals: service.NewApprovalService(store, store, store, hub, orch),
+	h := &controller.Controller{
+		Teams:     service.NewTeamService(reg.Teams),
+		Tasks:     service.NewTaskService(reg.Tasks, orch),
+		Approvals: service.NewApprovalService(reg.Teams, reg.Tasks, reg.Approvals, hub, orch),
 	}
-	teams, _ := store.ListTeams(context.Background())
+	teams, _ := reg.Teams.ListTeams(context.Background())
 	return h, teams[0].ID
 }
 
@@ -41,7 +43,7 @@ func TestSubmitTask_AlertFlow(t *testing.T) {
 	h, teamID := setupRouter(t, true)
 	r := rest.NewRouter(h, nil)
 
-	body, _ := json.Marshal(contract.SubmitTaskRequest{
+	body, _ := json.Marshal(dto.SubmitTaskRequest{
 		Content: "线上 CPU 飙高且有多条 P1 告警",
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/teams/"+teamID+"/tasks", bytes.NewReader(body))
@@ -52,7 +54,7 @@ func TestSubmitTask_AlertFlow(t *testing.T) {
 		t.Fatalf("submit: %d %s", w.Code, w.Body.String())
 	}
 
-	var task contract.TeamTask
+	var task dto.TeamTask
 	if err := json.Unmarshal(w.Body.Bytes(), &task); err != nil {
 		t.Fatal(err)
 	}
@@ -62,9 +64,9 @@ func TestSubmitTask_AlertFlow(t *testing.T) {
 		req2 := httptest.NewRequest(http.MethodGet, "/api/v1/teams/"+teamID+"/tasks/"+task.ID, nil)
 		w2 := httptest.NewRecorder()
 		r.ServeHTTP(w2, req2)
-		var got contract.TeamTask
+		var got dto.TeamTask
 		_ = json.Unmarshal(w2.Body.Bytes(), &got)
-		if got.Status == contract.TaskCompleted || got.Status == contract.TaskAwaitingApproval {
+		if got.Status == dto.TaskCompleted || got.Status == dto.TaskAwaitingApproval {
 			return
 		}
 		time.Sleep(200 * time.Millisecond)
@@ -74,7 +76,7 @@ func TestSubmitTask_AlertFlow(t *testing.T) {
 
 func TestLLMRemote_NotImplemented(t *testing.T) {
 	remote := struct {
-		Complete func(context.Context, contract.CompletionRequest) (contract.CompletionResponse, error)
+		Complete func(context.Context, model.CompletionRequest) (model.CompletionResponse, error)
 	}{}
 	_ = remote
 }

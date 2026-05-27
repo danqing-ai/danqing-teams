@@ -5,7 +5,14 @@
 | Item | Location |
 |------|----------|
 | API entry | `cmd/server/main.go` |
-| HTTP routes | `internal/api/rest/` |
+| HTTP routes | `internal/api/rest/router.go` |
+| Controllers | `internal/api/rest/controller/` |
+| DTOs | `internal/api/rest/dto/` |
+| App services | `internal/application/service/` |
+| Ports | `internal/application/port/` |
+| Domain model | `internal/domain/model/` |
+| Repositories | `internal/domain/repository/` |
+| Persistence | `internal/persistence/` |
 | Frontend | `frontend/` → build to `out/frontend/dist/` |
 | Dev scripts | `scripts/start.sh`, `scripts/stop.sh`, `scripts/dev_process.sh` |
 | Paths | `scripts/out_paths.sh` |
@@ -15,7 +22,8 @@
 ```bash
 make dev              # backend :7801 + Vite :5801 (same as make start)
 make stop
-make test
+make check-layers
+make test              # check-layers + go test ./...
 make test-integration
 make build-all        # out/frontend/dist + out/server/danqing-teams
 make pack-linux-server
@@ -62,6 +70,25 @@ Thin shell — backend must run separately (`make dev`). Then `cd desktop && npm
 - Windows desktop → `out/desktop/bundle/**/*.exe`
 
 Checks out `danqing-ai/dq-ui` alongside the repo (same layout as local dev).
+
+## Architecture
+
+```
+api/rest/controller + api/mcp
+    → application/port (interfaces)
+    → application/service (implementations)
+    → domain/repository (interfaces)
+    → persistence/sqlite|memory
+
+api/rest/dto + application/assembler  (HTTP JSON ↔ domain/model)
+
+domain/model — entities & value objects (no JSON tags)
+core/orchestration | core/worker | core/policy — pure domain logic
+provider/llm — LLM adapters
+OrchestrationWorker — multi-instance job consumer
+```
+
+Layer boundaries: `make check-layers` or `make test`.
 
 ## Notes
 

@@ -4,17 +4,17 @@ import (
 	"context"
 	"errors"
 
-	"danqing-teams/internal/contract"
+	"danqing-teams/internal/domain/model"
 	"danqing-teams/pkg/errs"
 	"danqing-teams/pkg/id"
 	"gorm.io/gorm"
 )
 
-func (s *Store) Create(ctx context.Context, req *contract.ApprovalRequest) error {
+func (s *Store) Create(ctx context.Context, req *model.ApprovalRequest) error {
 	return s.createApproval(ctx, req)
 }
 
-func (s *Store) createApproval(ctx context.Context, req *contract.ApprovalRequest) error {
+func (s *Store) createApproval(ctx context.Context, req *model.ApprovalRequest) error {
 	return s.dbWithCtx(ctx).Create(&approvalRow{
 		ID: req.ID, TeamID: req.TeamID, TaskID: req.TaskID, RunID: req.RunID,
 		Summary: req.Summary, HighRiskItems: req.HighRiskItems,
@@ -23,11 +23,11 @@ func (s *Store) createApproval(ctx context.Context, req *contract.ApprovalReques
 	}).Error
 }
 
-func (s *Store) Get(ctx context.Context, teamID, approvalID string) (*contract.ApprovalRequest, error) {
+func (s *Store) Get(ctx context.Context, teamID, approvalID string) (*model.ApprovalRequest, error) {
 	return s.GetApproval(ctx, teamID, approvalID)
 }
 
-func (s *Store) GetApproval(ctx context.Context, _, approvalID string) (*contract.ApprovalRequest, error) {
+func (s *Store) GetApproval(ctx context.Context, _, approvalID string) (*model.ApprovalRequest, error) {
 	var r approvalRow
 	if err := s.dbWithCtx(ctx).First(&r, "id = ?", approvalID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -39,11 +39,11 @@ func (s *Store) GetApproval(ctx context.Context, _, approvalID string) (*contrac
 	return &a, nil
 }
 
-func (s *Store) Update(ctx context.Context, req *contract.ApprovalRequest) error {
+func (s *Store) Update(ctx context.Context, req *model.ApprovalRequest) error {
 	return s.UpdateApproval(ctx, req)
 }
 
-func (s *Store) UpdateApproval(ctx context.Context, req *contract.ApprovalRequest) error {
+func (s *Store) UpdateApproval(ctx context.Context, req *model.ApprovalRequest) error {
 	res := s.dbWithCtx(ctx).Model(&approvalRow{}).Where("id = ?", req.ID).Updates(map[string]any{
 		"status": req.Status, "comment": req.Comment,
 		"high_risk_json": req.HighRiskItems, "summary": req.Summary, "updated_at": req.UpdatedAt,
@@ -57,11 +57,11 @@ func (s *Store) UpdateApproval(ctx context.Context, req *contract.ApprovalReques
 	return nil
 }
 
-func (s *Store) List(ctx context.Context, teamID string, status contract.ApprovalStatus) ([]contract.ApprovalRequest, error) {
+func (s *Store) List(ctx context.Context, teamID string, status model.ApprovalStatus) ([]model.ApprovalRequest, error) {
 	return s.ListApprovals(ctx, teamID, status)
 }
 
-func (s *Store) ListApprovals(ctx context.Context, teamID string, status contract.ApprovalStatus) ([]contract.ApprovalRequest, error) {
+func (s *Store) ListApprovals(ctx context.Context, teamID string, status model.ApprovalStatus) ([]model.ApprovalRequest, error) {
 	q := s.dbWithCtx(ctx).Where("team_id = ?", teamID)
 	if status != "" {
 		q = q.Where("status = ?", status)
@@ -70,18 +70,18 @@ func (s *Store) ListApprovals(ctx context.Context, teamID string, status contrac
 	if err := q.Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	out := make([]contract.ApprovalRequest, len(rows))
+	out := make([]model.ApprovalRequest, len(rows))
 	for i, r := range rows {
 		out[i] = approvalFromRow(r)
 	}
 	return out, nil
 }
 
-func (s *Store) GetByRunID(ctx context.Context, runID string) (*contract.ApprovalRequest, error) {
+func (s *Store) GetByRunID(ctx context.Context, runID string) (*model.ApprovalRequest, error) {
 	return s.GetApprovalByRunID(ctx, runID)
 }
 
-func (s *Store) GetApprovalByRunID(ctx context.Context, runID string) (*contract.ApprovalRequest, error) {
+func (s *Store) GetApprovalByRunID(ctx context.Context, runID string) (*model.ApprovalRequest, error) {
 	var r approvalRow
 	if err := s.dbWithCtx(ctx).First(&r, "run_id = ?", runID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -93,7 +93,7 @@ func (s *Store) GetApprovalByRunID(ctx context.Context, runID string) (*contract
 	return &a, nil
 }
 
-func (s *Store) ListTodos(ctx context.Context, teamID, taskID string) ([]contract.TodoItem, error) {
+func (s *Store) ListTodos(ctx context.Context, teamID, taskID string) ([]model.TodoItem, error) {
 	q := s.dbWithCtx(ctx).Where("team_id = ?", teamID)
 	if taskID != "" {
 		q = q.Where("task_id = ?", taskID)
@@ -102,9 +102,9 @@ func (s *Store) ListTodos(ctx context.Context, teamID, taskID string) ([]contrac
 	if err := q.Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	out := make([]contract.TodoItem, len(rows))
+	out := make([]model.TodoItem, len(rows))
 	for i, r := range rows {
-		out[i] = contract.TodoItem{
+		out[i] = model.TodoItem{
 			ID: r.ID, TeamID: r.TeamID, TaskID: r.TaskID,
 			Title: r.Title, Done: r.Done, CreatedAt: r.CreatedAt,
 		}
@@ -112,7 +112,7 @@ func (s *Store) ListTodos(ctx context.Context, teamID, taskID string) ([]contrac
 	return out, nil
 }
 
-func (s *Store) CreateTodo(ctx context.Context, teamID string, item contract.TodoItem) (*contract.TodoItem, error) {
+func (s *Store) CreateTodo(ctx context.Context, teamID string, item model.TodoItem) (*model.TodoItem, error) {
 	if item.ID == "" {
 		item.ID = id.New()
 	}
@@ -127,7 +127,7 @@ func (s *Store) CreateTodo(ctx context.Context, teamID string, item contract.Tod
 	return &item, nil
 }
 
-func (s *Store) UpdateTodo(ctx context.Context, teamID, todoID string, done bool) (*contract.TodoItem, error) {
+func (s *Store) UpdateTodo(ctx context.Context, teamID, todoID string, done bool) (*model.TodoItem, error) {
 	res := s.dbWithCtx(ctx).Model(&todoRow{}).Where("team_id = ? AND id = ?", teamID, todoID).Update("done", done)
 	if res.Error != nil {
 		return nil, res.Error

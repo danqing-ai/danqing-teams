@@ -3,7 +3,7 @@ package sqlstore
 import (
 	"time"
 
-	"danqing-teams/internal/contract"
+	"danqing-teams/internal/domain/model"
 )
 
 type teamRow struct {
@@ -29,9 +29,9 @@ type workerRow struct {
 	TeamID   string `gorm:"index:idx_workers_team"`
 	Name     string
 	Persona  string                    `gorm:"default:''"`
-	Skills   []contract.Skill          `gorm:"column:skills_json;serializer:json;default:'[]'"`
-	Tools    []contract.ToolBinding    `gorm:"column:tools_json;serializer:json;default:'[]'"`
-	KB       contract.KnowledgeBaseRef `gorm:"column:kb_json;serializer:json"`
+	Skills   []model.Skill          `gorm:"column:skills_json;serializer:json;default:'[]'"`
+	Tools    []model.ToolBinding    `gorm:"column:tools_json;serializer:json;default:'[]'"`
+	KB       model.KnowledgeBaseRef `gorm:"column:kb_json;serializer:json"`
 }
 
 func (workerRow) TableName() string { return "workers" }
@@ -50,8 +50,8 @@ type taskRow struct {
 	ID          string                  `gorm:"primaryKey"`
 	TeamID      string                  `gorm:"index:idx_tasks_team"`
 	Content     string
-	Status      contract.TaskStatus     `gorm:"index:idx_tasks_status"`
-	CloseReason contract.TaskCloseReason `gorm:"column:close_reason;default:''"`
+	Status      model.TaskStatus     `gorm:"index:idx_tasks_status"`
+	CloseReason model.TaskCloseReason `gorm:"column:close_reason;default:''"`
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
@@ -76,7 +76,7 @@ type workerRunRow struct {
 	TaskID     string              `gorm:"index:idx_runs_task"`
 	DispatchID string              `gorm:"column:dispatch_id"`
 	WorkerID   string              `gorm:"column:worker_id"`
-	Status     contract.RunStatus
+	Status     model.RunStatus
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 }
@@ -88,8 +88,8 @@ type executionPlanRow struct {
 	SkillIDs      []string            `gorm:"column:skill_ids_json;serializer:json;default:'[]'"`
 	ToolIDs       []string            `gorm:"column:tool_ids_json;serializer:json;default:'[]'"`
 	Rationale     string              `gorm:"default:''"`
-	EvaluatedRisk contract.RiskLevel  `gorm:"column:evaluated_risk;default:low"`
-	HighRiskItems []contract.RiskItem `gorm:"column:high_risk_json;serializer:json;default:'[]'"`
+	EvaluatedRisk model.RiskLevel  `gorm:"column:evaluated_risk;default:low"`
+	HighRiskItems []model.RiskItem `gorm:"column:high_risk_json;serializer:json;default:'[]'"`
 }
 
 func (executionPlanRow) TableName() string { return "execution_plans" }
@@ -101,8 +101,8 @@ type reportRow struct {
 	WorkerID         string                    `gorm:"column:worker_id"`
 	WorkerName       string                    `gorm:"column:worker_name;default:''"`
 	ContentMarkdown  string                    `gorm:"column:content_markdown"`
-	Intent           contract.ReportIntent
-	SuggestedActions []contract.SuggestedAction `gorm:"column:suggested_actions_json;serializer:json;default:'[]'"`
+	Intent           model.ReportIntent
+	SuggestedActions []model.SuggestedAction `gorm:"column:suggested_actions_json;serializer:json;default:'[]'"`
 	CreatedAt        time.Time
 }
 
@@ -122,7 +122,7 @@ type messageRow struct {
 	ID        string               `gorm:"primaryKey"`
 	TeamID    string               `gorm:"column:team_id"`
 	TaskID    string               `gorm:"index:idx_messages_task"`
-	Role      contract.MessageRole
+	Role      model.MessageRole
 	Content   string
 	CreatedAt time.Time
 }
@@ -135,8 +135,8 @@ type approvalRow struct {
 	TaskID        string                  `gorm:"column:task_id"`
 	RunID         string                  `gorm:"index:idx_approvals_run;column:run_id"`
 	Summary       string
-	HighRiskItems []contract.RiskItem     `gorm:"column:high_risk_json;serializer:json;default:'[]'"`
-	Status        contract.ApprovalStatus
+	HighRiskItems []model.RiskItem     `gorm:"column:high_risk_json;serializer:json;default:'[]'"`
+	Status        model.ApprovalStatus
 	Comment       string                  `gorm:"default:''"`
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
@@ -181,10 +181,10 @@ type orchestrationJobRow struct {
 	ID         string             `gorm:"primaryKey"`
 	TeamID     string             `gorm:"column:team_id"`
 	TaskID     string             `gorm:"index:idx_jobs_task;column:task_id"`
-	Kind       contract.JobKind
+	Kind       model.JobKind
 	Payload    string             `gorm:"column:payload_json;default:'{}'"`
 	DedupKey   string             `gorm:"index:idx_jobs_dedup;column:dedup_key"`
-	Status     contract.JobStatus `gorm:"index:idx_jobs_status_created,priority:1"`
+	Status     model.JobStatus `gorm:"index:idx_jobs_status_created,priority:1"`
 	LeaseOwner string             `gorm:"column:lease_owner;default:''"`
 	LeaseUntil *time.Time         `gorm:"column:lease_until"`
 	LastError  string             `gorm:"column:last_error;default:''"`
@@ -198,16 +198,16 @@ type agentRow struct {
 	ID                       string               `gorm:"primaryKey"`
 	Name                     string
 	Description              string               `gorm:"default:''"`
-	Role                     contract.AgentRole   `gorm:"index:idx_agents_role"`
+	Role                     model.AgentRole   `gorm:"index:idx_agents_role"`
 	LLMURL                   string               `gorm:"column:llm_url;default:''"`
 	LLMAPIKey                string               `gorm:"column:llm_api_key;default:''"`
 	DefaultModel             string               `gorm:"column:default_model;default:''"`
 	AllModels                []string             `gorm:"column:all_models_json;serializer:json;default:'[]'"`
 	SystemPrompt             string               `gorm:"column:system_prompt;default:''"`
 	MinFunctionCallingRounds int                  `gorm:"column:min_function_calling_rounds;default:1"`
-	Skills                   []contract.Skill     `gorm:"column:skills_json;serializer:json;default:'[]'"`
-	Tools                    []contract.ToolBinding `gorm:"column:tools_json;serializer:json;default:'[]'"`
-	KB                       contract.KnowledgeBaseRef `gorm:"column:kb_json;serializer:json"`
+	Skills                   []model.Skill     `gorm:"column:skills_json;serializer:json;default:'[]'"`
+	Tools                    []model.ToolBinding `gorm:"column:tools_json;serializer:json;default:'[]'"`
+	KB                       model.KnowledgeBaseRef `gorm:"column:kb_json;serializer:json"`
 	CreatedAt                time.Time
 	UpdatedAt                time.Time
 }

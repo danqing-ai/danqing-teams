@@ -4,26 +4,26 @@ import (
 	"context"
 	"errors"
 
-	"danqing-teams/internal/contract"
+	"danqing-teams/internal/domain/model"
 	"danqing-teams/pkg/errs"
 	"danqing-teams/pkg/id"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
-func (s *Store) ListTeams(ctx context.Context) ([]contract.Team, error) {
+func (s *Store) ListTeams(ctx context.Context) ([]model.Team, error) {
 	var rows []teamRow
 	if err := s.dbWithCtx(ctx).Order("created_at").Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	out := make([]contract.Team, len(rows))
+	out := make([]model.Team, len(rows))
 	for i, r := range rows {
 		out[i] = teamFromRow(r)
 	}
 	return out, nil
 }
 
-func (s *Store) GetTeam(ctx context.Context, teamID string) (*contract.TeamDetail, error) {
+func (s *Store) GetTeam(ctx context.Context, teamID string) (*model.TeamDetail, error) {
 	t, err := s.getTeamRow(ctx, teamID)
 	if err != nil {
 		return nil, err
@@ -40,18 +40,18 @@ func (s *Store) GetTeam(ctx context.Context, teamID string) (*contract.TeamDetai
 	if err != nil {
 		return nil, err
 	}
-	return &contract.TeamDetail{
+	return &model.TeamDetail{
 		Team: *t,
-		Controller: contract.TeamController{Persona: ctrl.Persona, SystemPrompt: ctrl.SystemPrompt},
+		Controller: model.TeamController{Persona: ctrl.Persona, SystemPrompt: ctrl.SystemPrompt},
 		Workers: workers, Humans: humans,
 	}, nil
 }
 
-func (s *Store) CreateTeam(ctx context.Context, req contract.CreateTeamRequest) (*contract.TeamDetail, error) {
+func (s *Store) CreateTeam(ctx context.Context, req model.CreateTeamRequest) (*model.TeamDetail, error) {
 	tid := id.New()
 	now := nowUTC()
-	t := contract.Team{ID: tid, Name: req.Name, Description: req.Description, CreatedAt: now, UpdatedAt: now}
-	ctrl := contract.TeamController{
+	t := model.Team{ID: tid, Name: req.Name, Description: req.Description, CreatedAt: now, UpdatedAt: now}
+	ctrl := model.TeamController{
 		Persona:      "负责理解用户意图，按 Worker 人设分派任务，汇总报告并规划 follow-up。",
 		SystemPrompt: "你是 Team Controller，仅依据 Worker 人设匹配，不知道 Worker 的技能与 MCP Tool。",
 	}
@@ -66,10 +66,10 @@ func (s *Store) CreateTeam(ctx context.Context, req contract.CreateTeamRequest) 
 	if err != nil {
 		return nil, err
 	}
-	return &contract.TeamDetail{Team: t, Controller: ctrl}, nil
+	return &model.TeamDetail{Team: t, Controller: ctrl}, nil
 }
 
-func (s *Store) UpdateTeam(ctx context.Context, teamID string, req contract.UpdateTeamRequest) (*contract.Team, error) {
+func (s *Store) UpdateTeam(ctx context.Context, teamID string, req model.UpdateTeamRequest) (*model.Team, error) {
 	t, err := s.getTeamRow(ctx, teamID)
 	if err != nil {
 		return nil, err
@@ -101,7 +101,7 @@ func (s *Store) DeleteTeam(ctx context.Context, teamID string) error {
 	return nil
 }
 
-func (s *Store) getTeamRow(ctx context.Context, teamID string) (*contract.Team, error) {
+func (s *Store) getTeamRow(ctx context.Context, teamID string) (*model.Team, error) {
 	var r teamRow
 	if err := s.dbWithCtx(ctx).First(&r, "id = ?", teamID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -113,33 +113,33 @@ func (s *Store) getTeamRow(ctx context.Context, teamID string) (*contract.Team, 
 	return &t, nil
 }
 
-func (s *Store) ListPersonaCatalog(ctx context.Context, teamID string) ([]contract.WorkerPersonaCatalog, error) {
+func (s *Store) ListPersonaCatalog(ctx context.Context, teamID string) ([]model.WorkerPersonaCatalog, error) {
 	workers, err := s.ListWorkers(ctx, teamID)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]contract.WorkerPersonaCatalog, len(workers))
+	out := make([]model.WorkerPersonaCatalog, len(workers))
 	for i, w := range workers {
-		out[i] = contract.WorkerPersonaCatalog{ID: w.ID, Name: w.Name, Persona: w.Persona}
+		out[i] = model.WorkerPersonaCatalog{ID: w.ID, Name: w.Name, Persona: w.Persona}
 	}
 	return out, nil
 }
 
-func (s *Store) GetController(ctx context.Context, teamID string) (*contract.TeamController, error) {
+func (s *Store) GetController(ctx context.Context, teamID string) (*model.TeamController, error) {
 	if _, err := s.getTeamRow(ctx, teamID); err != nil {
 		return nil, err
 	}
 	var ctrl teamControllerRow
 	if err := s.dbWithCtx(ctx).First(&ctrl, "team_id = ?", teamID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return &contract.TeamController{}, nil
+			return &model.TeamController{}, nil
 		}
 		return nil, err
 	}
-	return &contract.TeamController{Persona: ctrl.Persona, SystemPrompt: ctrl.SystemPrompt}, nil
+	return &model.TeamController{Persona: ctrl.Persona, SystemPrompt: ctrl.SystemPrompt}, nil
 }
 
-func (s *Store) UpdateController(ctx context.Context, teamID string, c contract.TeamController) error {
+func (s *Store) UpdateController(ctx context.Context, teamID string, c model.TeamController) error {
 	if _, err := s.getTeamRow(ctx, teamID); err != nil {
 		return err
 	}
@@ -150,7 +150,7 @@ func (s *Store) UpdateController(ctx context.Context, teamID string, c contract.
 	}).Create(&row).Error
 }
 
-func (s *Store) ListWorkers(ctx context.Context, teamID string) ([]contract.WorkerAgent, error) {
+func (s *Store) ListWorkers(ctx context.Context, teamID string) ([]model.WorkerAgent, error) {
 	if workers, err := s.listWorkersFromAgents(ctx, teamID); err != nil {
 		return nil, err
 	} else if len(workers) > 0 {
@@ -160,14 +160,14 @@ func (s *Store) ListWorkers(ctx context.Context, teamID string) ([]contract.Work
 	if err := s.dbWithCtx(ctx).Where("team_id = ?", teamID).Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	out := make([]contract.WorkerAgent, len(rows))
+	out := make([]model.WorkerAgent, len(rows))
 	for i, r := range rows {
 		out[i] = workerFromRow(r)
 	}
 	return out, nil
 }
 
-func (s *Store) GetWorker(ctx context.Context, teamID, workerID string) (*contract.WorkerAgent, error) {
+func (s *Store) GetWorker(ctx context.Context, teamID, workerID string) (*model.WorkerAgent, error) {
 	if w, err := s.getWorkerFromAgents(ctx, teamID, workerID); err == nil {
 		return w, nil
 	} else if !errors.Is(err, errs.ErrNotFound) {
@@ -184,7 +184,7 @@ func (s *Store) GetWorker(ctx context.Context, teamID, workerID string) (*contra
 	return &w, nil
 }
 
-func (s *Store) UpsertWorker(ctx context.Context, teamID string, worker *contract.WorkerAgent) error {
+func (s *Store) UpsertWorker(ctx context.Context, teamID string, worker *model.WorkerAgent) error {
 	if _, err := s.getTeamRow(ctx, teamID); err != nil {
 		return err
 	}
@@ -217,29 +217,29 @@ func (s *Store) DeleteWorker(ctx context.Context, teamID, workerID string) error
 	return nil
 }
 
-func (s *Store) GetWorkerPrivateProfile(ctx context.Context, teamID, workerID string) (*contract.WorkerPrivateProfile, error) {
+func (s *Store) GetWorkerPrivateProfile(ctx context.Context, teamID, workerID string) (*model.WorkerPrivateProfile, error) {
 	w, err := s.GetWorker(ctx, teamID, workerID)
 	if err != nil {
 		return nil, err
 	}
-	return &contract.WorkerPrivateProfile{
+	return &model.WorkerPrivateProfile{
 		WorkerID: w.ID, Skills: w.Skills, Tools: w.Tools, KnowledgeBase: w.KnowledgeBase,
 	}, nil
 }
 
-func (s *Store) ListHumans(ctx context.Context, teamID string) ([]contract.HumanMember, error) {
+func (s *Store) ListHumans(ctx context.Context, teamID string) ([]model.HumanMember, error) {
 	var rows []humanRow
 	if err := s.dbWithCtx(ctx).Where("team_id = ?", teamID).Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	out := make([]contract.HumanMember, len(rows))
+	out := make([]model.HumanMember, len(rows))
 	for i, r := range rows {
-		out[i] = contract.HumanMember{ID: r.ID, DisplayName: r.DisplayName, Email: r.Email, Role: r.Role}
+		out[i] = model.HumanMember{ID: r.ID, DisplayName: r.DisplayName, Email: r.Email, Role: r.Role}
 	}
 	return out, nil
 }
 
-func (s *Store) AddHuman(ctx context.Context, teamID string, h contract.HumanMember) error {
+func (s *Store) AddHuman(ctx context.Context, teamID string, h model.HumanMember) error {
 	if _, err := s.getTeamRow(ctx, teamID); err != nil {
 		return err
 	}

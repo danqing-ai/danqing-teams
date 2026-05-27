@@ -9,7 +9,7 @@ export DQ_APP_NAME := $(APP_NAME)
 
 .PHONY: help dev start stop \
 	frontend-install frontend-dev frontend-build frontend-typecheck \
-	test test-integration \
+	check-layers test test-integration \
 	build-server build-all clean \
 	pack-prereqs pack-macos-desktop pack-linux-server pack-windows-desktop
 
@@ -18,7 +18,7 @@ help:
 	@echo ""
 	@echo "Dev:       dev | start | stop"
 	@echo "Frontend:  frontend-install | frontend-dev | frontend-build | frontend-typecheck"
-	@echo "Test:      test | test-integration"
+	@echo "Test:      check-layers | test | test-integration"
 	@echo "Build:     build-server | build-all | clean"
 	@echo "Release:   pack-macos-desktop | pack-linux-server | pack-windows-desktop"
 
@@ -42,7 +42,10 @@ frontend-build: frontend-install
 frontend-typecheck: frontend-install
 	cd $(FRONTEND_DIR) && npm run typecheck
 
-test:
+check-layers:
+	go run scripts/check_layers.go
+
+test: check-layers
 	go test ./... -count=1
 
 test-integration:

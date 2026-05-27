@@ -3,11 +3,11 @@ package orchestration
 import (
 	"testing"
 
-	"danqing-teams/internal/contract"
+	"danqing-teams/internal/domain/model"
 )
 
-func personas() []contract.WorkerPersonaCatalog {
-	return []contract.WorkerPersonaCatalog{
+func personas() []model.WorkerPersonaCatalog {
+	return []model.WorkerPersonaCatalog{
 		{ID: "w1", Name: "AlertAnalyst", Persona: "负责告警归因、指标与日志分析；不执行集群变更"},
 		{ID: "w2", Name: "ClusterOperator", Persona: "负责 Kubernetes 扩容、节点迁移、集群配置变更"},
 		{ID: "w3", Name: "ConfigAuditor", Persona: "负责配置审查与合规检查"},

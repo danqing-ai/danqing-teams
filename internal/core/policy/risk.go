@@ -1,26 +1,26 @@
 package policy
 
-import "danqing-teams/internal/contract"
+import "danqing-teams/internal/domain/model"
 
 // EvaluatePlan aggregates risk from Worker-reported execution plan items only.
-func EvaluatePlan(profile contract.WorkerPrivateProfile, plan contract.ExecutionPlan) (contract.RiskLevel, []contract.RiskItem) {
-	skillRisk := map[string]contract.Skill{}
+func EvaluatePlan(profile model.WorkerPrivateProfile, plan model.ExecutionPlan) (model.RiskLevel, []model.RiskItem) {
+	skillRisk := map[string]model.Skill{}
 	for _, s := range profile.Skills {
 		skillRisk[s.ID] = s
 	}
-	toolRisk := map[string]contract.ToolBinding{}
+	toolRisk := map[string]model.ToolBinding{}
 	for _, t := range profile.Tools {
 		toolRisk[t.ToolID] = t
 	}
 
-	max := contract.RiskLow
-	var highItems []contract.RiskItem
+	max := model.RiskLow
+	var highItems []model.RiskItem
 
 	for _, sid := range plan.SkillIDs {
 		if s, ok := skillRisk[sid]; ok {
-			max = contract.MaxRisk(max, s.RiskLevel)
-			if s.RiskLevel == contract.RiskHigh {
-				highItems = append(highItems, contract.RiskItem{
+			max = model.MaxRisk(max, s.RiskLevel)
+			if s.RiskLevel == model.RiskHigh {
+				highItems = append(highItems, model.RiskItem{
 					Type: "skill", ID: s.ID, DisplayName: s.Name,
 				})
 			}
@@ -28,9 +28,9 @@ func EvaluatePlan(profile contract.WorkerPrivateProfile, plan contract.Execution
 	}
 	for _, tid := range plan.ToolIDs {
 		if t, ok := toolRisk[tid]; ok {
-			max = contract.MaxRisk(max, t.RiskLevel)
-			if t.RiskLevel == contract.RiskHigh {
-				highItems = append(highItems, contract.RiskItem{
+			max = model.MaxRisk(max, t.RiskLevel)
+			if t.RiskLevel == model.RiskHigh {
+				highItems = append(highItems, model.RiskItem{
 					Type: "mcp_tool", ID: t.ToolID, DisplayName: t.Name,
 				})
 			}
@@ -39,6 +39,6 @@ func EvaluatePlan(profile contract.WorkerPrivateProfile, plan contract.Execution
 	return max, highItems
 }
 
-func RequiresApproval(max contract.RiskLevel, highItems []contract.RiskItem) bool {
-	return max == contract.RiskHigh && len(highItems) > 0
+func RequiresApproval(max model.RiskLevel, highItems []model.RiskItem) bool {
+	return max == model.RiskHigh && len(highItems) > 0
 }

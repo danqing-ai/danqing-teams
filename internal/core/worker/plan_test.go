@@ -3,19 +3,19 @@ package worker
 import (
 	"testing"
 
-	"danqing-teams/internal/contract"
+	"danqing-teams/internal/domain/model"
 )
 
-func clusterProfile() contract.WorkerPrivateProfile {
-	return contract.WorkerPrivateProfile{
+func clusterProfile() model.WorkerPrivateProfile {
+	return model.WorkerPrivateProfile{
 		WorkerID: "w2",
-		Skills: []contract.Skill{
-			{ID: "cluster.inspect", Name: "Inspect", Keywords: []string{"inspect", "节点"}, RiskLevel: contract.RiskLow},
-			{ID: "k8s.scale", Name: "Scale", Keywords: []string{"扩容", "scale"}, RiskLevel: contract.RiskHigh},
+		Skills: []model.Skill{
+			{ID: "cluster.inspect", Name: "Inspect", Keywords: []string{"inspect", "节点"}, RiskLevel: model.RiskLow},
+			{ID: "k8s.scale", Name: "Scale", Keywords: []string{"扩容", "scale"}, RiskLevel: model.RiskHigh},
 		},
-		Tools: []contract.ToolBinding{
-			{ToolID: "k8s.nodes.list", Name: "List", RiskLevel: contract.RiskLow},
-			{ToolID: "k8s.deployment.scale", Name: "Scale Deploy", RiskLevel: contract.RiskHigh},
+		Tools: []model.ToolBinding{
+			{ToolID: "k8s.nodes.list", Name: "List", RiskLevel: model.RiskLow},
+			{ToolID: "k8s.deployment.scale", Name: "Scale Deploy", RiskLevel: model.RiskHigh},
 		},
 	}
 }

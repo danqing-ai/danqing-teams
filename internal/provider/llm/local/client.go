@@ -3,7 +3,7 @@ package local
 import (
 	"context"
 
-	"danqing-teams/internal/contract"
+	"danqing-teams/internal/domain/model"
 	"danqing-teams/pkg/errs"
 )
 
@@ -12,6 +12,6 @@ type Client struct{}
 
 func New() *Client { return &Client{} }
 
-func (c *Client) Complete(_ context.Context, _ contract.CompletionRequest) (contract.CompletionResponse, error) {
-	return contract.CompletionResponse{}, errs.ErrNotImplemented
+func (c *Client) Complete(_ context.Context, _ model.CompletionRequest) (model.CompletionResponse, error) {
+	return model.CompletionResponse{}, errs.ErrNotImplemented
 }

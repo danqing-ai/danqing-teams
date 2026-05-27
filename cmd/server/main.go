@@ -10,15 +10,15 @@ import (
 
 	"danqing-teams/internal/api/mcp"
 	"danqing-teams/internal/api/rest"
-	"danqing-teams/internal/api/rest/handlers"
-	"danqing-teams/internal/contract"
+	"danqing-teams/internal/api/rest/controller"
+	"danqing-teams/internal/application/service"
+	"danqing-teams/internal/application/service/events"
+	"danqing-teams/internal/domain/model"
 	"danqing-teams/internal/persistence"
 	"danqing-teams/internal/provider/llm/mock"
-	"danqing-teams/internal/service"
-	"danqing-teams/internal/service/events"
 )
 
-func noopEvents() contract.EventPublisher {
+func noopEvents() model.EventPublisher {
 	return events.NewNoop()
 }
 
@@ -30,7 +30,7 @@ func main() {
 	dbPath := env("TEAMS_DB_PATH", "./data/teams.db")
 	instanceID := env("TEAMS_INSTANCE_ID", "")
 
-	repos, kind, closeStore, err := persistence.Open(ctx, storeKind, dbPath)
+	reg, kind, closeStore, err := persistence.Open(ctx, storeKind, dbPath)
 	if err != nil {
 		log.Fatalf("store: %v", err)
 	}
@@ -40,25 +40,18 @@ func main() {
 	llm := mock.New()
 	autoApprove := envBool("TEAMS_AUTO_APPROVE", false)
 
-	teams := repos.(contract.TeamRepository)
-	agents := repos.(contract.AgentRepository)
-	tasks := repos.(contract.TaskRepository)
-	approvals := repos.(contract.ApprovalRepository)
-	jobs := repos.(contract.JobRepository)
-	recoverStore := repos.(service.RecoverableTaskStore)
-
-	orch := service.NewOrchestrationService(teams, tasks, approvals, jobs, llm, hub, autoApprove)
-	worker := service.NewOrchestrationWorker(orch, jobs, recoverStore, instanceID)
+	orch := service.NewOrchestrationService(reg.Teams, reg.Tasks, reg.Approvals, reg.Jobs, llm, hub, autoApprove)
+	worker := service.NewOrchestrationWorker(orch, reg.Jobs, reg.Recover, instanceID)
 	worker.Start(ctx)
 
-	teamSvc := service.NewTeamService(teams)
-	agentSvc := service.NewAgentService(agents, teams)
-	taskSvc := service.NewTaskService(tasks, orch)
-	approvalSvc := service.NewApprovalService(teams, tasks, approvals, hub, orch)
-	todos := service.NewTodoService(repos.(contract.TeamRepository))
-	workspace := service.NewWorkspaceService(repos.(contract.WorkspaceRepository))
+	teamSvc := service.NewTeamService(reg.Teams)
+	agentSvc := service.NewAgentService(reg.Agents, reg.Teams)
+	taskSvc := service.NewTaskService(reg.Tasks, orch)
+	approvalSvc := service.NewApprovalService(reg.Teams, reg.Tasks, reg.Approvals, hub, orch)
+	todos := service.NewTodoService(reg.Teams)
+	workspace := service.NewWorkspaceService(reg.Workspace)
 
-	h := &handlers.Handlers{
+	h := &controller.Controller{
 		Teams: teamSvc, Tasks: taskSvc, Approvals: approvalSvc,
 		Todos: todos, Workspace: workspace, Agents: agentSvc,
 	}

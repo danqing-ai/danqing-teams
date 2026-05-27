@@ -5,26 +5,26 @@ import (
 	"fmt"
 	"strings"
 
-	"danqing-teams/internal/contract"
+	"danqing-teams/internal/domain/model"
 )
 
-// Provider implements contract.LLMProvider with deterministic rule-based responses.
+// Provider implements model.LLMProvider with deterministic rule-based responses.
 type Provider struct{}
 
 func New() *Provider { return &Provider{} }
 
-func (p *Provider) Complete(_ context.Context, req contract.CompletionRequest) (contract.CompletionResponse, error) {
+func (p *Provider) Complete(_ context.Context, req model.CompletionRequest) (model.CompletionResponse, error) {
 	switch req.Role {
-	case contract.LLMRoleController:
-		return contract.CompletionResponse{Content: p.controllerReply(req)}, nil
-	case contract.LLMRoleWorker:
-		return contract.CompletionResponse{Content: p.workerReply(req)}, nil
+	case model.LLMRoleController:
+		return model.CompletionResponse{Content: p.controllerReply(req)}, nil
+	case model.LLMRoleWorker:
+		return model.CompletionResponse{Content: p.workerReply(req)}, nil
 	default:
-		return contract.CompletionResponse{Content: "ok"}, nil
+		return model.CompletionResponse{Content: "ok"}, nil
 	}
 }
 
-func (p *Provider) controllerReply(req contract.CompletionRequest) string {
+func (p *Provider) controllerReply(req model.CompletionRequest) string {
 	intent := strings.ToLower(strings.TrimSpace(req.Prompt))
 	personas := req.Context["personas"]
 
@@ -87,7 +87,7 @@ func scoreControllerIntent(task, name, persona string) int {
 	return score
 }
 
-func (p *Provider) workerReply(req contract.CompletionRequest) string {
+func (p *Provider) workerReply(req model.CompletionRequest) string {
 	workerName := req.Context["worker_name"]
 	intent := req.Context["intent"]
 	planSkills := req.Context["plan_skills"]

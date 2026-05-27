@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"danqing-teams/internal/contract"
+	"danqing-teams/internal/domain/model"
 	"danqing-teams/pkg/errs"
 	"danqing-teams/pkg/id"
 )
@@ -15,62 +15,62 @@ type Store struct {
 	mu sync.RWMutex
 
 	teams      map[string]*teamRecord
-	tasks      map[string]*contract.TeamTask
-	dispatches map[string][]contract.Dispatch
-	runs       map[string]*contract.WorkerRun
-	plans      map[string]*contract.ExecutionPlan
-	reports    map[string][]contract.Report
-	timeline   map[string][]contract.TimelineEvent
-	messages   map[string][]contract.TeamMessage
-	approvals  map[string]*contract.ApprovalRequest
-	todos      map[string][]contract.TodoItem
-	artifacts  map[string][]contract.WorkspaceArtifact
-	kbDocs     map[string][]contract.KnowledgeDoc // key teamId:workerId
-	jobs       map[string]*contract.OrchestrationJob
-	agents     map[string]contract.Agent
+	tasks      map[string]*model.TeamTask
+	dispatches map[string][]model.Dispatch
+	runs       map[string]*model.WorkerRun
+	plans      map[string]*model.ExecutionPlan
+	reports    map[string][]model.Report
+	timeline   map[string][]model.TimelineEvent
+	messages   map[string][]model.TeamMessage
+	approvals  map[string]*model.ApprovalRequest
+	todos      map[string][]model.TodoItem
+	artifacts  map[string][]model.WorkspaceArtifact
+	kbDocs     map[string][]model.KnowledgeDoc // key teamId:workerId
+	jobs       map[string]*model.OrchestrationJob
+	agents     map[string]model.Agent
 	teamAgents map[string]struct{} // key teamId:agentId
 }
 
 type teamRecord struct {
-	team       contract.Team
-	controller contract.TeamController
-	workers    map[string]contract.WorkerAgent
-	humans     []contract.HumanMember
+	team       model.Team
+	controller model.TeamController
+	workers    map[string]model.WorkerAgent
+	humans     []model.HumanMember
 }
 
 func NewStore() *Store {
 	return &Store{
 		teams:      make(map[string]*teamRecord),
-		tasks:      make(map[string]*contract.TeamTask),
-		dispatches: make(map[string][]contract.Dispatch),
-		runs:       make(map[string]*contract.WorkerRun),
-		plans:      make(map[string]*contract.ExecutionPlan),
-		reports:    make(map[string][]contract.Report),
-		timeline:   make(map[string][]contract.TimelineEvent),
-		messages:   make(map[string][]contract.TeamMessage),
-		approvals:  make(map[string]*contract.ApprovalRequest),
-		todos:      make(map[string][]contract.TodoItem),
-		artifacts:  make(map[string][]contract.WorkspaceArtifact),
-		kbDocs:     make(map[string][]contract.KnowledgeDoc),
-		jobs:       make(map[string]*contract.OrchestrationJob),
-		agents:     make(map[string]contract.Agent),
+		tasks:      make(map[string]*model.TeamTask),
+		dispatches: make(map[string][]model.Dispatch),
+		runs:       make(map[string]*model.WorkerRun),
+		plans:      make(map[string]*model.ExecutionPlan),
+		reports:    make(map[string][]model.Report),
+		timeline:   make(map[string][]model.TimelineEvent),
+		messages:   make(map[string][]model.TeamMessage),
+		approvals:  make(map[string]*model.ApprovalRequest),
+		todos:      make(map[string][]model.TodoItem),
+		artifacts:  make(map[string][]model.WorkspaceArtifact),
+		kbDocs:     make(map[string][]model.KnowledgeDoc),
+		jobs:       make(map[string]*model.OrchestrationJob),
+		agents:     make(map[string]model.Agent),
 		teamAgents: make(map[string]struct{}),
 	}
 }
 
 func kbKey(teamID, workerID string) string { return teamID + ":" + workerID }
 
-func (s *Store) ListTeams(_ context.Context) ([]contract.Team, error) {
+func (s *Store) ListTeams(_ context.Context) ([]model.Team, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]contract.Team, 0, len(s.teams))
+	out := make([]model.Team, 0, len(s.teams))
 	for _, tr := range s.teams {
 		out = append(out, tr.team)
 	}
 	return out, nil
 }
 
-func (s *Store) GetTeam(_ context.Context, teamID string) (*contract.TeamDetail, error) {
+func (s *Store) GetTeam(_ context.Context, teamID string) (*model.TeamDetail, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	tr, ok := s.teams[teamID]
@@ -79,40 +79,40 @@ func (s *Store) GetTeam(_ context.Context, teamID string) (*contract.TeamDetail,
 	}
 	workers := s.listWorkersFromAgents(teamID)
 	if len(workers) == 0 {
-		workers = make([]contract.WorkerAgent, 0, len(tr.workers))
+		workers = make([]model.WorkerAgent, 0, len(tr.workers))
 		for _, w := range tr.workers {
 			workers = append(workers, w)
 		}
 	}
-	return &contract.TeamDetail{
+	return &model.TeamDetail{
 		Team:       tr.team,
 		Controller: tr.controller,
 		Workers:    workers,
-		Humans:     append([]contract.HumanMember(nil), tr.humans...),
+		Humans:     append([]model.HumanMember(nil), tr.humans...),
 	}, nil
 }
 
-func (s *Store) CreateTeam(_ context.Context, req contract.CreateTeamRequest) (*contract.TeamDetail, error) {
+func (s *Store) CreateTeam(_ context.Context, req model.CreateTeamRequest) (*model.TeamDetail, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tid := id.New()
 	now := time.Now().UTC()
 	tr := &teamRecord{
-		team: contract.Team{
+		team: model.Team{
 			ID: tid, Name: req.Name, Description: req.Description,
 			CreatedAt: now, UpdatedAt: now,
 		},
-		controller: contract.TeamController{
+		controller: model.TeamController{
 			Persona:      "负责理解用户意图，按 Worker 人设分派任务，汇总报告并规划 follow-up。",
 			SystemPrompt: "你是 Team Controller，仅依据 Worker 人设匹配，不知道 Worker 的技能与 MCP Tool。",
 		},
-		workers: make(map[string]contract.WorkerAgent),
+		workers: make(map[string]model.WorkerAgent),
 	}
 	s.teams[tid] = tr
-	return &contract.TeamDetail{Team: tr.team, Controller: tr.controller}, nil
+	return &model.TeamDetail{Team: tr.team, Controller: tr.controller}, nil
 }
 
-func (s *Store) UpdateTeam(_ context.Context, teamID string, req contract.UpdateTeamRequest) (*contract.Team, error) {
+func (s *Store) UpdateTeam(_ context.Context, teamID string, req model.UpdateTeamRequest) (*model.Team, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tr, ok := s.teams[teamID]
@@ -139,19 +139,19 @@ func (s *Store) DeleteTeam(_ context.Context, teamID string) error {
 	return nil
 }
 
-func (s *Store) ListPersonaCatalog(ctx context.Context, teamID string) ([]contract.WorkerPersonaCatalog, error) {
+func (s *Store) ListPersonaCatalog(ctx context.Context, teamID string) ([]model.WorkerPersonaCatalog, error) {
 	workers, err := s.ListWorkers(ctx, teamID)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]contract.WorkerPersonaCatalog, len(workers))
+	out := make([]model.WorkerPersonaCatalog, len(workers))
 	for i, w := range workers {
-		out[i] = contract.WorkerPersonaCatalog{ID: w.ID, Name: w.Name, Persona: w.Persona}
+		out[i] = model.WorkerPersonaCatalog{ID: w.ID, Name: w.Name, Persona: w.Persona}
 	}
 	return out, nil
 }
 
-func (s *Store) GetController(_ context.Context, teamID string) (*contract.TeamController, error) {
+func (s *Store) GetController(_ context.Context, teamID string) (*model.TeamController, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	tr, ok := s.teams[teamID]
@@ -162,7 +162,7 @@ func (s *Store) GetController(_ context.Context, teamID string) (*contract.TeamC
 	return &c, nil
 }
 
-func (s *Store) UpdateController(_ context.Context, teamID string, c contract.TeamController) error {
+func (s *Store) UpdateController(_ context.Context, teamID string, c model.TeamController) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tr, ok := s.teams[teamID]
@@ -173,7 +173,7 @@ func (s *Store) UpdateController(_ context.Context, teamID string, c contract.Te
 	return nil
 }
 
-func (s *Store) ListWorkers(_ context.Context, teamID string) ([]contract.WorkerAgent, error) {
+func (s *Store) ListWorkers(_ context.Context, teamID string) ([]model.WorkerAgent, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if workers := s.listWorkersFromAgents(teamID); len(workers) > 0 {
@@ -183,14 +183,14 @@ func (s *Store) ListWorkers(_ context.Context, teamID string) ([]contract.Worker
 	if !ok {
 		return nil, errs.NotFound("team not found")
 	}
-	out := make([]contract.WorkerAgent, 0, len(tr.workers))
+	out := make([]model.WorkerAgent, 0, len(tr.workers))
 	for _, w := range tr.workers {
 		out = append(out, w)
 	}
 	return out, nil
 }
 
-func (s *Store) GetWorker(_ context.Context, teamID, workerID string) (*contract.WorkerAgent, error) {
+func (s *Store) GetWorker(_ context.Context, teamID, workerID string) (*model.WorkerAgent, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if _, ok := s.teamAgents[teamAgentKey(teamID, workerID)]; ok {
@@ -210,7 +210,7 @@ func (s *Store) GetWorker(_ context.Context, teamID, workerID string) (*contract
 	return &w, nil
 }
 
-func (s *Store) UpsertWorker(_ context.Context, teamID string, worker *contract.WorkerAgent) error {
+func (s *Store) UpsertWorker(_ context.Context, teamID string, worker *model.WorkerAgent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tr, ok := s.teams[teamID]
@@ -241,17 +241,17 @@ func (s *Store) DeleteWorker(_ context.Context, teamID, workerID string) error {
 	return nil
 }
 
-func (s *Store) GetWorkerPrivateProfile(_ context.Context, teamID, workerID string) (*contract.WorkerPrivateProfile, error) {
+func (s *Store) GetWorkerPrivateProfile(_ context.Context, teamID, workerID string) (*model.WorkerPrivateProfile, error) {
 	w, err := s.GetWorker(context.Background(), teamID, workerID)
 	if err != nil {
 		return nil, err
 	}
-	return &contract.WorkerPrivateProfile{
+	return &model.WorkerPrivateProfile{
 		WorkerID: w.ID, Skills: w.Skills, Tools: w.Tools, KnowledgeBase: w.KnowledgeBase,
 	}, nil
 }
 
-func (s *Store) ListHumans(_ context.Context, teamID string) ([]contract.HumanMember, error) {
+func (s *Store) ListHumans(_ context.Context, teamID string) ([]model.HumanMember, error) {
 	detail, err := s.GetTeam(context.Background(), teamID)
 	if err != nil {
 		return nil, err
@@ -259,7 +259,7 @@ func (s *Store) ListHumans(_ context.Context, teamID string) ([]contract.HumanMe
 	return detail.Humans, nil
 }
 
-func (s *Store) AddHuman(_ context.Context, teamID string, h contract.HumanMember) error {
+func (s *Store) AddHuman(_ context.Context, teamID string, h model.HumanMember) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tr, ok := s.teams[teamID]
@@ -273,14 +273,14 @@ func (s *Store) AddHuman(_ context.Context, teamID string, h contract.HumanMembe
 	return nil
 }
 
-func (s *Store) ListTodos(_ context.Context, teamID, taskID string) ([]contract.TodoItem, error) {
+func (s *Store) ListTodos(_ context.Context, teamID, taskID string) ([]model.TodoItem, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	items := s.todos[teamID]
 	if taskID == "" {
-		return append([]contract.TodoItem(nil), items...), nil
+		return append([]model.TodoItem(nil), items...), nil
 	}
-	out := make([]contract.TodoItem, 0)
+	out := make([]model.TodoItem, 0)
 	for _, it := range items {
 		if it.TaskID == taskID {
 			out = append(out, it)
@@ -289,7 +289,7 @@ func (s *Store) ListTodos(_ context.Context, teamID, taskID string) ([]contract.
 	return out, nil
 }
 
-func (s *Store) CreateTodo(_ context.Context, teamID string, item contract.TodoItem) (*contract.TodoItem, error) {
+func (s *Store) CreateTodo(_ context.Context, teamID string, item model.TodoItem) (*model.TodoItem, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if item.ID == "" {
@@ -301,7 +301,7 @@ func (s *Store) CreateTodo(_ context.Context, teamID string, item contract.TodoI
 	return &item, nil
 }
 
-func (s *Store) UpdateTodo(_ context.Context, teamID, todoID string, done bool) (*contract.TodoItem, error) {
+func (s *Store) UpdateTodo(_ context.Context, teamID, todoID string, done bool) (*model.TodoItem, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i, it := range s.todos[teamID] {
@@ -314,10 +314,10 @@ func (s *Store) UpdateTodo(_ context.Context, teamID, todoID string, done bool) 
 	return nil, errs.NotFound("todo not found")
 }
 
-func (s *Store) ListTasks(_ context.Context, teamID string, status contract.TaskStatus) ([]contract.TeamTask, error) {
+func (s *Store) ListTasks(_ context.Context, teamID string, status model.TaskStatus) ([]model.TeamTask, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]contract.TeamTask, 0)
+	out := make([]model.TeamTask, 0)
 	for _, t := range s.tasks {
 		if t.TeamID == teamID && (status == "" || t.Status == status) {
 			out = append(out, *t)
@@ -326,7 +326,7 @@ func (s *Store) ListTasks(_ context.Context, teamID string, status contract.Task
 	return out, nil
 }
 
-func (s *Store) GetTask(_ context.Context, teamID, taskID string) (*contract.TeamTask, error) {
+func (s *Store) GetTask(_ context.Context, teamID, taskID string) (*model.TeamTask, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	t, ok := s.tasks[taskID]
@@ -339,14 +339,14 @@ func (s *Store) GetTask(_ context.Context, teamID, taskID string) (*contract.Tea
 	return t, nil
 }
 
-func (s *Store) CreateTask(_ context.Context, task *contract.TeamTask) error {
+func (s *Store) CreateTask(_ context.Context, task *model.TeamTask) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.tasks[task.ID] = task
 	return nil
 }
 
-func (s *Store) UpdateTaskStatus(_ context.Context, _, taskID string, status contract.TaskStatus) error {
+func (s *Store) UpdateTaskStatus(_ context.Context, _, taskID string, status model.TaskStatus) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	t, ok := s.tasks[taskID]
@@ -358,7 +358,7 @@ func (s *Store) UpdateTaskStatus(_ context.Context, _, taskID string, status con
 	return nil
 }
 
-func (s *Store) UpdateTaskClosure(_ context.Context, _, taskID string, status contract.TaskStatus, reason contract.TaskCloseReason) error {
+func (s *Store) UpdateTaskClosure(_ context.Context, _, taskID string, status model.TaskStatus, reason model.TaskCloseReason) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	t, ok := s.tasks[taskID]
@@ -371,27 +371,27 @@ func (s *Store) UpdateTaskClosure(_ context.Context, _, taskID string, status co
 	return nil
 }
 
-func (s *Store) SaveDispatch(_ context.Context, d *contract.Dispatch) error {
+func (s *Store) SaveDispatch(_ context.Context, d *model.Dispatch) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.dispatches[d.TaskID] = append(s.dispatches[d.TaskID], *d)
 	return nil
 }
 
-func (s *Store) ListDispatches(_ context.Context, taskID string) ([]contract.Dispatch, error) {
+func (s *Store) ListDispatches(_ context.Context, taskID string) ([]model.Dispatch, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return append([]contract.Dispatch(nil), s.dispatches[taskID]...), nil
+	return append([]model.Dispatch(nil), s.dispatches[taskID]...), nil
 }
 
-func (s *Store) SaveRun(_ context.Context, run *contract.WorkerRun) error {
+func (s *Store) SaveRun(_ context.Context, run *model.WorkerRun) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.runs[run.ID] = run
 	return nil
 }
 
-func (s *Store) GetRun(_ context.Context, runID string) (*contract.WorkerRun, error) {
+func (s *Store) GetRun(_ context.Context, runID string) (*model.WorkerRun, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	r, ok := s.runs[runID]
@@ -401,7 +401,7 @@ func (s *Store) GetRun(_ context.Context, runID string) (*contract.WorkerRun, er
 	return r, nil
 }
 
-func (s *Store) UpdateRun(_ context.Context, run *contract.WorkerRun) error {
+func (s *Store) UpdateRun(_ context.Context, run *model.WorkerRun) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.runs[run.ID]; !ok {
@@ -412,10 +412,10 @@ func (s *Store) UpdateRun(_ context.Context, run *contract.WorkerRun) error {
 	return nil
 }
 
-func (s *Store) ListRuns(_ context.Context, taskID string) ([]contract.WorkerRun, error) {
+func (s *Store) ListRuns(_ context.Context, taskID string) ([]model.WorkerRun, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]contract.WorkerRun, 0)
+	out := make([]model.WorkerRun, 0)
 	for _, r := range s.runs {
 		if r.TaskID == taskID {
 			out = append(out, *r)
@@ -424,14 +424,14 @@ func (s *Store) ListRuns(_ context.Context, taskID string) ([]contract.WorkerRun
 	return out, nil
 }
 
-func (s *Store) SavePlan(_ context.Context, plan *contract.ExecutionPlan) error {
+func (s *Store) SavePlan(_ context.Context, plan *model.ExecutionPlan) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.plans[plan.RunID] = plan
 	return nil
 }
 
-func (s *Store) GetPlan(_ context.Context, runID string) (*contract.ExecutionPlan, error) {
+func (s *Store) GetPlan(_ context.Context, runID string) (*model.ExecutionPlan, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	p, ok := s.plans[runID]
@@ -441,73 +441,73 @@ func (s *Store) GetPlan(_ context.Context, runID string) (*contract.ExecutionPla
 	return p, nil
 }
 
-func (s *Store) SaveReport(_ context.Context, r *contract.Report) error {
+func (s *Store) SaveReport(_ context.Context, r *model.Report) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.reports[r.TaskID] = append(s.reports[r.TaskID], *r)
 	return nil
 }
 
-func (s *Store) ListReports(_ context.Context, taskID string) ([]contract.Report, error) {
+func (s *Store) ListReports(_ context.Context, taskID string) ([]model.Report, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return append([]contract.Report(nil), s.reports[taskID]...), nil
+	return append([]model.Report(nil), s.reports[taskID]...), nil
 }
 
-func (s *Store) AppendTimeline(_ context.Context, evt contract.TimelineEvent) error {
+func (s *Store) AppendTimeline(_ context.Context, evt model.TimelineEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.timeline[evt.TaskID] = append(s.timeline[evt.TaskID], evt)
 	return nil
 }
 
-func (s *Store) GetTimeline(_ context.Context, taskID string) ([]contract.TimelineEvent, error) {
+func (s *Store) GetTimeline(_ context.Context, taskID string) ([]model.TimelineEvent, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return append([]contract.TimelineEvent(nil), s.timeline[taskID]...), nil
+	return append([]model.TimelineEvent(nil), s.timeline[taskID]...), nil
 }
 
-func (s *Store) AppendMessage(_ context.Context, msg *contract.TeamMessage) error {
+func (s *Store) AppendMessage(_ context.Context, msg *model.TeamMessage) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.messages[msg.TaskID] = append(s.messages[msg.TaskID], *msg)
 	return nil
 }
 
-func (s *Store) ListMessages(_ context.Context, taskID string) ([]contract.TeamMessage, error) {
+func (s *Store) ListMessages(_ context.Context, taskID string) ([]model.TeamMessage, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return append([]contract.TeamMessage(nil), s.messages[taskID]...), nil
+	return append([]model.TeamMessage(nil), s.messages[taskID]...), nil
 }
 
-func (s *Store) Create(_ context.Context, req *contract.ApprovalRequest) error {
+func (s *Store) Create(_ context.Context, req *model.ApprovalRequest) error {
 	return s.createApproval(req)
 }
 
-func (s *Store) Get(_ context.Context, teamID, approvalID string) (*contract.ApprovalRequest, error) {
+func (s *Store) Get(_ context.Context, teamID, approvalID string) (*model.ApprovalRequest, error) {
 	return s.GetApproval(context.Background(), teamID, approvalID)
 }
 
-func (s *Store) Update(_ context.Context, req *contract.ApprovalRequest) error {
+func (s *Store) Update(_ context.Context, req *model.ApprovalRequest) error {
 	return s.UpdateApproval(context.Background(), req)
 }
 
-func (s *Store) List(_ context.Context, teamID string, status contract.ApprovalStatus) ([]contract.ApprovalRequest, error) {
+func (s *Store) List(_ context.Context, teamID string, status model.ApprovalStatus) ([]model.ApprovalRequest, error) {
 	return s.ListApprovals(context.Background(), teamID, status)
 }
 
-func (s *Store) GetByRunID(ctx context.Context, runID string) (*contract.ApprovalRequest, error) {
+func (s *Store) GetByRunID(ctx context.Context, runID string) (*model.ApprovalRequest, error) {
 	return s.GetApprovalByRunID(ctx, runID)
 }
 
-func (s *Store) createApproval(req *contract.ApprovalRequest) error {
+func (s *Store) createApproval(req *model.ApprovalRequest) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.approvals[req.ID] = req
 	return nil
 }
 
-func (s *Store) GetApproval(_ context.Context, _ string, approvalID string) (*contract.ApprovalRequest, error) {
+func (s *Store) GetApproval(_ context.Context, _ string, approvalID string) (*model.ApprovalRequest, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	a, ok := s.approvals[approvalID]
@@ -517,17 +517,17 @@ func (s *Store) GetApproval(_ context.Context, _ string, approvalID string) (*co
 	return a, nil
 }
 
-func (s *Store) UpdateApproval(_ context.Context, req *contract.ApprovalRequest) error {
+func (s *Store) UpdateApproval(_ context.Context, req *model.ApprovalRequest) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.approvals[req.ID] = req
 	return nil
 }
 
-func (s *Store) ListApprovals(_ context.Context, teamID string, status contract.ApprovalStatus) ([]contract.ApprovalRequest, error) {
+func (s *Store) ListApprovals(_ context.Context, teamID string, status model.ApprovalStatus) ([]model.ApprovalRequest, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]contract.ApprovalRequest, 0)
+	out := make([]model.ApprovalRequest, 0)
 	for _, a := range s.approvals {
 		if a.TeamID == teamID && (status == "" || a.Status == status) {
 			out = append(out, *a)
@@ -536,7 +536,7 @@ func (s *Store) ListApprovals(_ context.Context, teamID string, status contract.
 	return out, nil
 }
 
-func (s *Store) GetApprovalByRunID(_ context.Context, runID string) (*contract.ApprovalRequest, error) {
+func (s *Store) GetApprovalByRunID(_ context.Context, runID string) (*model.ApprovalRequest, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, a := range s.approvals {
@@ -547,13 +547,13 @@ func (s *Store) GetApprovalByRunID(_ context.Context, runID string) (*contract.A
 	return nil, errs.NotFound("approval not found")
 }
 
-func (s *Store) ListArtifacts(_ context.Context, teamID string) ([]contract.WorkspaceArtifact, error) {
+func (s *Store) ListArtifacts(_ context.Context, teamID string) ([]model.WorkspaceArtifact, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return append([]contract.WorkspaceArtifact(nil), s.artifacts[teamID]...), nil
+	return append([]model.WorkspaceArtifact(nil), s.artifacts[teamID]...), nil
 }
 
-func (s *Store) CreateArtifact(_ context.Context, teamID string, a contract.WorkspaceArtifact) (*contract.WorkspaceArtifact, error) {
+func (s *Store) CreateArtifact(_ context.Context, teamID string, a model.WorkspaceArtifact) (*model.WorkspaceArtifact, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if a.ID == "" {
@@ -565,15 +565,15 @@ func (s *Store) CreateArtifact(_ context.Context, teamID string, a contract.Work
 	return &a, nil
 }
 
-func (s *Store) ListKnowledgeDocs(_ context.Context, teamID, workerID string) ([]contract.KnowledgeDoc, error) {
+func (s *Store) ListKnowledgeDocs(_ context.Context, teamID, workerID string) ([]model.KnowledgeDoc, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return append([]contract.KnowledgeDoc(nil), s.kbDocs[kbKey(teamID, workerID)]...), nil
+	return append([]model.KnowledgeDoc(nil), s.kbDocs[kbKey(teamID, workerID)]...), nil
 }
 
-func (s *Store) SaveKnowledgeDocs(_ context.Context, teamID, workerID string, docs []contract.KnowledgeDoc) error {
+func (s *Store) SaveKnowledgeDocs(_ context.Context, teamID, workerID string, docs []model.KnowledgeDoc) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.kbDocs[kbKey(teamID, workerID)] = append([]contract.KnowledgeDoc(nil), docs...)
+	s.kbDocs[kbKey(teamID, workerID)] = append([]model.KnowledgeDoc(nil), docs...)
 	return nil
 }

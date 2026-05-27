@@ -5,12 +5,12 @@ import (
 	"strings"
 	"time"
 
-	"danqing-teams/internal/contract"
+	"danqing-teams/internal/domain/model"
 	"danqing-teams/pkg/errs"
 )
 
-func agentToWorker(a contract.Agent) contract.WorkerAgent {
-	return contract.WorkerAgent{
+func agentToWorker(a model.Agent) model.WorkerAgent {
+	return model.WorkerAgent{
 		ID:            a.ID,
 		Name:          a.Name,
 		Persona:       a.Description,
@@ -20,17 +20,17 @@ func agentToWorker(a contract.Agent) contract.WorkerAgent {
 	}
 }
 
-func sanitizeAgentForResponse(a *contract.Agent) {
+func sanitizeAgentForResponse(a *model.Agent) {
 	if a.LLM.APIKey != "" {
 		a.LLM.HasAPIKey = true
 		a.LLM.APIKey = ""
 	}
 }
 
-func (s *Store) ListAgents(_ context.Context, role contract.AgentRole) ([]contract.Agent, error) {
+func (s *Store) ListAgents(_ context.Context, role model.AgentRole) ([]model.Agent, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	var out []contract.Agent
+	var out []model.Agent
 	for _, a := range s.agents {
 		if role != "" && a.Role != role {
 			continue
@@ -42,7 +42,7 @@ func (s *Store) ListAgents(_ context.Context, role contract.AgentRole) ([]contra
 	return out, nil
 }
 
-func (s *Store) GetAgent(_ context.Context, agentID string) (*contract.Agent, error) {
+func (s *Store) GetAgent(_ context.Context, agentID string) (*model.Agent, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	a, ok := s.agents[agentID]
@@ -54,16 +54,16 @@ func (s *Store) GetAgent(_ context.Context, agentID string) (*contract.Agent, er
 	return &copy, nil
 }
 
-func (s *Store) CreateAgent(_ context.Context, req contract.CreateAgentRequest) (*contract.Agent, error) {
+func (s *Store) CreateAgent(_ context.Context, req model.CreateAgentRequest) (*model.Agent, error) {
 	if strings.TrimSpace(req.Name) == "" {
 		return nil, errs.BadRequest("agent name required")
 	}
-	agentID, err := contract.ParseAgentID(req.ID)
+	agentID, err := model.ParseAgentID(req.ID)
 	if err != nil {
 		return nil, err
 	}
 	if req.Role == "" {
-		req.Role = contract.AgentRoleTeamWorker
+		req.Role = model.AgentRoleTeamWorker
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -71,7 +71,7 @@ func (s *Store) CreateAgent(_ context.Context, req contract.CreateAgentRequest) 
 		return nil, errs.BadRequest("agent id already exists")
 	}
 	now := time.Now().UTC()
-	a := contract.Agent{
+	a := model.Agent{
 		ID:                       agentID,
 		Name:                     strings.TrimSpace(req.Name),
 		Description:              req.Description,
@@ -94,7 +94,7 @@ func (s *Store) CreateAgent(_ context.Context, req contract.CreateAgentRequest) 
 	return &copy, nil
 }
 
-func (s *Store) UpdateAgent(_ context.Context, agentID string, req contract.UpdateAgentRequest) (*contract.Agent, error) {
+func (s *Store) UpdateAgent(_ context.Context, agentID string, req model.UpdateAgentRequest) (*model.Agent, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	a, ok := s.agents[agentID]
@@ -161,20 +161,20 @@ func teamAgentKey(teamID, agentID string) string {
 	return teamID + ":" + agentID
 }
 
-func (s *Store) ListTeamAgentMembers(_ context.Context, teamID string) ([]contract.Agent, error) {
+func (s *Store) ListTeamAgentMembers(_ context.Context, teamID string) ([]model.Agent, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if _, ok := s.teams[teamID]; !ok {
 		return nil, errs.NotFound("team not found")
 	}
-	var out []contract.Agent
+	var out []model.Agent
 	for key := range s.teamAgents {
 		if !strings.HasPrefix(key, teamID+":") {
 			continue
 		}
 		agentID := strings.TrimPrefix(key, teamID+":")
 		a, ok := s.agents[agentID]
-		if !ok || a.Role != contract.AgentRoleTeamWorker {
+		if !ok || a.Role != model.AgentRoleTeamWorker {
 			continue
 		}
 		copy := a
@@ -194,7 +194,7 @@ func (s *Store) AddTeamAgent(_ context.Context, teamID, agentID string) error {
 	if !ok {
 		return errs.NotFound("agent not found")
 	}
-	if a.Role != contract.AgentRoleTeamWorker {
+	if a.Role != model.AgentRoleTeamWorker {
 		return errs.BadRequest("only team-worker agents can join a team")
 	}
 	s.teamAgents[teamAgentKey(teamID, agentID)] = struct{}{}
@@ -219,15 +219,15 @@ func (s *Store) IsTeamAgentMember(_ context.Context, teamID, agentID string) (bo
 	return ok, nil
 }
 
-func (s *Store) listWorkersFromAgents(teamID string) []contract.WorkerAgent {
-	var out []contract.WorkerAgent
+func (s *Store) listWorkersFromAgents(teamID string) []model.WorkerAgent {
+	var out []model.WorkerAgent
 	for key := range s.teamAgents {
 		if !strings.HasPrefix(key, teamID+":") {
 			continue
 		}
 		agentID := strings.TrimPrefix(key, teamID+":")
 		a, ok := s.agents[agentID]
-		if !ok || a.Role != contract.AgentRoleTeamWorker {
+		if !ok || a.Role != model.AgentRoleTeamWorker {
 			continue
 		}
 		out = append(out, agentToWorker(a))

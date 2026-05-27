@@ -5,15 +5,15 @@ import (
 	"errors"
 	"time"
 
-	"danqing-teams/internal/contract"
+	"danqing-teams/internal/domain/model"
 	"danqing-teams/pkg/errs"
 	"gorm.io/gorm"
 )
 
-func (s *Store) Enqueue(ctx context.Context, job *contract.OrchestrationJob) error {
+func (s *Store) Enqueue(ctx context.Context, job *model.OrchestrationJob) error {
 	var existing int64
 	err := s.dbWithCtx(ctx).Model(&orchestrationJobRow{}).
-		Where("dedup_key = ? AND status IN ?", job.DedupKey, []contract.JobStatus{contract.JobPending, contract.JobProcessing}).
+		Where("dedup_key = ? AND status IN ?", job.DedupKey, []model.JobStatus{model.JobPending, model.JobProcessing}).
 		Count(&existing).Error
 	if err != nil {
 		return err
@@ -32,14 +32,14 @@ func (s *Store) Enqueue(ctx context.Context, job *contract.OrchestrationJob) err
 	}).Error
 }
 
-func (s *Store) ClaimNext(ctx context.Context, instanceID string, leaseUntil time.Time) (*contract.OrchestrationJob, error) {
-	var claimed *contract.OrchestrationJob
+func (s *Store) ClaimNext(ctx context.Context, instanceID string, leaseUntil time.Time) (*model.OrchestrationJob, error) {
+	var claimed *model.OrchestrationJob
 	now := nowUTC()
 	err := s.dbWithCtx(ctx).Transaction(func(tx *gorm.DB) error {
 		var row orchestrationJobRow
 		err := tx.Where(
 			"status = ? OR (status = ? AND lease_until IS NOT NULL AND lease_until < ?)",
-			contract.JobPending, contract.JobProcessing, now,
+			model.JobPending, model.JobProcessing, now,
 		).Order("created_at").First(&row).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil
@@ -49,9 +49,9 @@ func (s *Store) ClaimNext(ctx context.Context, instanceID string, leaseUntil tim
 		}
 		res := tx.Model(&orchestrationJobRow{}).Where(
 			"id = ? AND (status = ? OR (status = ? AND lease_until IS NOT NULL AND lease_until < ?))",
-			row.ID, contract.JobPending, contract.JobProcessing, now,
+			row.ID, model.JobPending, model.JobProcessing, now,
 		).Updates(map[string]any{
-			"status": contract.JobProcessing, "lease_owner": instanceID,
+			"status": model.JobProcessing, "lease_owner": instanceID,
 			"lease_until": leaseUntil, "updated_at": now,
 		})
 		if res.Error != nil {
@@ -75,7 +75,7 @@ func (s *Store) ClaimNext(ctx context.Context, instanceID string, leaseUntil tim
 
 func (s *Store) Complete(ctx context.Context, jobID string) error {
 	res := s.dbWithCtx(ctx).Model(&orchestrationJobRow{}).Where("id = ?", jobID).Updates(map[string]any{
-		"status": contract.JobCompleted, "updated_at": nowUTC(),
+		"status": model.JobCompleted, "updated_at": nowUTC(),
 	})
 	if res.Error != nil {
 		return res.Error
@@ -88,7 +88,7 @@ func (s *Store) Complete(ctx context.Context, jobID string) error {
 
 func (s *Store) Fail(ctx context.Context, jobID string, errMsg string) error {
 	res := s.dbWithCtx(ctx).Model(&orchestrationJobRow{}).Where("id = ?", jobID).Updates(map[string]any{
-		"status": contract.JobFailed, "last_error": errMsg, "updated_at": nowUTC(),
+		"status": model.JobFailed, "last_error": errMsg, "updated_at": nowUTC(),
 	})
 	if res.Error != nil {
 		return res.Error
@@ -103,9 +103,9 @@ func (s *Store) ReleaseExpiredLeases(ctx context.Context) (int, error) {
 	now := nowUTC()
 	res := s.dbWithCtx(ctx).Model(&orchestrationJobRow{}).Where(
 		"status = ? AND lease_until IS NOT NULL AND lease_until < ?",
-		contract.JobProcessing, now,
+		model.JobProcessing, now,
 	).Updates(map[string]any{
-		"status": contract.JobPending, "lease_owner": "", "lease_until": nil, "updated_at": now,
+		"status": model.JobPending, "lease_owner": "", "lease_until": nil, "updated_at": now,
 	})
 	if res.Error != nil {
 		return 0, res.Error
@@ -116,7 +116,7 @@ func (s *Store) ReleaseExpiredLeases(ctx context.Context) (int, error) {
 func (s *Store) HasActiveJobForTask(ctx context.Context, taskID string) (bool, error) {
 	var n int64
 	err := s.dbWithCtx(ctx).Model(&orchestrationJobRow{}).
-		Where("task_id = ? AND status IN ?", taskID, []contract.JobStatus{contract.JobPending, contract.JobProcessing}).
+		Where("task_id = ? AND status IN ?", taskID, []model.JobStatus{model.JobPending, model.JobProcessing}).
 		Count(&n).Error
 	return n > 0, err
 }

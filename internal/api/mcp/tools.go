@@ -4,15 +4,17 @@ import (
 	"context"
 	"encoding/json"
 
-	"danqing-teams/internal/contract"
-	"danqing-teams/internal/service"
+	"danqing-teams/internal/api/rest/dto"
+	"danqing-teams/internal/application/assembler"
+	"danqing-teams/internal/application/port"
+	"danqing-teams/internal/domain/model"
 )
 
 // Tools bridges MCP tool calls to application services.
 type Tools struct {
-	Teams     *service.TeamService
-	Tasks     *service.TaskService
-	Approvals *service.ApprovalService
+	Teams     port.TeamService
+	Tasks     port.TaskService
+	Approvals port.ApprovalService
 }
 
 type CallRequest struct {
@@ -28,7 +30,10 @@ func (t *Tools) Call(ctx context.Context, req CallRequest) (CallResponse, error)
 	switch req.Name {
 	case "teams_list":
 		list, err := t.Teams.List(ctx)
-		return CallResponse{Content: list}, err
+		if err != nil {
+			return CallResponse{}, err
+		}
+		return CallResponse{Content: assembler.ToTeams(list)}, nil
 	case "teams_get":
 		var args struct {
 			TeamID string `json:"teamId"`
@@ -37,28 +42,37 @@ func (t *Tools) Call(ctx context.Context, req CallRequest) (CallResponse, error)
 			return CallResponse{}, err
 		}
 		team, err := t.Teams.Get(ctx, args.TeamID, false)
-		return CallResponse{Content: team}, err
+		if err != nil {
+			return CallResponse{}, err
+		}
+		return CallResponse{Content: assembler.ToTeamDetail(team)}, nil
 	case "workers_upsert":
 		var args struct {
-			TeamID string                    `json:"teamId"`
-			Worker contract.UpsertWorkerRequest `json:"worker"`
-			WorkerID string `json:"workerId,omitempty"`
+			TeamID   string                `json:"teamId"`
+			Worker   dto.UpsertWorkerRequest `json:"worker"`
+			WorkerID string                `json:"workerId,omitempty"`
 		}
 		if err := json.Unmarshal(req.Arguments, &args); err != nil {
 			return CallResponse{}, err
 		}
-		w, err := t.Teams.UpsertWorker(ctx, args.TeamID, args.Worker, args.WorkerID)
-		return CallResponse{Content: w}, err
+		w, err := t.Teams.UpsertWorker(ctx, args.TeamID, assembler.FromUpsertWorkerRequest(args.Worker), args.WorkerID)
+		if err != nil {
+			return CallResponse{}, err
+		}
+		return CallResponse{Content: assembler.ToWorkerAgent(w)}, nil
 	case "task_submit":
 		var args struct {
-			TeamID  string                    `json:"teamId"`
-			Content string                    `json:"content"`
+			TeamID  string `json:"teamId"`
+			Content string `json:"content"`
 		}
 		if err := json.Unmarshal(req.Arguments, &args); err != nil {
 			return CallResponse{}, err
 		}
-		task, err := t.Tasks.Submit(ctx, args.TeamID, contract.SubmitTaskRequest{Content: args.Content})
-		return CallResponse{Content: task}, err
+		task, err := t.Tasks.Submit(ctx, args.TeamID, model.SubmitTaskRequest{Content: args.Content})
+		if err != nil {
+			return CallResponse{}, err
+		}
+		return CallResponse{Content: assembler.ToTeamTask(task)}, nil
 	case "task_timeline":
 		var args struct {
 			TeamID string `json:"teamId"`
@@ -68,7 +82,10 @@ func (t *Tools) Call(ctx context.Context, req CallRequest) (CallResponse, error)
 			return CallResponse{}, err
 		}
 		events, err := t.Tasks.Timeline(ctx, args.TeamID, args.TaskID)
-		return CallResponse{Content: events}, err
+		if err != nil {
+			return CallResponse{}, err
+		}
+		return CallResponse{Content: assembler.ToTimelineEvents(events)}, nil
 	case "task_cancel":
 		var args struct {
 			TeamID string `json:"teamId"`
@@ -87,7 +104,10 @@ func (t *Tools) Call(ctx context.Context, req CallRequest) (CallResponse, error)
 			return CallResponse{}, err
 		}
 		list, err := t.Approvals.ListPending(ctx, args.TeamID)
-		return CallResponse{Content: list}, err
+		if err != nil {
+			return CallResponse{}, err
+		}
+		return CallResponse{Content: assembler.ToApprovalRequests(list)}, nil
 	case "approval_decide":
 		var args struct {
 			TeamID     string `json:"teamId"`
@@ -98,13 +118,19 @@ func (t *Tools) Call(ctx context.Context, req CallRequest) (CallResponse, error)
 		if err := json.Unmarshal(req.Arguments, &args); err != nil {
 			return CallResponse{}, err
 		}
-		dec := contract.DecideApprovalRequest{Comment: args.Comment}
+		dec := model.DecideApprovalRequest{Comment: args.Comment}
 		if args.Approve {
 			a, err := t.Approvals.Approve(ctx, args.TeamID, args.ApprovalID, dec)
-			return CallResponse{Content: a}, err
+			if err != nil {
+				return CallResponse{}, err
+			}
+			return CallResponse{Content: assembler.ToApprovalRequest(a)}, nil
 		}
 		a, err := t.Approvals.Reject(ctx, args.TeamID, args.ApprovalID, dec)
-		return CallResponse{Content: a}, err
+		if err != nil {
+			return CallResponse{}, err
+		}
+		return CallResponse{Content: assembler.ToApprovalRequest(a)}, nil
 	default:
 		return CallResponse{}, errsUnknownTool(req.Name)
 	}
