@@ -51,11 +51,17 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install dq-ui packages
-        run: npm install --no-audit --no-fund
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
         working-directory: dq-ui/packages/tokens
-      - run: npm install --no-audit --no-fund
+      - run: |
+          npm install --no-audit --no-fund
+          npm run build
         working-directory: dq-ui/packages/ui
-      - run: npm install --no-audit --no-fund
+      - run: |
+          npm install --no-audit --no-fund
+          npm run build
         working-directory: dq-ui/packages/shell
 
       - name: Set release version
@@ -111,11 +117,17 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install dq-ui packages
-        run: npm install --no-audit --no-fund
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
         working-directory: dq-ui/packages/tokens
-      - run: npm install --no-audit --no-fund
+      - run: |
+          npm install --no-audit --no-fund
+          npm run build
         working-directory: dq-ui/packages/ui
-      - run: npm install --no-audit --no-fund
+      - run: |
+          npm install --no-audit --no-fund
+          npm run build
         working-directory: dq-ui/packages/shell
 
       - name: Set release version
@@ -179,6 +191,20 @@ jobs:
       - name: Install Make
         run: choco install make -y --no-progress
         shell: pwsh
+
+      - name: Install dq-ui packages
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+        working-directory: dq-ui/packages/tokens
+      - run: |
+          npm install --no-audit --no-fund
+          npm run build
+        working-directory: dq-ui/packages/ui
+      - run: |
+          npm install --no-audit --no-fund
+          npm run build
+        working-directory: dq-ui/packages/shell
 
       - name: Verify dq-ui checkout
         run: test -f dq-ui/packages/ui/package.json
