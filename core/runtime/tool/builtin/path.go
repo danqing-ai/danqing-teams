@@ -22,10 +22,10 @@ func resolvePath(workDir, path string) (string, error) {
 
 	rel, err := filepath.Rel(workDir, resolved)
 	if err != nil {
-		return "", fmt.Errorf("cannot resolve path %q: use relative paths from project root, or use list_directory to discover valid paths", path)
+		return "", fmt.Errorf("cannot resolve path %q: use relative paths from project root, or use read_file to discover valid paths", path)
 	}
 	if strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
-		return "", fmt.Errorf("path %q is outside project directory. Use relative paths (e.g., 'src/main.go') or start with list_directory to explore the project structure", path)
+		return "", fmt.Errorf("path %q is outside project directory. Use relative paths (e.g., 'src/main.go') or start with read_file to explore the project structure", path)
 	}
 	return resolved, nil
 }

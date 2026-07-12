@@ -749,7 +749,7 @@ func TestDefaultToolCallWithRealLLM(t *testing.T) {
 	r := newRouter(t, core)
 
 	w := postJSON(t, r, "/api/v1/sessions", domain.CreateSessionRequest{
-		Content: "请使用 list_directory 工具列出工作目录的内容，然后回复我目录中有哪些文件和目录。",
+		Content: "请使用 read_file 工具列出工作目录的内容，然后回复我目录中有哪些文件和目录。",
 		AgentID: agentDefault,
 		ModelID: modelID,
 	})
