@@ -137,7 +137,7 @@ func defaultLLMPresets() []domain.LLMProviderPreset {
 		{ID: "google", Name: "Google Gemini", Provider: "openai", BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai", Icon: "🔷", Description: "Gemini Pro、Flash"},
 		{ID: "zhipu", Name: "智谱 (Zhipu)", Provider: "openai", BaseURL: "https://open.bigmodel.cn/api/paas/v4", Icon: "🟣", Description: "GLM 系列"},
 		{ID: "qwen", Name: "通义千问 (Qwen)", Provider: "openai", BaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", Icon: "🟡", Description: "Qwen Max、Plus、Turbo"},
-		{ID: "moonshot", Name: "Moonshot (Kimi)", Provider: "openai", BaseURL: "https://api.moonshot.cn/v1", Icon: "🌙", Description: "Kimi 系列"},
+		{ID: "moonshot", Name: "Moonshot (Kimi)", Provider: "openai", BaseURL: "https://api.kimi.com/coding/v1", Icon: "🌙", Description: "Kimi 系列"},
 		{ID: "ollama", Name: "Ollama (Local)", Provider: "openai", BaseURL: "http://localhost:11434/v1", Icon: "🦙", Description: "本地模型，通过 Ollama 运行"},
 	}
 }

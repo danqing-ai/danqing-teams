@@ -1,6 +1,8 @@
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, Emitter};
 
+const HELP_URL: &str = "https://github.com/danqing-ai/DanQing-Teams#macos-%E5%AE%89%E8%A3%85";
+
 struct SidecarState {
     _child: Mutex<Option<std::process::Child>>,
 }
@@ -63,10 +65,25 @@ fn spawn_backend(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Open help documentation on first launch (macOS only, due to unsigned app)
+fn handle_first_launch(app: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(data_dir) = app.path().app_data_dir() {
+            let marker = data_dir.join(".first_launch_done");
+            if !marker.exists() {
+                let _ = std::fs::write(&marker, "1");
+                let _ = open::that(HELP_URL);
+            }
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            handle_first_launch(&app.handle());
             if let Err(e) = spawn_backend(&app.handle()) {
                 eprintln!("WARNING: backend sidecar failed to start: {e}");
                 eprintln!("The app will run without backend API. Start it manually if needed.");

@@ -4,7 +4,6 @@ import { useSessionsStore } from '@/stores/sessions'
 import { useProjectsStore } from '@/stores/projects'
 import { useLLMStore } from '@/stores/llm'
 import { toast } from '@/utils/feedback'
-import { COMPOSER_MODELS } from '@/constants/composer-models'
 
 const content = ref('')
 const inputWrap = ref<HTMLElement | null>(null)
@@ -13,13 +12,7 @@ const projects = useProjectsStore()
 const llm = useLLMStore()
 
 const availableModels = computed(() => {
-  if (llm.models.length) {
-    return llm.models.map((m) => ({ id: m.id, label: m.id }))
-  }
-  if (!llm.modelsLoaded) {
-    return COMPOSER_MODELS
-  }
-  return []
+  return llm.models.map((m) => ({ id: m.id, label: m.id }))
 })
 
 const selectedModelLabel = computed(
@@ -45,9 +38,19 @@ const placeholder = computed(() =>
   sessions.composingNew ? '输入会话目标…' : '继续输入…',
 )
 
-onMounted(() => {
-  llm.loadModels()
+onMounted(async () => {
+  const oldIds = new Set(llm.models.map((m) => m.id))
+  await llm.loadModels()
+  sessions.syncModelSelection(llm.models, oldIds)
 })
+
+watch(
+  () => llm.models,
+  (newModels, oldModels) => {
+    const oldIds = new Set((oldModels ?? []).map((m) => m.id))
+    sessions.syncModelSelection(newModels, oldIds)
+  },
+)
 
 function focusInput() {
   void nextTick(() => {

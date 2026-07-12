@@ -2,9 +2,8 @@ import { defineStore } from 'pinia'
 import { ref, reactive, computed, watch } from 'vue'
 import { fetchJSON, asArray } from '@/api/client'
 import { apiBaseUrl } from '@/utils/desktop'
-import { DEFAULT_COMPOSER_MODEL_ID } from '@/constants/composer-models'
 import { i18n } from '@/i18n'
-import type { Session, TurnLog, StreamEvent, Agent, Skill, WorkerCard, AgentRun, UpdateSessionPayload } from '@/types/mission'
+import type { Session, TurnLog, StreamEvent, Agent, Skill, WorkerCard, AgentRun, UpdateSessionPayload, LLMModel } from '@/types/mission'
 
 const base = apiBaseUrl()
 const MODEL_KEY = 'teams-composer-model'
@@ -30,11 +29,29 @@ export const useSessionsStore = defineStore('sessions', () => {
   const workers = ref<WorkerCard[]>([])
   const agentRuns = ref<AgentRun[]>([])
 
-  const selectedModelId = ref(localStorage.getItem(MODEL_KEY) ?? DEFAULT_COMPOSER_MODEL_ID)
+  const selectedModelId = ref(localStorage.getItem(MODEL_KEY) ?? '')
   const selectedProjectId = ref<string | null>(null)
   const selectedAgentId = ref<string | null>(null)
   const composingNew = ref(true)
   const loading = ref(false)
+
+  /** Sync selected model: auto-select newly added model, or fix invalid selection */
+  function syncModelSelection(models: LLMModel[], previousIds: Set<string>) {
+    if (!models.length) return
+    const ids = models.map((m) => m.id)
+
+    // Detect newly added model and auto-select it
+    const added = models.find((m) => !previousIds.has(m.id))
+    if (added) {
+      selectedModelId.value = added.id
+      return
+    }
+
+    // Current selection invalid — fall back to first available
+    if (!selectedModelId.value || !ids.includes(selectedModelId.value)) {
+      selectedModelId.value = ids[0]
+    }
+  }
 
   watch(selectedModelId, (v) => {
     localStorage.setItem(MODEL_KEY, v)
@@ -367,5 +384,6 @@ export const useSessionsStore = defineStore('sessions', () => {
     pendingAsks,
     resolvedAskCallIds,
     decidedApprovalIds,
+    syncModelSelection,
   }
 })

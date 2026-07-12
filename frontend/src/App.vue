@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import LeftRail from '@/components/left/LeftRail.vue'
 import { useSessionsStore } from '@/stores/sessions'
@@ -41,7 +41,13 @@ onMounted(async () => {
   if (projects.projects.length) {
     sessions.selectedProjectId = projects.projects[0].id
   }
+  sessions.syncModelSelection(llm.models, new Set())
   await sessions.loadSessions()
+})
+
+watch(() => llm.models, (newModels, oldModels) => {
+  const oldIds = new Set((oldModels ?? []).map((m) => m.id))
+  sessions.syncModelSelection(newModels, oldIds)
 })
 </script>
 

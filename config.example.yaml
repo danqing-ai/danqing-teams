@@ -94,7 +94,7 @@ llm:
     - id: moonshot
       name: Moonshot (Kimi)
       provider: openai
-      base_url: "https://api.moonshot.cn/v1"
+      base_url: "https://api.kimi.com/coding/v1"
       icon: "\U0001F319"
       description: "Kimi \u7CFB\u5217"
     - id: ollama

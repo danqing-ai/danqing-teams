@@ -45,7 +45,7 @@ llm:
         - id: moonshot
           name: Moonshot (Kimi)
           provider: openai
-          baseurl: https://api.moonshot.cn/v1
+          baseurl: https://api.kimi.com/coding/v1
           icon: "\U0001F319"
           description: Kimi 系列
         - id: ollama

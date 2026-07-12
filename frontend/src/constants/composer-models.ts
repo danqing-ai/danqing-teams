@@ -1,3 +1,4 @@
+// Composer model constants removed — models are now loaded dynamically from LLM store
 export interface ComposerModelOption {
   id: string
   label: string
