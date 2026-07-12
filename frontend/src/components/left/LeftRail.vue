@@ -94,6 +94,26 @@ function selectSession(id: string) {
   emit('selectSession', id)
 }
 
+async function archiveSession(id: string) {
+  try {
+    await sessions.updateSession(id, { status: 'archived' })
+    toast.success('已归档')
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : '归档失败')
+  }
+}
+
+async function deleteSession(id: string) {
+  const confirmed = await confirm('确定删除该会话？', { title: '删除会话', confirmText: '删除', type: 'danger' })
+  if (!confirmed) return
+  try {
+    await sessions.deleteSession(id)
+    toast.success('已删除')
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : '删除失败')
+  }
+}
+
 const renamingProjectId = ref<string | null>(null)
 const renamingName = ref('')
 
@@ -321,18 +341,39 @@ watch(() => projects.projects.length, (len) => {
                 </div>
 
                 <div v-if="expandedProjects.has(p.id)" class="project-tree__sessions">
-                  <button
+                  <div
                     v-for="t_ in visibleSessions(p)"
                     :key="t_.id"
-                    type="button"
-                    class="project-tree__session"
-                    :class="{ 'is-active': sessions.currentSessionId === t_.id && !sessions.composingNew }"
-                    @click="selectSession(t_.id)"
+                    class="project-tree__session-row"
                   >
-                    <span class="project-tree__session-dot" />
-                    <span class="project-tree__session-name">{{ sessionTitle(t_) }}</span>
-                    <span class="project-tree__session-time">{{ formatRelativeTime(t_.updatedAt || t_.createdAt) }}</span>
-                  </button>
+                    <button
+                      type="button"
+                      class="project-tree__session"
+                      :class="{ 'is-active': sessions.currentSessionId === t_.id && !sessions.composingNew }"
+                      @click="selectSession(t_.id)"
+                    >
+                      <span class="project-tree__session-dot" />
+                      <span class="project-tree__session-name">{{ sessionTitle(t_) }}</span>
+                      <span class="project-tree__session-time">{{ formatRelativeTime(t_.updatedAt || t_.createdAt) }}</span>
+                    </button>
+                    <DqDropdown>
+                      <button type="button" class="project-tree__session-action" title="会话操作" @click.stop>
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                          <circle cx="12" cy="5" r="1.5" />
+                          <circle cx="12" cy="12" r="1.5" />
+                          <circle cx="12" cy="19" r="1.5" />
+                        </svg>
+                      </button>
+                      <template #dropdown>
+                        <DqDropdownMenu>
+                          <DqDropdownItem @click="archiveSession(t_.id)">归档</DqDropdownItem>
+                          <DqDropdownItem @click="deleteSession(t_.id)">
+                            <span style="color:var(--dq-color-danger)">删除</span>
+                          </DqDropdownItem>
+                        </DqDropdownMenu>
+                      </template>
+                    </DqDropdown>
+                  </div>
                   <button
                     v-if="hasMoreSessions(p)"
                     type="button"
@@ -661,6 +702,21 @@ watch(() => projects.projects.length, (len) => {
   border-left: 1px solid color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
 }
 
+.project-tree__session-row {
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+  transition: background 0.12s ease;
+}
+
+.project-tree__session-row:hover {
+  background: color-mix(in srgb, var(--dq-label-primary) 5%, transparent);
+}
+
+.project-tree__session-row:hover .project-tree__session-action {
+  opacity: 1;
+}
+
 .project-tree__session {
   display: flex;
   align-items: center;
@@ -673,17 +729,42 @@ watch(() => projects.projects.length, (len) => {
   font-size: 12px;
   cursor: pointer;
   text-align: left;
-  transition: background 0.12s ease, color 0.12s ease;
+  flex: 1;
+  min-width: 0;
+  transition: color 0.12s ease;
 }
 
 .project-tree__session:hover {
-  background: color-mix(in srgb, var(--dq-label-primary) 5%, transparent);
+  background: transparent;
   color: var(--dq-label-primary);
 }
 
 .project-tree__session.is-active {
   background: color-mix(in srgb, var(--dq-accent) 10%, var(--dq-fill-tertiary));
   color: var(--dq-accent);
+}
+
+.project-tree__session-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-right: 4px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dq-label-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  flex-shrink: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+
+.project-tree__session-action:hover {
+  background: color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
+  color: var(--dq-label-primary);
 }
 
 .project-tree__session--empty {

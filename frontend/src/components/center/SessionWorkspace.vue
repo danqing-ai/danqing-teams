@@ -11,6 +11,7 @@ import ExpertsPanel from '@/components/center/ExpertsPanel.vue'
 import { renderMarkdown } from '@/utils/markdown-render'
 import { toast } from '@/utils/feedback'
 import { apiBaseUrl } from '@/utils/desktop'
+
 import type { StreamEvent, TurnLog } from '@/types/mission'
 
 const router = useRouter()
@@ -465,6 +466,14 @@ function reportStatus(ev: StreamEvent): string {
   return String(p?.status ?? '')
 }
 
+function reportStatusType(ev: StreamEvent): string {
+  const s = reportStatus(ev)
+  if (s === 'done') return 'success'
+  if (s === 'failed') return 'danger'
+  if (s === 'blocked') return 'warning'
+  return 'default'
+}
+
 function reportStatusLabel(ev: StreamEvent): string {
   const status = reportStatus(ev)
   if (status === 'done') return '已完成'
@@ -834,18 +843,15 @@ function onTitleKeydown(e: KeyboardEvent) {
         <DqTag :type="statusType">{{ statusLabel }}</DqTag>
       </div>
       <div class="session-workspace__actions">
-        <DqButton size="small" @click="copyLink">
-          <svg class="session-workspace__copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-          </svg>
-          复制链接
-        </DqButton>
         <DqButton v-if="sessions.runningTurnId" type="warning" size="small" @click="cancelRunning">
           取消运行
         </DqButton>
-        <DqButton size="small" @click="archiveSession">归档</DqButton>
-        <DqButton type="danger" size="small" @click="removeSession">删除</DqButton>
+        <button class="session-workspace__copy-btn" title="复制链接" @click="copyLink">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+          </svg>
+        </button>
       </div>
     </header>
 
@@ -965,9 +971,9 @@ function onTitleKeydown(e: KeyboardEvent) {
                       v-else-if="ev.type === 'report'"
                       class="turn__report-meta"
                     >
-                      <span class="turn__report-meta-status" :data-status="reportStatus(ev)">
+                      <DqTag :type="reportStatusType(ev)">
                         {{ reportStatusLabel(ev) }}
-                      </span>
+                      </DqTag>
                       <span v-if="reportConfidence(ev) !== null" class="turn__report-meta-confidence">
                         置信度 {{ reportConfidence(ev) }}
                       </span>
@@ -1250,6 +1256,26 @@ function onTitleKeydown(e: KeyboardEvent) {
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
+}
+
+.session-workspace__copy-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--dq-radius-md, 6px);
+  background: transparent;
+  color: var(--dq-label-secondary);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.session-workspace__copy-btn:hover {
+  background: var(--dq-fill-2);
+  color: var(--dq-accent);
 }
 
 .session-workspace__body {
@@ -1544,27 +1570,6 @@ function onTitleKeydown(e: KeyboardEvent) {
   color: var(--dq-label-tertiary);
 }
 
-.turn__report-meta-status {
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 6px;
-  font-size: 11px;
-}
-
-.turn__report-meta-status[data-status='done'] {
-  background: var(--dq-bg-success, #e6f9e8);
-  color: var(--dq-text-success, #1b7d1f);
-}
-
-.turn__report-meta-status[data-status='failed'] {
-  background: var(--dq-bg-danger, #fdeaea);
-  color: var(--dq-text-danger, #c53030);
-}
-
-.turn__report-meta-status[data-status='blocked'] {
-  background: var(--dq-bg-warning, #fef3c7);
-  color: var(--dq-text-warning, #92400e);
-}
 
 .turn__report-meta-confidence,
 .turn__report-meta-steps {
