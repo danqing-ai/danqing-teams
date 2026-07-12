@@ -1,11 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed, watch } from 'vue'
 import { fetchJSON, asArray } from '@/api/client'
+import { apiBaseUrl } from '@/utils/desktop'
 import { DEFAULT_COMPOSER_MODEL_ID } from '@/constants/composer-models'
 import { i18n } from '@/i18n'
 import type { Session, TurnLog, StreamEvent, Agent, Skill, WorkerCard, AgentRun, UpdateSessionPayload } from '@/types/mission'
 
-const base = import.meta.env.VITE_API_BASE_URL ?? ''
+const base = apiBaseUrl()
 const MODEL_KEY = 'teams-composer-model'
 
 const SKILLS_KEY = 'danqing-skills'

@@ -10,6 +10,7 @@ import FileViewer from '@/components/center/FileViewer.vue'
 import ExpertsPanel from '@/components/center/ExpertsPanel.vue'
 import { renderMarkdown } from '@/utils/markdown-render'
 import { toast } from '@/utils/feedback'
+import { apiBaseUrl } from '@/utils/desktop'
 import type { StreamEvent, TurnLog } from '@/types/mission'
 
 const router = useRouter()
@@ -711,7 +712,7 @@ function turnStatusType(status: TurnLog['status']): 'info' | 'success' | 'danger
 async function downloadTurnLog(turnId: string) {
   if (!sessions.currentSessionId) return
   try {
-    const base = import.meta.env.VITE_API_BASE_URL ?? ''
+    const base = apiBaseUrl()
     const url = `${base}/api/v1/sessions/${sessions.currentSessionId}/turns/${turnId}/log`
     const res = await fetch(url)
     if (!res.ok) throw new Error('download failed')

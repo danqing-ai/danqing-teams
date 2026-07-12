@@ -1,4 +1,6 @@
-const base = import.meta.env.VITE_API_BASE_URL ?? ''
+import { apiBaseUrl } from '@/utils/desktop'
+
+const base = apiBaseUrl()
 
 /** Go 空 slice 常序列化为 JSON null，列表接口统一归一成 [] */
 export function asArray<T>(data: T[] | null | undefined): T[] {
@@ -6,10 +8,16 @@ export function asArray<T>(data: T[] | null | undefined): T[] {
 }
 
 export async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${base}/api/v1${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(init?.headers as Record<string, string>) },
-    ...init,
-  })
+  const url = `${base}/api/v1${path}`
+  let res: Response
+  try {
+    res = await fetch(url, {
+      headers: { 'Content-Type': 'application/json', ...(init?.headers as Record<string, string>) },
+      ...init,
+    })
+  } catch (networkErr) {
+    throw new Error(`网络请求失败: ${url} — ${networkErr instanceof Error ? networkErr.message : '未知错误'}`)
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }))
     throw new Error((err as { error?: string }).error ?? res.statusText)
