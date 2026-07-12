@@ -78,6 +78,28 @@ export function renderMarkdown(markdown: string): string {
       continue
     }
 
+    // Table: lines starting with |
+    if (/^\|/.test(line) && i + 1 < lines.length && /^\|[\s\-:|]+\|/.test(lines[i + 1])) {
+      const headerCells = line.split('|').slice(1, -1).map(c => c.trim())
+      i += 2 // skip header + separator
+      const rows: string[][] = []
+      while (i < lines.length && /^\|/.test(lines[i])) {
+        rows.push(lines[i].split('|').slice(1, -1).map(c => c.trim()))
+        i += 1
+      }
+      let table = '<table><thead><tr>'
+      for (const cell of headerCells) table += `<th>${inlineMarkdown(cell)}</th>`
+      table += '</tr></thead><tbody>'
+      for (const row of rows) {
+        table += '<tr>'
+        for (const cell of row) table += `<td>${inlineMarkdown(cell)}</td>`
+        table += '</tr>'
+      }
+      table += '</tbody></table>'
+      out.push(table)
+      continue
+    }
+
     if (line.trim() === '') {
       i += 1
       continue

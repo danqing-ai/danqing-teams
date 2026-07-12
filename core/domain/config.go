@@ -1,0 +1,83 @@
+package domain
+
+// ConfigFile is the full user-editable configuration that is persisted to
+// danqing-teams.yaml. It mirrors the file layout so the API can expose and
+// update sections independently.
+type ConfigFile struct {
+	Data      ConfigDataSection      `json:"data" mapstructure:"data"`
+	Server    ConfigServerSection    `json:"server" mapstructure:"server"`
+	Instance  ConfigInstanceSection  `json:"instance" mapstructure:"instance"`
+	Runtime   ConfigRuntimeSection   `json:"runtime" mapstructure:"runtime"`
+	Search    SearchConfig           `json:"search" mapstructure:"search"`
+	LLM       ConfigLLMSection       `json:"llm" mapstructure:"llm"`
+}
+
+type ConfigLLMSection struct {
+	Providers []LLMProviderPreset `json:"providers" mapstructure:"providers"`
+}
+
+type ConfigDataSection struct {
+	Dir      string `json:"dir" mapstructure:"dir"`
+	Database string `json:"database" mapstructure:"database"`
+	Store    string `json:"store" mapstructure:"store"`
+}
+
+type ConfigServerSection struct {
+	ListenAddr string `json:"listenAddr" mapstructure:"listen_addr"`
+}
+
+type ConfigInstanceSection struct {
+	ID string `json:"id" mapstructure:"id"`
+}
+
+type ConfigRuntimeSection struct {
+	AutoApprove bool                      `json:"autoApprove" mapstructure:"auto_approve"`
+	Turn        ConfigTurnSection         `json:"turn" mapstructure:"turn"`
+	Team        ConfigTeamSection         `json:"team" mapstructure:"team"`
+	Memory      ConfigMemorySection       `json:"memory" mapstructure:"memory"`
+	Knowledge   ConfigKnowledgeSection    `json:"knowledge" mapstructure:"knowledge"`
+	Compaction  ConfigCompactionSection   `json:"compaction" mapstructure:"compaction"`
+}
+
+type ConfigCompactionSection struct {
+	Enabled      bool   `json:"enabled" mapstructure:"enabled"`
+	Model        string `json:"model" mapstructure:"model"`
+	MaxTokens    int    `json:"maxTokens" mapstructure:"max_tokens"`
+	TriggerRatio float64 `json:"triggerRatio" mapstructure:"trigger_ratio"`
+	CutTokens    int    `json:"cutTokens" mapstructure:"cut_tokens"`
+	TurnInterval int    `json:"turnInterval" mapstructure:"turn_interval"`
+	SubInterval  int    `json:"subInterval" mapstructure:"sub_interval"`
+	ToolTruncate int    `json:"toolTruncate" mapstructure:"tool_truncate"`
+}
+
+type ConfigTurnSection struct {
+	DoomLoopThreshold int `json:"doomLoopThreshold" mapstructure:"doom_loop_threshold"`
+	MaxStepsDefault   int `json:"maxStepsDefault" mapstructure:"max_steps_default"`
+}
+
+type ConfigTeamSection struct {
+	MaxDelegationDepth int `json:"maxDelegationDepth" mapstructure:"max_delegation_depth"`
+}
+
+// ConfigMemorySection is reserved for future BM25-based episodic recall.
+// TODO(nil): Re-enable when BM25-indexed episodic memory is implemented.
+// The current config is intentionally a no-op — recall was removed
+// because the original strings.Contains matching had near-zero hit rate.
+type ConfigMemorySection struct {
+	RecallTopK int `json:"recallTopK" mapstructure:"recall_top_k"`
+}
+
+type ConfigKnowledgeSection struct {
+	SearchTopK int `json:"searchTopK" mapstructure:"search_top_k"`
+}
+
+// UpdateConfigFileRequest is sent by clients to update one or more sections
+// of the configuration file. Only sections that are non-nil are modified;
+// other sections are preserved as-is.
+type UpdateConfigFileRequest struct {
+	Data     *ConfigDataSection     `json:"data,omitempty"`
+	Server   *ConfigServerSection   `json:"server,omitempty"`
+	Instance *ConfigInstanceSection `json:"instance,omitempty"`
+	Runtime  *ConfigRuntimeSection  `json:"runtime,omitempty"`
+	Search   *UpsertSearchConfigRequest `json:"search,omitempty"`
+}

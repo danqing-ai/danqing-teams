@@ -1,0 +1,8 @@
+{
+  "identifier": "default",
+  "description": "Default capabilities for DanQing Teams desktop",
+  "windows": ["main"],
+  "permissions": [
+    "core:default"
+  ]
+}

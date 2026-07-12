@@ -1,0 +1,240 @@
+package sqlite
+
+import (
+	"encoding/json"
+	"time"
+
+	"danqing-teams/core/domain"
+
+	"gorm.io/gorm"
+)
+
+// ---- Agent ----
+
+type agentModel struct {
+	ID            string `gorm:"primaryKey"`
+	Name          string
+	Description   string
+	Persona       string
+	Mode          string
+	SystemPrompt  string `gorm:"column:system_prompt"`
+	Steps         int
+	SkillIDsJSON  string `gorm:"column:skill_ids"`
+	ToolsJSON     string `gorm:"column:tools"`
+	KnowledgeJSON string `gorm:"column:knowledge_ids"`
+}
+
+func (agentModel) TableName() string { return "agents" }
+
+func (m *agentModel) BeforeSave(_ *gorm.DB) error {
+	b, _ := json.Marshal(m.skillIDs())
+	m.SkillIDsJSON = string(b)
+	b, _ = json.Marshal(m.tools())
+	m.ToolsJSON = string(b)
+	b, _ = json.Marshal(m.knowledgeIDs())
+	m.KnowledgeJSON = string(b)
+	return nil
+}
+
+func (m *agentModel) skillIDs() []string { return unmarshalSlice[string](m.SkillIDsJSON) }
+func (m *agentModel) tools() []domain.ToolBinding {
+	var v []domain.ToolBinding
+	_ = json.Unmarshal([]byte(m.ToolsJSON), &v)
+	if v == nil {
+		return nil
+	}
+	return v
+}
+func (m *agentModel) knowledgeIDs() []string { return unmarshalSlice[string](m.KnowledgeJSON) }
+
+func agentToDomain(m agentModel) domain.Agent {
+	return domain.Agent{
+		ID: m.ID, Name: m.Name, Description: m.Description, Persona: m.Persona,
+		Mode: domain.AgentMode(m.Mode), SystemPrompt: m.SystemPrompt, Steps: m.Steps,
+		SkillIDs: m.skillIDs(), Tools: m.tools(), KnowledgeIDs: m.knowledgeIDs(),
+	}
+}
+
+func agentFromDomain(a domain.Agent) agentModel {
+	return agentModel{
+		ID: a.ID, Name: a.Name, Description: a.Description, Persona: a.Persona,
+		Mode: string(a.Mode), SystemPrompt: a.SystemPrompt, Steps: a.Steps,
+		SkillIDsJSON: marshalJSON(a.SkillIDs), ToolsJSON: marshalJSON(a.Tools), KnowledgeJSON: marshalJSON(a.KnowledgeIDs),
+	}
+}
+
+// ---- Skill ----
+
+type skillModel struct {
+	ID           string `gorm:"primaryKey"`
+	Name         string
+	Description  string
+	KeywordsJSON string `gorm:"column:keywords"`
+	ToolIDsJSON  string `gorm:"column:tool_ids"`
+	SystemHint   string `gorm:"column:system_hint"`
+}
+
+func (skillModel) TableName() string { return "skills" }
+
+func (m *skillModel) BeforeSave(_ *gorm.DB) error {
+	m.KeywordsJSON = marshalJSON(m.keywords())
+	m.ToolIDsJSON = marshalJSON(m.toolIDs())
+	return nil
+}
+
+func (m *skillModel) keywords() []string { return unmarshalSlice[string](m.KeywordsJSON) }
+func (m *skillModel) toolIDs() []string  { return unmarshalSlice[string](m.ToolIDsJSON) }
+
+func skillToDomain(m skillModel) domain.Skill {
+	return domain.Skill{
+		ID: m.ID, Name: m.Name, Description: m.Description,
+		Keywords: m.keywords(), ToolIDs: m.toolIDs(), SystemHint: m.SystemHint,
+	}
+}
+
+func skillFromDomain(s domain.Skill) skillModel {
+	return skillModel{
+		ID: s.ID, Name: s.Name, Description: s.Description,
+		KeywordsJSON: marshalJSON(s.Keywords), ToolIDsJSON: marshalJSON(s.ToolIDs), SystemHint: s.SystemHint,
+	}
+}
+
+// ---- Session ----
+
+type sessionModel struct {
+	ID        string `gorm:"primaryKey"`
+	Title     string
+	ProjectID string `gorm:"column:project_id"`
+	AgentID   string `gorm:"column:agent_id"`
+	ModelID   string `gorm:"column:model_id"`
+	Content   string
+	Status    string
+	CreatedAt time.Time `gorm:"column:created_at"`
+	UpdatedAt time.Time `gorm:"column:updated_at"`
+}
+
+func (sessionModel) TableName() string { return "sessions" }
+
+func sessionToDomain(m sessionModel) domain.Session {
+	return domain.Session{
+		ID: m.ID, Title: m.Title, ProjectID: m.ProjectID, AgentID: m.AgentID,
+		ModelID: m.ModelID, Content: m.Content,
+		Status: domain.SessionStatus(m.Status), CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
+	}
+}
+
+func sessionFromDomain(s domain.Session) sessionModel {
+	return sessionModel{
+		ID: s.ID, Title: s.Title, ProjectID: s.ProjectID, AgentID: s.AgentID,
+		ModelID: s.ModelID, Content: s.Content,
+		Status: string(s.Status), CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt,
+	}
+}
+
+// ---- Project ----
+
+type projectModel struct {
+	ID        string `gorm:"primaryKey"`
+	Name      string
+	Directory string
+	CreatedAt time.Time `gorm:"column:created_at"`
+	UpdatedAt time.Time `gorm:"column:updated_at"`
+}
+
+func (projectModel) TableName() string { return "projects" }
+
+func projectToDomain(m projectModel) domain.Project {
+	return domain.Project{ID: m.ID, Name: m.Name, Directory: m.Directory, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt}
+}
+
+func projectFromDomain(p domain.Project) projectModel {
+	return projectModel{ID: p.ID, Name: p.Name, Directory: p.Directory, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}
+}
+
+// ---- Approval ----
+
+type approvalModel struct {
+	ID        string `gorm:"primaryKey"`
+	SessionID string `gorm:"column:session_id"`
+	TurnID    string `gorm:"column:turn_id"`
+	ToolName  string `gorm:"column:tool_name"`
+	Summary   string
+	Status    string
+	CreatedAt time.Time `gorm:"column:created_at"`
+}
+
+func (approvalModel) TableName() string { return "approvals" }
+
+func approvalToDomain(m approvalModel) domain.Approval {
+	return domain.Approval{ID: m.ID, SessionID: m.SessionID, TurnID: m.TurnID, ToolName: m.ToolName, Summary: m.Summary, Status: m.Status, CreatedAt: m.CreatedAt}
+}
+
+func approvalFromDomain(a domain.Approval) approvalModel {
+	return approvalModel{ID: a.ID, SessionID: a.SessionID, TurnID: a.TurnID, ToolName: a.ToolName, Summary: a.Summary, Status: a.Status, CreatedAt: a.CreatedAt}
+}
+
+// ---- StreamEvent ----
+
+type streamEventModel struct {
+	ID        uint      `gorm:"primaryKey;autoIncrement"`
+	SessionID string    `gorm:"column:session_id;index"`
+	TurnID    string    `gorm:"column:turn_id"`
+	Seq       int64     `gorm:"index"`
+	Type      string
+	Payload   string
+	CreatedAt time.Time `gorm:"column:created_at"`
+}
+
+func (streamEventModel) TableName() string { return "stream_events" }
+
+func streamEventToDomain(m streamEventModel) domain.StreamEvent {
+	return domain.StreamEvent{
+		Seq: m.Seq, Type: m.Type, SessionID: m.SessionID,
+		TurnID: m.TurnID, Payload: json.RawMessage(m.Payload), CreatedAt: m.CreatedAt,
+	}
+}
+
+// ---- Turn ----
+
+type turnModel struct {
+	ID        string `gorm:"primaryKey"`
+	SessionID string `gorm:"column:session_id;index"`
+	AgentID   string `gorm:"column:agent_id"`
+	Status    string
+	Goal      string
+}
+
+func (turnModel) TableName() string { return "turns" }
+
+func turnToDomain(m turnModel) domain.TurnLog {
+	return domain.TurnLog{
+		ID: m.ID, SessionID: m.SessionID, AgentID: m.AgentID,
+		Status: domain.TurnStatus(m.Status), Goal: m.Goal,
+	}
+}
+
+func turnFromDomain(t domain.TurnLog) turnModel {
+	return turnModel{
+		ID: t.ID, SessionID: t.SessionID, AgentID: t.AgentID,
+		Status: string(t.Status), Goal: t.Goal,
+	}
+}
+
+// ---- Helpers ----
+
+func unmarshalSlice[T any](raw string) []T {
+	var v []T
+	if raw == "" || raw == "null" {
+		return nil
+	}
+	_ = json.Unmarshal([]byte(raw), &v)
+	return v
+}
+
+func marshalJSON(v any) string {
+	if v == nil {
+		return "[]"
+	}
+	b, _ := json.Marshal(v)
+	return string(b)
+}

@@ -23,6 +23,13 @@ if [[ ! -d node_modules ]]; then
   npm install
 fi
 
+# Desktop app needs to know the backend API URL
+export VITE_API_BASE_URL="http://127.0.0.1:${DQ_BACKEND_PORT:-7801}"
+
+# Build Go backend as Tauri sidecar binary
+echo "==> Building backend sidecar..."
+"$SCRIPT_DIR/build_sidecar.sh"
+
 echo "==> Tauri build ($APP_NAME) -> $CARGO_TARGET_DIR"
 npm run tauri build
 

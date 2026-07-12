@@ -1,97 +1,103 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
-import { useTasksStore } from '@/stores/tasks'
-import { useTeamsStore } from '@/stores/teams'
-import { useTaskActions } from '@/composables/useTaskActions'
-import { composerClosedHint, isComposerLocked, terminalStatusDetail } from '@/utils/task-list'
+import { computed, nextTick, ref, watch, onMounted } from 'vue'
+import { useSessionsStore } from '@/stores/sessions'
+import { useProjectsStore } from '@/stores/projects'
+import { useLLMStore } from '@/stores/llm'
 import { toast } from '@/utils/feedback'
+import { COMPOSER_MODELS } from '@/constants/composer-models'
 
 const content = ref('')
-const loading = ref(false)
 const inputWrap = ref<HTMLElement | null>(null)
-const tasks = useTasksStore()
-const teams = useTeamsStore()
-const { openCreateTask } = useTaskActions()
+const sessions = useSessionsStore()
+const projects = useProjectsStore()
+const llm = useLLMStore()
 
-const composerLocked = computed(
-  () => !tasks.composingNew && isComposerLocked(tasks.currentTask),
-)
-
-const closedHint = computed(() => {
-  if (!tasks.composingNew && tasks.currentTaskTerminal && terminalStatusDetail(tasks.currentTask)) {
-    return null
+const availableModels = computed(() => {
+  if (llm.models.length) {
+    return llm.models.map((m) => ({ id: m.id, label: m.id }))
   }
-  return composerClosedHint(tasks.currentTask, tasks.timeline, tasks.messages)
+  if (!llm.modelsLoaded) {
+    return COMPOSER_MODELS
+  }
+  return []
 })
 
-const showTerminalActionOnly = computed(
-  () => composerLocked.value && !closedHint.value,
+const selectedModelLabel = computed(
+  () => availableModels.value.find((m) => m.id === sessions.selectedModelId)?.label ?? sessions.selectedModelId,
 )
 
-const placeholder = computed(() => {
-  if (tasks.composingNew) {
-    return '输入任务目标，例如：集群 ses-01 节点负载高，请分析根因…'
+const primaryAgents = computed(() =>
+  sessions.agents.filter((a) => a.mode !== 'subagent' && a.id !== 'default'),
+)
+
+const selectedAgentLabel = computed(() => {
+  if (sessions.selectedAgentId) {
+    return sessions.agents.find((a) => a.id === sessions.selectedAgentId)?.name ?? sessions.selectedAgentId
   }
-  if (tasks.currentTaskId) {
-    return '在当前任务中继续输入，Team Controller 将分派或跟进 Worker…'
-  }
-  return '输入任务目标，发送后 Team Controller 将创建任务并分派 Worker…'
+  return 'Default'
+})
+
+const selectedProject = computed(() =>
+  projects.projects.find((p) => p.id === sessions.selectedProjectId) ?? null,
+)
+
+const placeholder = computed(() =>
+  sessions.composingNew ? '输入会话目标…' : '继续输入…',
+)
+
+onMounted(() => {
+  llm.loadModels()
 })
 
 function focusInput() {
   void nextTick(() => {
-    const el = inputWrap.value?.querySelector('textarea')
-    el?.focus()
+    inputWrap.value?.querySelector('textarea')?.focus()
   })
 }
 
 watch(
-  () => tasks.composingNew,
-  (v, prev) => {
+  () => sessions.composingNew,
+  (v) => {
     if (v) {
       content.value = ''
-      tasks.setComposeDraft('')
+      if (!sessions.selectedProjectId && projects.projects.length) {
+        sessions.selectedProjectId = projects.projects[0].id
+      }
       focusInput()
-      return
-    }
-    if (prev) {
-      content.value = ''
-      tasks.setComposeDraft('')
     }
   },
 )
 
-watch(content, (v) => {
-  if (tasks.composingNew) tasks.setComposeDraft(v)
-})
-
 async function send() {
-  if (composerLocked.value || !content.value.trim() || loading.value) return
-  if (!teams.currentTeamId) {
-    toast.warning('请先在左侧选择 Team')
+  const text = content.value.trim()
+  if (!text || sessions.loading) return
+
+  if (sessions.composingNew) {
+    if (!sessions.selectedProjectId) {
+      toast.warning('请选择项目')
+      return
+    }
+    try {
+      await sessions.createSession(text, sessions.selectedProjectId)
+      content.value = ''
+      focusInput()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '发送失败')
+    }
     return
   }
-  loading.value = true
-  const creating = tasks.composingNew
+
   try {
-    await tasks.sendMessage(content.value.trim())
+    await sessions.sendTurn(text)
     content.value = ''
-    if (creating) {
-      toast.success('任务已创建')
-    } else {
-      focusInput()
-    }
+    focusInput()
   } catch (e) {
     toast.error(e instanceof Error ? e.message : '发送失败')
-  } finally {
-    loading.value = false
   }
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (composerLocked.value) return
-  const mod = e.metaKey || e.ctrlKey
-  if (mod && e.key === 'Enter') {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
     e.preventDefault()
     void send()
     return
@@ -102,105 +108,232 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
-function onNewTask() {
-  openCreateTask()
-}
-
 defineExpose({ focusInput })
 </script>
 
 <template>
-  <div
-    class="composer-float"
-    :class="{
-      'is-locked': composerLocked,
-      'is-compose': tasks.composingNew,
-      'is-sending': loading,
-    }"
-    role="form"
-    aria-label="Team task composer"
-  >
-    <div v-if="composerLocked" class="composer-float__status" :class="{ 'is-minimal': showTerminalActionOnly }" role="status">
-      <span v-if="closedHint" class="composer-float__status-text">{{ closedHint }}</span>
-      <span v-if="closedHint" class="composer-float__status-sep" aria-hidden="true">·</span>
-      <button type="button" class="composer-float__status-action" @click="onNewTask">
-        新建任务
-      </button>
+  <div class="composer-float" role="form" aria-label="Session composer">
+    <div ref="inputWrap" class="composer-float__body">
+      <DqInput
+        v-model="content"
+        type="textarea"
+        :rows="2"
+        class="composer-float__input"
+        :placeholder="placeholder"
+        @keydown="onKeydown"
+      />
     </div>
 
-    <template v-else>
-      <div ref="inputWrap" class="composer-float__row">
-        <DqInput
-          v-model="content"
-          type="textarea"
-          :rows="tasks.composingNew ? 3 : 2"
-          class="composer-float__input"
-          :placeholder="placeholder"
-          @keydown="onKeydown"
-        />
-        <DqIconButton
-          type="primary"
+    <div class="composer-float__actions">
+      <div class="composer-float__chips">
+        <label v-if="sessions.composingNew" class="composer-chip composer-chip--select">
+          <span class="composer-chip__label">{{ selectedProject?.name || '选择项目' }}</span>
+          <select v-model="sessions.selectedProjectId" class="composer-chip__select" aria-label="选择项目">
+            <option v-for="p in projects.sortedProjects" :key="p.id" :value="p.id">
+              {{ p.name }}
+            </option>
+          </select>
+        </label>
+
+        <label v-if="llm.modelsLoaded && !availableModels.length" class="composer-chip">
+          <span class="composer-chip__label composer-chip__label--accent">请先配置 LLM 提供商</span>
+        </label>
+        <label v-else class="composer-chip composer-chip--select">
+          <span class="composer-chip__label">{{ selectedModelLabel }}</span>
+          <select v-model="sessions.selectedModelId" class="composer-chip__select" aria-label="选择模型">
+            <option v-for="model in availableModels" :key="model.id" :value="model.id">
+              {{ model.label }}
+            </option>
+          </select>
+        </label>
+
+        <label v-if="(sessions.composingNew || sessions.currentSessionId) && primaryAgents.length" class="composer-chip composer-chip--select">
+          <span class="composer-chip__label">{{ selectedAgentLabel }}</span>
+          <select v-model="sessions.selectedAgentId" class="composer-chip__select" aria-label="选择 Agent">
+            <option :value="null">Default</option>
+            <option v-for="a in primaryAgents" :key="a.id" :value="a.id">
+              {{ a.name }}
+            </option>
+          </select>
+        </label>
+
+      </div>
+
+      <div class="composer-float__actions-right">
+        <button
+          type="button"
           class="composer-float__send"
-          :disabled="loading || !content.trim()"
-          :label="tasks.composingNew ? '创建任务' : 'Send'"
+          :disabled="sessions.loading || !content.trim()"
+          aria-label="发送"
           @click="send"
         >
-          <DqIcon :size="18" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 19V5M5 12l7-7 7 7" />
-            </svg>
-          </DqIcon>
-        </DqIconButton>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 19V5M5 12l7-7 7 7" />
+          </svg>
+        </button>
       </div>
-      <footer class="composer-float__footer">
-        <span class="composer-float__hint">
-          {{
-            loading
-              ? '发送中…'
-              : tasks.composingNew
-                ? '首条消息即任务目标，发送后开始执行。'
-                : '消息将发给 Team Controller，由其分派 Worker。'
-          }}
-        </span>
-        <span class="composer-float__keys">
-          Enter / ⌘↩ 发送 · Shift+Enter 换行 · ⌘N 新建<span v-if="tasks.composingNew"> · Esc 取消</span>
-        </span>
-      </footer>
-    </template>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.composer-float__row {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
+.composer-float {
+  background: var(--dq-glass-popover-bg);
+  border: 1px solid var(--dq-glass-border-strong);
+  border-radius: var(--dq-radius-menu, 18px);
+  box-shadow: var(--dq-shadow-glass);
+  -webkit-backdrop-filter: var(--dq-glass-blur-heavy);
+  backdrop-filter: var(--dq-glass-blur-heavy);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
-.composer-float__send {
-  flex-shrink: 0;
-  margin-bottom: 2px;
+.composer-float:focus-within {
+  border-color: var(--dq-accent);
+  box-shadow:
+    var(--dq-shadow-glass),
+    0 0 0 1px color-mix(in srgb, var(--dq-accent) 16%, transparent);
 }
 
-.composer-float__row :deep(textarea.dq-input) {
-  flex: 1;
-  min-height: 44px;
+.composer-float__body :deep(textarea.dq-input) {
+  display: block;
+  width: 100%;
+  min-height: 56px;
+  max-height: 180px;
   resize: none;
   border: none;
   background: transparent;
   box-shadow: none;
-  padding: 4px 8px 4px 4px;
-  font-size: 15px;
-  line-height: 1.45;
+  padding: 16px 18px 10px;
+  font-size: 14px;
+  line-height: 1.55;
   color: var(--dq-label-primary);
 }
 
-.composer-float__row :deep(textarea.dq-input::placeholder) {
-  color: var(--dq-label-tertiary);
+.composer-float__body :deep(textarea.dq-input::placeholder) {
+  color: var(--dq-label-quaternary);
 }
 
-.composer-float__row :deep(textarea.dq-input:focus) {
+.composer-float__body :deep(textarea.dq-input:focus) {
   outline: none;
   box-shadow: none;
+}
+
+.composer-float__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 10px 10px 12px;
+}
+
+.composer-float__chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.composer-float__actions-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.composer-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+  color: var(--dq-label-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.composer-chip:hover {
+  color: var(--dq-label-primary);
+  background: color-mix(in srgb, var(--dq-label-primary) 12%, transparent);
+  border-color: color-mix(in srgb, var(--dq-label-primary) 16%, transparent);
+}
+
+.composer-chip.is-on {
+  background: color-mix(in srgb, var(--dq-accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--dq-accent) 28%, transparent);
+  color: var(--dq-accent);
+}
+
+.composer-chip--select::after {
+  content: '';
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  width: 0;
+  height: 0;
+  margin-top: -1px;
+  border-left: 3.5px solid transparent;
+  border-right: 3.5px solid transparent;
+  border-top: 4px solid currentColor;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.composer-chip__label--accent {
+  color: var(--dq-accent);
+}
+
+.composer-chip__select {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.composer-chip__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.composer-chip--select {
+  padding-right: 22px;
+}
+
+.composer-float__send {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--dq-accent);
+  color: var(--dq-bg-page, #fff);
+  cursor: pointer;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.composer-float__send:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.composer-float__send:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.composer-float__send:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 </style>

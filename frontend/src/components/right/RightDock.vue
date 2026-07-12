@@ -1,296 +1,198 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { Monitor } from '@danqing/dq-shell'
 import { useResizableWidth } from '@/composables/useResizableWidth'
-import AgentMembersDialog from '@/components/right/AgentMembersDialog.vue'
-import AgentPickerDialog from '@/components/right/AgentPickerDialog.vue'
-import { useTeamsStore } from '@/stores/teams'
-import { useTodosStore } from '@/stores/todos'
-import { useWorkspaceStore } from '@/stores/workspace'
-import { useTasksStore } from '@/stores/tasks'
-import { workerInitial } from '@/utils/stream-actors'
+import { useSessionsStore } from '@/stores/sessions'
 
-const emit = defineEmits<{
-  openAgents: [agentId?: string]
-}>()
-
-const COLLAPSED_KEY = 'teams-right-collapsed'
-
-const { width, onResizePointerDown } = useResizableWidth(
-  'teams-right-width',
-  292,
-  240,
-  420,
-  'right',
-)
+const COLLAPSED_KEY = 'app-right-collapsed'
+const { width, onResizePointerDown } = useResizableWidth('app-right-width', 280, 240, 420, 'right')
 
 const collapsed = ref(localStorage.getItem(COLLAPSED_KEY) === '1')
-watch(collapsed, (v) => {
-  localStorage.setItem(COLLAPSED_KEY, v ? '1' : '0')
-})
+const tab = ref<'monitor' | 'assets' | 'files' | 'workers'>('monitor')
+const sessions = useSessionsStore()
 
-const showMembers = ref(false)
-const showPicker = ref(false)
-const teams = useTeamsStore()
-const todos = useTodosStore()
-const workspace = useWorkspaceStore()
-const tasks = useTasksStore()
+watch(collapsed, (v) => localStorage.setItem(COLLAPSED_KEY, v ? '1' : '0'))
 
-const workspaceEmptyHint = computed(() => {
-  if (tasks.composingNew) {
-    return '发送任务目标后，Worker 产物将显示在此。'
-  }
-  return tasks.currentTaskId
-    ? '当前任务暂无 Workspace 产物。'
-    : '选择任务后查看产物。'
-})
+const railStyle = computed(() => (collapsed.value ? { width: '44px' } : { width: `${width.value}px` }))
 
-const pendingTodos = computed(() => todos.items.filter((item) => !item.done))
-const doneTodos = computed(() => todos.items.filter((item) => item.done))
-
-const todoEmptyHint = computed(() => {
-  if (tasks.composingNew) {
-    return '发送任务目标后，Controller 将在此规划待办。'
-  }
-  return tasks.currentTaskId
-    ? 'Controller 将在此规划待办。'
-    : '选择任务后查看 Controller 规划的待办。'
-})
-
-const showTodos = computed(() => !tasks.composingNew && todos.items.length > 0)
-
-const agentCount = computed(() => teams.workers.length)
-
-const agentMenu = [
-  { command: 'add', label: '添加 Worker' },
-  { command: 'manage', label: '管理成员', divided: true },
-]
-
-const artifactCount = computed(() => workspace.artifacts.length)
-
-const workspaceMenu = computed(() => [
-  {
-    command: 'refresh',
-    label: '刷新产物',
-    disabled: !tasks.currentTaskId,
-  },
-])
-
-const railStyle = computed(() =>
-  collapsed.value ? { width: '44px' } : { width: `${width.value}px` },
+const reports = computed(() =>
+  sessions.streamEvents.filter((e) => e.type === 'report').map((e) => e.payload),
 )
-
-function onAgentMenu(command: string) {
-  if (command === 'add') showPicker.value = true
-  if (command === 'manage') showMembers.value = true
-}
-
-function kindLabel(kind: string) {
-  if (kind === 'report') return '报告'
-  if (kind === 'note') return '笔记'
-  if (kind === 'pin') return 'Pin'
-  return kind
-}
-
-async function refreshWorkspace() {
-  await workspace.load(tasks.currentTaskId || undefined)
-}
-
-function onWorkspaceMenu(command: string) {
-  if (command === 'refresh') refreshWorkspace()
-}
 </script>
 
 <template>
-  <div
-    class="teams-right-rail"
-    :class="{ 'is-collapsed': collapsed }"
-    :style="railStyle"
-    aria-label="Task inspector"
-  >
+  <div class="teams-right-rail agent-inspector" :class="{ 'is-collapsed': collapsed }" :style="railStyle">
     <div v-if="collapsed" class="teams-right-rail__strip">
-      <DqIconButton
-        class="teams-right-rail__expand"
-        aria-label="展开 Inspector 面板"
-        @click="collapsed = false"
-      >
+      <DqIconButton aria-label="展开 Inspector" @click="collapsed = false">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M15 18l-6-6 6-6" stroke-linecap="round" stroke-linejoin="round" />
+          <path d="M15 6l-6 6 6 6" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
       </DqIconButton>
-      <span class="teams-right-rail__strip-label" aria-hidden="true">Inspector</span>
+      <span class="teams-right-rail__strip-label">Inspector</span>
     </div>
 
-    <template v-else>
-      <button
-        type="button"
-        class="teams-right-rail__resize"
-        aria-label="调整右侧面板宽度"
-        @pointerdown="onResizePointerDown"
-      />
+    <aside v-else class="agent-inspector__panel">
+      <header class="agent-inspector__head">
+        <DqIcon class="agent-inspector__head-icon" :size="18"><Monitor /></DqIcon>
+        <h2 class="agent-inspector__title">Inspector</h2>
+        <DqIconButton aria-label="收起 Inspector" @click="collapsed = true">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </DqIconButton>
+      </header>
 
-      <DqSurfaceCard class="teams-right-panel float-island">
-        <template #header>
-          <div class="teams-right-panel__head">
-            <h2 class="teams-right-panel__title">Inspector</h2>
-            <DqIconButton
-              class="teams-right-panel__collapse"
-              aria-label="收起 Inspector 面板"
-              @click="collapsed = true"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-            </DqIconButton>
-          </div>
-        </template>
+      <nav class="agent-inspector__tabs" aria-label="Inspector 分区">
+        <button type="button" :class="{ active: tab === 'monitor' }" @click="tab = 'monitor'">监控</button>
+        <button type="button" :class="{ active: tab === 'assets' }" @click="tab = 'assets'">资产</button>
+        <button type="button" :class="{ active: tab === 'files' }" @click="tab = 'files'">文件</button>
+        <button type="button" :class="{ active: tab === 'workers' }" @click="tab = 'workers'">Workers</button>
+      </nav>
 
-        <div class="teams-right-panel__scroll">
-          <section class="teams-right-section">
-            <div class="teams-right-section__head">
-              <h3 class="teams-right-section__title">Todo</h3>
-            </div>
-
-            <template v-if="showTodos">
-              <div v-if="pendingTodos.length" class="teams-todo-group">
-                <h4 class="teams-todo-group__label">未完成</h4>
-                <label
-                  v-for="item in pendingTodos"
-                  :key="item.id"
-                  class="teams-todo-item"
-                >
-                  <DqCheckbox
-                    :model-value="item.done"
-                    @update:model-value="(v: boolean) => todos.toggle(item.id, v)"
-                  />
-                  <span>{{ item.title }}</span>
-                </label>
-              </div>
-
-              <div v-if="doneTodos.length" class="teams-todo-group">
-                <h4 class="teams-todo-group__label">已完成</h4>
-                <label
-                  v-for="item in doneTodos"
-                  :key="item.id"
-                  class="teams-todo-item is-done"
-                >
-                  <DqCheckbox
-                    :model-value="item.done"
-                    @update:model-value="(v: boolean) => todos.toggle(item.id, v)"
-                  />
-                  <span>{{ item.title }}</span>
-                </label>
-              </div>
-            </template>
-
-            <div v-else class="teams-todo-empty">
-              <DqEmpty :description="todoEmptyHint" />
-            </div>
-          </section>
-
-          <section class="teams-right-section">
-            <div class="teams-right-section__head">
-              <h3 class="teams-right-section__title">
-                Agents
-                <span v-if="agentCount" class="teams-right-section__count">{{ agentCount }}</span>
-              </h3>
-              <DqDropdown trigger="click" @command="onAgentMenu">
-                <button
-                  type="button"
-                  class="teams-right-section__more"
-                  aria-label="Agents 更多操作"
-                  @click.stop
-                >
-                  ···
-                </button>
-                <template #dropdown>
-                  <DqDropdownMenu>
-                    <DqDropdownItem
-                      v-for="item in agentMenu"
-                      :key="item.command"
-                      :command="item.command"
-                      :divided="item.divided"
-                    >
-                      {{ item.label }}
-                    </DqDropdownItem>
-                  </DqDropdownMenu>
-                </template>
-              </DqDropdown>
-            </div>
-
-            <div
-              v-for="w in teams.workers"
-              :key="w.id"
-              class="agent-member-card agent-member-card--static"
-            >
-              <span class="agent-member-card__avatar" aria-hidden="true">
-                {{ workerInitial(w.name) }}
-              </span>
-              <span class="agent-member-card__body">
-                <span class="agent-member-card__name">{{ w.name }}</span>
-                <span class="agent-member-card__persona">{{ w.persona }}</span>
-              </span>
-            </div>
-
-            <DqEmpty v-if="!teams.workers.length" description="暂无 Worker 成员">
-              <p class="agent-member-card__empty-hint">点击 ··· 从 Agents 库添加成员。</p>
-            </DqEmpty>
-          </section>
-
-          <section class="teams-right-section">
-            <div class="teams-right-section__head">
-              <h3 class="teams-right-section__title">
-                Workspace
-                <span v-if="artifactCount" class="teams-right-section__count">{{ artifactCount }}</span>
-              </h3>
-              <DqDropdown trigger="click" @command="onWorkspaceMenu">
-                <button
-                  type="button"
-                  class="teams-right-section__more"
-                  aria-label="Workspace 更多操作"
-                  @click.stop
-                >
-                  ···
-                </button>
-                <template #dropdown>
-                  <DqDropdownMenu>
-                    <DqDropdownItem
-                      v-for="item in workspaceMenu"
-                      :key="item.command"
-                      :command="item.command"
-                      :disabled="item.disabled"
-                    >
-                      {{ item.label }}
-                    </DqDropdownItem>
-                  </DqDropdownMenu>
-                </template>
-              </DqDropdown>
-            </div>
-            <DqEmpty
-              v-if="tasks.composingNew || !workspace.artifacts.length"
-              :description="workspaceEmptyHint"
-            />
-            <DqSurfaceCard
-              v-for="a in workspace.artifacts"
-              v-show="!tasks.composingNew"
-              :key="a.id"
-              class="workspace-card"
-            >
-              <div class="workspace-card__head">
-                <p class="workspace-card__title">{{ a.title }}</p>
-                <DqTag size="small" type="info">{{ kindLabel(a.kind) }}</DqTag>
-              </div>
-              <p v-if="a.content" class="workspace-card__content">{{ a.content }}</p>
-            </DqSurfaceCard>
-          </section>
+      <div class="agent-inspector__body">
+        <div v-if="tab === 'monitor'" class="agent-inspector__content">
+          <ul>
+            <li v-for="s in sessions.agentRuns" :key="s.id">
+              <strong>{{ s.agentId }}</strong>
+              <span>{{ s.status }} · step {{ s.stepsUsed }}</span>
+            </li>
+          </ul>
+          <p v-if="!sessions.agentRuns.length" class="muted">暂无 Session</p>
         </div>
-      </DqSurfaceCard>
-    </template>
+        <div v-else-if="tab === 'assets'" class="agent-inspector__content">
+          <pre v-for="(r, i) in reports" :key="i">{{ JSON.stringify(r, null, 2) }}</pre>
+          <p v-if="!reports.length" class="muted">暂无 Report</p>
+        </div>
+        <div v-else-if="tab === 'files'" class="agent-inspector__content">
+          <p class="muted">Session Workspace（后续接入）</p>
+        </div>
+        <div v-else class="agent-inspector__content">
+          <ul>
+            <li v-for="w in sessions.workers" :key="w.runId">
+              <strong>{{ w.agentId }}</strong>
+              <span>{{ w.status }} · {{ w.stepsUsed }} steps</span>
+            </li>
+          </ul>
+          <p v-if="!sessions.workers.length" class="muted">暂无 Worker</p>
+        </div>
+      </div>
 
-    <AgentMembersDialog
-      v-model:open="showMembers"
-      @open-agents="emit('openAgents', $event)"
-      @add="showPicker = true"
-    />
-    <AgentPickerDialog v-model:open="showPicker" />
+      <button type="button" class="teams-right-rail__resize" aria-label="调整宽度" @pointerdown="onResizePointerDown" />
+    </aside>
   </div>
 </template>
+
+<style scoped>
+.agent-inspector__panel {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  background: transparent;
+}
+
+.agent-inspector__head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 8px 0 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+}
+
+.agent-inspector__head-icon {
+  color: var(--dq-accent);
+  flex-shrink: 0;
+}
+
+.agent-inspector__title {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--dq-label-primary);
+}
+
+.agent-inspector__tabs {
+  flex-shrink: 0;
+  display: flex;
+  gap: 0;
+  padding: 0 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+}
+
+.agent-inspector__tabs button {
+  padding: 8px 10px;
+  font-size: 12px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--dq-label-tertiary);
+  cursor: pointer;
+}
+
+.agent-inspector__tabs button:hover {
+  color: var(--dq-label-secondary);
+}
+
+.agent-inspector__tabs button.active {
+  color: var(--dq-label-primary);
+  border-bottom-color: var(--dq-accent);
+  font-weight: 600;
+}
+
+.agent-inspector__body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.agent-inspector__content {
+  height: 100%;
+  overflow: auto;
+  padding: 8px 12px;
+}
+
+.agent-inspector__content ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.agent-inspector__content li {
+  padding: 8px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.muted {
+  color: var(--dq-label-tertiary);
+  font-size: 13px;
+}
+
+pre {
+  font-size: 11px;
+  overflow: auto;
+  margin: 0 0 8px;
+}
+
+.teams-right-rail__resize {
+  position: absolute;
+  top: 0;
+  left: -6px;
+  z-index: 5;
+  width: 12px;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: col-resize;
+}
+</style>

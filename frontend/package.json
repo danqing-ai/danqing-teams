@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "typecheck": "vue-tsc --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -13,7 +14,9 @@
     "@danqing/dq-tokens": "file:../../dq-ui/packages/tokens",
     "@danqing/dq-ui": "file:../../dq-ui/packages/ui",
     "pinia": "^2.3.0",
-    "vue": "^3.5.13"
+    "vue": "^3.5.13",
+    "vue-i18n": "^9.14.5",
+    "vue-router": "^4.6.4"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",

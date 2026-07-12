@@ -1,6 +1,5 @@
 # Build
 /out/
-/web/
 /bin/
 *.exe
 *.dll

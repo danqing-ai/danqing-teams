@@ -1,108 +1,128 @@
-export type AgentRole = 'team-worker' | 'team-controller'
-
-export interface AgentLLMConfig {
-  url?: string
-  apiKey?: string
-  hasApiKey?: boolean
-  defaultModel?: string
-  allModels?: string[]
-}
-
 export interface Agent {
   id: string
   name: string
-  description: string
-  role: AgentRole
-  llm: AgentLLMConfig
+  description?: string
+  persona?: string
+  mode?: 'primary' | 'subagent'
   systemPrompt?: string
-  minFunctionCallingRounds: number
-  skills?: Skill[]
+  steps?: number
+  skillIds?: string[]
   tools?: ToolBinding[]
-  knowledgeBase?: { id: string; name: string }
+  knowledgeIds?: string[]
 }
 
 export interface CreateAgentPayload {
   id: string
   name: string
-  description: string
-  role: AgentRole
-  llm?: AgentLLMConfig
+  description?: string
+  persona?: string
+  mode?: 'primary' | 'subagent'
   systemPrompt?: string
-  minFunctionCallingRounds?: number
+  steps?: number
+  skillIds?: string[]
+  tools?: ToolBinding[]
+  knowledgeIds?: string[]
 }
 
 export interface UpdateAgentPayload {
   name?: string
   description?: string
-  role?: AgentRole
-  llm?: AgentLLMConfig
+  persona?: string
+  mode?: 'primary' | 'subagent'
   systemPrompt?: string
-  minFunctionCallingRounds?: number
+  steps?: number
+  skillIds?: string[]
+  tools?: ToolBinding[]
+  knowledgeIds?: string[]
 }
 
 export type RiskLevel = 'low' | 'medium' | 'high'
-
-export interface Team {
-  id: string
-  name: string
-  description?: string
-}
-
-export interface WorkerAgent {
-  id: string
-  name: string
-  persona: string
-  skills?: Skill[]
-  tools?: ToolBinding[]
-  knowledgeBase?: { id: string; name: string }
-}
 
 export interface Skill {
   id: string
   name: string
   description?: string
+  domainId?: string
   keywords?: string[]
-  riskLevel: RiskLevel
+  riskLevel?: RiskLevel
+  toolIds?: string[]
+  systemHint?: string
 }
 
 export interface ToolBinding {
   toolId: string
-  mcpServer: string
+  mcpServer?: string
+  name?: string
+  riskLevel?: RiskLevel
+}
+
+export interface Tool {
+  id: string
   name: string
-  riskLevel: RiskLevel
+  description?: string
+  type: 'builtin' | 'mcp'
+  mcpServer?: string
+  riskLevel?: RiskLevel
+  schema?: string
 }
 
-export type MessageRole = 'user' | 'controller' | 'system'
-
-export interface TeamMessage {
+export interface KnowledgeBase {
   id: string
-  teamId: string
-  taskId: string
-  role: MessageRole
-  content: string
+  name: string
+  description?: string
+  documentCount: number
+  updatedAt: string
+}
+
+export interface Project {
+  id: string
+  name: string
+  directory: string
   createdAt: string
+  updatedAt: string
 }
 
-export interface SendTeamMessageResponse {
-  message: TeamMessage
-  task: TeamTask
-}
-
-export interface TeamTask {
+export interface KnowledgeDocument {
   id: string
-  teamId: string
-  content: string
-  status: string
-  closeReason?: TaskCloseReason
-  createdAt?: string
-  updatedAt?: string
+  knowledgeBaseId: string
+  title: string
+  content?: string
+  updatedAt: string
 }
 
-export type TaskCloseReason = 'done' | 'no_intent' | 'exhausted' | 'cancelled' | 'error' | ''
+export interface MCPServer {
+  id: string
+  name: string
+  description?: string
+  transport: 'stdio' | 'sse' | 'streamable-http'
+  command?: string
+  args?: string
+  url?: string
+  env?: string
+  tools?: Tool[]
+  status: 'connected' | 'disconnected' | 'error'
+}
+
+export type AutomationTrigger = 'schedule' | 'event' | 'webhook' | 'manual'
+
+export interface Automation {
+  id: string
+  name: string
+  description?: string
+  enabled: boolean
+  trigger: AutomationTrigger
+  schedule?: string
+  eventType?: string
+  webhookPath?: string
+  agentId?: string
+  prompt: string
+  lastRunAt?: string
+  nextRunAt?: string
+}
 
 export interface TimelineEvent {
   id: string
-  taskId: string
+  sessionId: string
   type: string
   payload: unknown
   createdAt: string
@@ -114,25 +134,25 @@ export interface ApprovalRequest {
   highRiskItems: { type: string; id: string; displayName: string }[]
   status: string
   runId: string
-  taskId: string
+  sessionId: string
 }
 
 export interface TodoItem {
   id: string
   title: string
   done: boolean
-  taskId?: string
+  sessionId?: string
 }
 
 export interface WorkspaceArtifact {
   id: string
-  teamId: string
-  taskId?: string
+  sessionId?: string
   title: string
   kind: 'report' | 'note' | 'pin' | string
   content?: string
   createdAt: string
 }
+
 export interface ExecutionPlan {
   runId: string
   skillIds: string[]

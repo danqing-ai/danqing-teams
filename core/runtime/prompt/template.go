@@ -1,0 +1,124 @@
+package prompt
+
+import (
+	"io/fs"
+	"strings"
+
+	"danqing-teams/core/domain"
+
+	"gopkg.in/yaml.v3"
+)
+
+type agentFrontmatter struct {
+	ID          string                `yaml:"id"`
+	Name        string                `yaml:"name"`
+	Description string                `yaml:"description"`
+	Persona     string                `yaml:"persona"`
+	Mode        string                `yaml:"mode"`
+	Steps       int                   `yaml:"steps"`
+	Skills      []string              `yaml:"skills"`
+	Tools       []toolFrontmatter     `yaml:"tools"`
+	Knowledge   []string              `yaml:"knowledge"`
+}
+
+type toolFrontmatter struct {
+	ToolID    string `yaml:"tool_id"`
+	MCP       string `yaml:"mcp"`
+	RiskLevel string `yaml:"risk_level"`
+}
+
+func parseRisk(s string) domain.RiskLevel {
+	switch strings.ToLower(s) {
+	case "high":
+		return domain.RiskHigh
+	case "medium":
+		return domain.RiskMedium
+	default:
+		return domain.RiskLow
+	}
+}
+
+func parseAgentMode(s string) domain.AgentMode {
+	switch strings.ToLower(s) {
+	case "subagent":
+		return domain.AgentModeSubagent
+	default:
+		return domain.AgentModePrimary
+	}
+}
+
+func parseFrontmatter(content string) (agentFrontmatter, string, error) {
+	var fm agentFrontmatter
+	parts := strings.SplitN(content, "---", 3)
+	if len(parts) < 3 {
+		return fm, content, nil
+	}
+	if err := yaml.Unmarshal([]byte(strings.TrimSpace(parts[1])), &fm); err != nil {
+		return fm, content, err
+	}
+	return fm, strings.TrimSpace(parts[2]), nil
+}
+
+type AgentTemplate struct {
+	Agent  domain.Agent
+	Source string
+}
+
+func LoadTemplates() ([]AgentTemplate, error) {
+	entries, err := fs.ReadDir(Templates, "templates")
+	if err != nil {
+		return nil, err
+	}
+	var result []AgentTemplate
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+		data, err := fs.ReadFile(Templates, "templates/"+entry.Name())
+		if err != nil {
+			return nil, err
+		}
+		fm, body, err := parseFrontmatter(string(data))
+		if err != nil {
+			return nil, err
+		}
+		if fm.ID == "" {
+			continue
+		}
+		var tools []domain.ToolBinding
+		for _, t := range fm.Tools {
+			tools = append(tools, domain.ToolBinding{
+				ToolID:    t.ToolID,
+				MCPServer: t.MCP,
+				RiskLevel: parseRisk(t.RiskLevel),
+			})
+		}
+		agent := domain.Agent{
+			ID:           fm.ID,
+			Name:         fm.Name,
+			Description:  fm.Description,
+			Persona:      fm.Persona,
+			Mode:         parseAgentMode(fm.Mode),
+			SystemPrompt: body,
+			Steps:        fm.Steps,
+			SkillIDs:     fm.Skills,
+			Tools:        tools,
+			KnowledgeIDs: fm.Knowledge,
+		}
+		result = append(result, AgentTemplate{Agent: agent, Source: entry.Name()})
+	}
+	return result, nil
+}
+
+func LoadTemplateByID(id string) (*domain.Agent, error) {
+	templates, err := LoadTemplates()
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range templates {
+		if t.Agent.ID == id {
+			return &t.Agent, nil
+		}
+	}
+	return nil, fs.ErrNotExist
+}

@@ -1,0 +1,313 @@
+package service
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"mime"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+
+	"danqing-teams/core/domain"
+	"danqing-teams/core/port"
+)
+
+type ProjectManager struct {
+	store   port.Repository
+	dataDir string
+}
+
+func NewProjectManager(store port.Repository, dataDir string) *ProjectManager {
+	return &ProjectManager{store: store, dataDir: dataDir}
+}
+
+func (m *ProjectManager) ProjectDir(projectID string) string {
+	return filepath.Join(m.dataDir, projectID)
+}
+
+func (m *ProjectManager) Create(ctx context.Context, req domain.CreateProjectRequest) (domain.Project, error) {
+	if req.Name == "" {
+		return domain.Project{}, fmt.Errorf("name required")
+	}
+	now := time.Now().UTC()
+	projectID := fmt.Sprintf("proj-%d", time.Now().UnixNano())
+	dir := req.Directory
+	if dir == "" {
+		dir = filepath.Join(m.ProjectDir(projectID), "files")
+	}
+	// Resolve relative paths against dataDir so we always store absolute paths.
+	if !filepath.IsAbs(dir) {
+		dir = filepath.Join(m.dataDir, dir)
+	}
+	dir = filepath.Clean(dir)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return domain.Project{}, fmt.Errorf("failed to create project directory: %w", err)
+	}
+	p := domain.Project{
+		ID:        projectID,
+		Name:      req.Name,
+		Directory: dir,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := m.store.Projects().Create(ctx, p); err != nil {
+		return domain.Project{}, err
+	}
+	return p, nil
+}
+
+func (m *ProjectManager) Get(ctx context.Context, id string) (domain.Project, error) {
+	return m.store.Projects().Get(ctx, id)
+}
+
+func (m *ProjectManager) List(ctx context.Context) ([]domain.Project, error) {
+	return m.store.Projects().List(ctx)
+}
+
+func (m *ProjectManager) Update(ctx context.Context, id string, req domain.UpdateProjectRequest) (domain.Project, error) {
+	p, err := m.store.Projects().Get(ctx, id)
+	if err != nil {
+		return domain.Project{}, err
+	}
+	if req.Name != "" {
+		p.Name = req.Name
+	}
+	if req.Directory != "" {
+		dir := req.Directory
+		if !filepath.IsAbs(dir) {
+			dir = filepath.Join(m.dataDir, dir)
+		}
+		p.Directory = filepath.Clean(dir)
+	}
+	p.UpdatedAt = time.Now().UTC()
+	if err := m.store.Projects().Update(ctx, p); err != nil {
+		return domain.Project{}, err
+	}
+	return p, nil
+}
+
+func (m *ProjectManager) Delete(ctx context.Context, id string) error {
+	return m.store.Projects().Delete(ctx, id)
+}
+
+func (m *ProjectManager) SessionsForProject(ctx context.Context, projectID string) ([]domain.Session, error) {
+	return m.store.Sessions().ListByProject(ctx, projectID)
+}
+
+func (m *ProjectManager) resolveFilesRoot(ctx context.Context, projectID string) (string, error) {
+	p, err := m.Get(ctx, projectID)
+	if err != nil {
+		return "", err
+	}
+	root := p.Directory
+	if root == "" {
+		root = filepath.Join(m.ProjectDir(projectID), "files")
+	}
+	root = filepath.Clean(root)
+	if err := os.MkdirAll(root, 0755); err != nil {
+		return "", err
+	}
+	return root, nil
+}
+
+func (m *ProjectManager) ResolveDir(ctx context.Context, projectID, fallbackDir string) string {
+	p, err := m.Get(ctx, projectID)
+	if err != nil {
+		return fallbackDir
+	}
+	if p.Directory == "" {
+		dir := filepath.Join(m.ProjectDir(projectID), "files")
+		os.MkdirAll(dir, 0755)
+		return dir
+	}
+	if filepath.IsAbs(p.Directory) {
+		return p.Directory
+	}
+	return filepath.Join(fallbackDir, p.Directory)
+}
+
+type FileNode struct {
+	Name     string      `json:"name"`
+	Path     string      `json:"path"`
+	IsDir    bool        `json:"isDir"`
+	Size     int64       `json:"size,omitempty"`
+	Children []*FileNode `json:"children,omitempty"`
+}
+
+func (m *ProjectManager) ListFiles(ctx context.Context, projectID, subPath string) ([]*FileNode, error) {
+	root, err := m.resolveFilesRoot(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	target := filepath.Join(root, subPath)
+	target, err = filepath.Abs(target)
+	if err != nil {
+		return nil, fmt.Errorf("invalid path")
+	}
+	if !strings.HasPrefix(target, root) {
+		return nil, fmt.Errorf("path escapes project directory")
+	}
+
+	entries, err := os.ReadDir(target)
+	if err != nil {
+		return nil, err
+	}
+
+	nodes := make([]*FileNode, 0, len(entries))
+	for _, e := range entries {
+		rel, _ := filepath.Rel(root, filepath.Join(target, e.Name()))
+		node := &FileNode{
+			Name:  e.Name(),
+			Path:  rel,
+			IsDir: e.IsDir(),
+		}
+		if !e.IsDir() {
+			info, _ := e.Info()
+			if info != nil {
+				node.Size = info.Size()
+			}
+		}
+		nodes = append(nodes, node)
+	}
+
+	sort.Slice(nodes, func(i, j int) bool {
+		if nodes[i].IsDir != nodes[j].IsDir {
+			return nodes[i].IsDir
+		}
+		return nodes[i].Name < nodes[j].Name
+	})
+
+	return nodes, nil
+}
+
+type FileContent struct {
+	Name        string `json:"name"`
+	Path        string `json:"path"`
+	Size        int64  `json:"size"`
+	ContentType string `json:"contentType"`
+	Content     string `json:"content"`
+	Binary      bool   `json:"binary"`
+}
+
+func (m *ProjectManager) ReadFileContent(ctx context.Context, projectID, subPath string) (*FileContent, error) {
+	root, err := m.resolveFilesRoot(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	target := filepath.Join(root, subPath)
+	target, err = filepath.Abs(target)
+	if err != nil {
+		return nil, fmt.Errorf("invalid path")
+	}
+	if !strings.HasPrefix(target, root) {
+		return nil, fmt.Errorf("path escapes project directory")
+	}
+
+	info, err := os.Stat(target)
+	if err != nil {
+		return nil, err
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("cannot read directory as file")
+	}
+
+	ext := filepath.Ext(target)
+	contentType := mime.TypeByExtension(ext)
+	if contentType == "" {
+		contentType = "text/plain"
+	}
+
+	isBinary := false
+	if strings.HasPrefix(contentType, "text/") ||
+		contentType == "application/json" ||
+		contentType == "application/javascript" ||
+		contentType == "application/xml" ||
+		contentType == "image/svg+xml" {
+		isBinary = false
+	} else if strings.HasPrefix(contentType, "image/") ||
+		strings.HasPrefix(contentType, "audio/") ||
+		strings.HasPrefix(contentType, "video/") {
+		isBinary = true
+	}
+
+	fc := &FileContent{
+		Name:        info.Name(),
+		Path:        subPath,
+		Size:        info.Size(),
+		ContentType: contentType,
+		Binary:      isBinary,
+	}
+
+	if isBinary {
+		data, err := os.ReadFile(target)
+		if err != nil {
+			return nil, err
+		}
+		fc.Content = fmt.Sprintf("data:%s;base64,%s", contentType, base64Encode(data))
+		return fc, nil
+	}
+
+	f, err := os.Open(target)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	const maxSize = 1 << 20
+	var buf strings.Builder
+	if info.Size() > maxSize {
+		lr := io.LimitReader(f, maxSize)
+		data, _ := io.ReadAll(lr)
+		buf.Write(data)
+		buf.WriteString("\n\n... (file truncated)")
+	} else {
+		data, _ := io.ReadAll(f)
+		buf.Write(data)
+	}
+	fc.Content = buf.String()
+	return fc, nil
+}
+
+func base64Encode(data []byte) string {
+	enc := make([]byte, ((len(data)+2)/3)*4)
+	encode(data, enc)
+	return string(enc)
+}
+
+const base64Table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+func encode(src, dst []byte) {
+	di, si := 0, 0
+	n := (len(src) / 3) * 3
+	for si < n {
+		val := uint(src[si])<<16 | uint(src[si+1])<<8 | uint(src[si+2])
+		dst[di] = base64Table[val>>18&0x3F]
+		dst[di+1] = base64Table[val>>12&0x3F]
+		dst[di+2] = base64Table[val>>6&0x3F]
+		dst[di+3] = base64Table[val&0x3F]
+		si += 3
+		di += 4
+	}
+	remain := len(src) - si
+	if remain == 0 {
+		return
+	}
+	val := uint(src[si]) << 16
+	if remain == 2 {
+		val |= uint(src[si+1]) << 8
+	}
+	dst[di] = base64Table[val>>18&0x3F]
+	dst[di+1] = base64Table[val>>12&0x3F]
+	if remain == 1 {
+		dst[di+2] = '='
+		dst[di+3] = '='
+	} else {
+		dst[di+2] = base64Table[val>>6&0x3F]
+		dst[di+3] = '='
+	}
+}

@@ -40,16 +40,16 @@ export function useResizableWidth(
       persist()
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
-      document.body.classList.remove('teams-is-resizing')
+      document.body.classList.remove('app-is-resizing')
     }
 
-    document.body.classList.add('teams-is-resizing')
+    document.body.classList.add('app-is-resizing')
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
   }
 
   onUnmounted(() => {
-    document.body.classList.remove('teams-is-resizing')
+    document.body.classList.remove('app-is-resizing')
   })
 
   return { width, onResizePointerDown }

@@ -1,6 +1,6 @@
 //go:build ignore
 
-// Layer import boundary checker for Spring-style backend layout.
+// Layer import boundary checker.
 // Usage: go run scripts/check_layers.go
 package main
 
@@ -19,66 +19,51 @@ type rule struct {
 }
 
 var rules = []rule{
+	// app — business orchestration; only port + domain
 	{
-		prefix: "internal/api/rest/controller",
+		prefix: "core/service",
 		forbidden: []string{
-			"/internal/application/service",
-			"/internal/persistence/",
-			"/internal/provider/",
-			"/internal/domain/repository",
-			"/internal/service",
-			"/internal/contract",
+			"/core/runtime",
+			"/core/adapter",
+			"/core/store/",
+			"/core/bootstrap",
 		},
 	},
+	// runtime — mission engine; no concrete adapters or persistence impls
 	{
-		prefix: "internal/api/rest/dto",
+		prefix: "core/runtime",
 		forbidden: []string{
-			"/internal/persistence/",
-			"/internal/provider/",
-			"/internal/application/service",
-			"/internal/service",
+			"/core/adapter",
+			"/core/store/",
 		},
 	},
+	// REST transport — delegates to app, not runtime internals
 	{
-		prefix: "internal/application/port",
+		prefix: "server/api",
 		forbidden: []string{
-			"/internal/persistence/",
-			"/internal/provider/",
-			"/internal/api/rest/controller",
-			"/internal/application/service",
-			"/internal/service",
+			"/core/runtime",
+			"/core/adapter",
+			"/core/store/sqlite",
+			"/core/store/turnlog",
+			"/core/bootstrap",
 		},
 	},
+	// shared core must not depend on HTTP
 	{
-		prefix: "internal/application/service",
+		prefix: "core/",
 		forbidden: []string{
-			"/internal/api/rest/controller",
-			"/internal/persistence/sqlstore",
-			"/internal/persistence/memory",
-			"/internal/provider/",
-			"/internal/service",
+			"/server/api/",
 		},
 	},
+	// port — pure contracts
 	{
-		prefix: "internal/domain/",
+		prefix: "core/port",
 		forbidden: []string{
-			"/internal/application/",
-			"/internal/api/",
-			"/internal/persistence/",
-			"/internal/provider/",
-			"/internal/service",
-			"/internal/contract",
-		},
-	},
-	{
-		prefix: "internal/core/",
-		forbidden: []string{
-			"/internal/application/",
-			"/internal/api/",
-			"/internal/persistence/",
-			"/internal/provider/",
-			"/internal/service",
-			"/internal/contract",
+			"/core/runtime",
+			"/core/adapter",
+			"/core/store/",
+			"/core/service",
+			"/core/bootstrap",
 		},
 	},
 }
@@ -96,8 +81,23 @@ func main() {
 	}
 
 	var violations []string
+	for _, dir := range []string{"core", "server"} {
+		walkDir(filepath.Join(root, dir), modulePath, &violations)
+	}
+
+	if len(violations) > 0 {
+		fmt.Fprintln(os.Stderr, "layer violations:")
+		for _, v := range violations {
+			fmt.Fprintln(os.Stderr, " ", v)
+		}
+		os.Exit(1)
+	}
+	fmt.Println("layer check OK")
+}
+
+func walkDir(dir, modulePath string, violations *[]string) {
 	fset := token.NewFileSet()
-	_ = filepath.Walk(filepath.Join(root, "internal"), func(path string, info os.FileInfo, walkErr error) error {
+	_ = filepath.Walk(dir, func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil || info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
@@ -105,8 +105,8 @@ func main() {
 		if err != nil {
 			return nil
 		}
-		rel, _ := filepath.Rel(root, filepath.Dir(path))
-		rel = filepath.ToSlash(rel)
+		rel, _ := filepath.Rel(dir, filepath.Dir(path))
+		rel = filepath.ToSlash(filepath.Join(filepath.Base(dir), rel))
 		for _, imp := range f.Imports {
 			importPath := strings.Trim(imp.Path.Value, `"`)
 			if !strings.HasPrefix(importPath, modulePath) {
@@ -119,22 +119,13 @@ func main() {
 				}
 				for _, forbidden := range r.forbidden {
 					if strings.Contains(suffix, forbidden) {
-						violations = append(violations, fmt.Sprintf("%s imports %s (forbidden for %s)", rel, importPath, r.prefix))
+						*violations = append(*violations, fmt.Sprintf("%s imports %s (forbidden for %s)", rel, importPath, r.prefix))
 					}
 				}
 			}
 		}
 		return nil
 	})
-
-	if len(violations) > 0 {
-		fmt.Fprintln(os.Stderr, "layer violations:")
-		for _, v := range violations {
-			fmt.Fprintln(os.Stderr, " ", v)
-		}
-		os.Exit(1)
-	}
-	fmt.Println("layer check OK")
 }
 
 func readModulePath(root string) string {

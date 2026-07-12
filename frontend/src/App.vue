@@ -1,47 +1,85 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import TopNav, { type AppModule } from '@/components/shell/TopNav.vue'
-import TeamsShell from '@/layouts/TeamsShell.vue'
-import AgentsManagement from '@/views/AgentsManagement.vue'
-import SettingsPlaceholder from '@/views/SettingsPlaceholder.vue'
-import { useTeamsStore } from '@/stores/teams'
-import { useTasksStore } from '@/stores/tasks'
-import { useGlobalAgentsStore } from '@/stores/globalAgents'
+import { computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import LeftRail from '@/components/left/LeftRail.vue'
+import { useSessionsStore } from '@/stores/sessions'
+import { useProjectsStore } from '@/stores/projects'
+import { useLLMStore } from '@/stores/llm'
+import type { AppModule } from '@/types/app-module'
 
-const activeModule = ref<AppModule>('teams')
-const pendingAgentId = ref<string | undefined>()
+const router = useRouter()
+const route = useRoute()
+const sessions = useSessionsStore()
+const projects = useProjectsStore()
+const llm = useLLMStore()
 
-const teams = useTeamsStore()
-const tasks = useTasksStore()
-const globalAgents = useGlobalAgentsStore()
-
-onMounted(async () => {
-  await teams.loadTeams()
-  await globalAgents.load()
-  await tasks.loadTasks()
-  if (tasks.tasks.length && !tasks.currentTaskId) {
-    tasks.selectTask(tasks.tasks[0].id)
+const activeModule = computed<AppModule>(() => {
+  const name = route.name as string
+  if (name === 'sessions') return 'sessions'
+  if (['workers', 'knowledge', 'skills', 'mcpServers', 'automations', 'settings'].includes(name)) {
+    return name as AppModule
   }
+  return 'sessions'
 })
 
-function openAgents(agentId?: string) {
-  pendingAgentId.value = agentId
-  activeModule.value = 'agents'
+function navigateTo(module: AppModule) {
+  if (module === 'sessions') {
+    router.push({ name: 'sessions' })
+  } else {
+    router.push({ name: module })
+  }
 }
+
+function onSelectSession(id: string) {
+  sessions.selectSession(id)
+  router.push({ name: 'sessions', params: { id } })
+}
+
+onMounted(async () => {
+  await sessions.loadCatalog()
+  await Promise.all([projects.loadProjects(), llm.loadConfigs(), llm.loadModels()])
+  if (projects.projects.length) {
+    sessions.selectedProjectId = projects.projects[0].id
+  }
+  await sessions.loadSessions()
+})
 </script>
 
 <template>
-  <div class="teams-app">
-    <TopNav :active-module="activeModule" @navigate="activeModule = $event" />
-    <main class="teams-app__main" :class="{ 'teams-app__main--agents': activeModule === 'agents' }">
-      <TeamsShell v-if="activeModule === 'teams'" @open-agents="openAgents" />
-      <AgentsManagement
-        v-else-if="activeModule === 'agents'"
-        :initial-agent-id="pendingAgentId"
-      />
-      <div v-else class="float-island float-island--settings">
-        <SettingsPlaceholder />
-      </div>
+  <div class="app-layout">
+    <LeftRail :active-module="activeModule" @navigate="navigateTo" @select-session="onSelectSession" @new-session="(pid?: string) => { sessions.startCompose(pid ?? projects.projects[0]?.id ?? null); router.push({ name: 'sessions' }) }" />
+    <main class="app-workspace">
+      <RouterView />
     </main>
   </div>
 </template>
+
+<style scoped>
+.app-layout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  height: 100vh;
+  overflow: hidden;
+  background: var(--dq-bg-page);
+}
+
+.app-workspace {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  background: transparent;
+}
+
+.app-workspace :deep(.resource-shell) {
+  border-radius: 0;
+  border-top: none;
+  border-bottom: none;
+  border-right: none;
+  height: 100%;
+}
+</style>

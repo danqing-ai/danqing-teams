@@ -11,10 +11,13 @@ import {
   DqIcon,
   DqIconButton,
   DqInput,
+  DqInputNumber,
+  DqSlider,
   DqSectionTabPanel,
   DqSectionTabs,
   DqSectionTabTrigger,
   DqSurfaceCard,
+  DqSwitch,
   DqTag,
 } from '@danqing/dq-shell'
 
@@ -33,7 +36,10 @@ const DQ_COMPONENTS = {
   DqTag,
   DqSurfaceCard,
   DqInput,
+  DqInputNumber,
+  DqSlider,
   DqCheckbox,
+  DqSwitch,
 } as const
 
 export function installDanQingUi(app: App) {

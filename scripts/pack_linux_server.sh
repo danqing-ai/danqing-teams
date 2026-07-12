@@ -13,10 +13,13 @@ OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 
 dq_ensure_out_layout
 
-if [[ ! -f "$DQ_SERVER_DIR/$APP_NAME" ]]; then
-  echo "Missing server binary: $DQ_SERVER_DIR/$APP_NAME (run make build-server)" >&2
-  exit 1
-fi
+for bin in "$APP_NAME" "$APP_NAME-cli" "$APP_NAME-tui"; do
+  if [[ ! -f "$DQ_SERVER_DIR/$bin" ]]; then
+    echo "Missing server binary: $DQ_SERVER_DIR/$bin (run make build-go)" >&2
+    exit 1
+  fi
+done
+
 if [[ ! -f "$DQ_FRONTEND_DIST/index.html" ]]; then
   echo "Missing frontend build: $DQ_FRONTEND_DIST (run make frontend-build)" >&2
   exit 1
@@ -26,9 +29,11 @@ STAGE="$DQ_RELEASE_DIST/.stage-${APP_NAME}-${OS}-${ARCH}"
 rm -rf "$STAGE"
 mkdir -p "$STAGE/out/server" "$STAGE/out/frontend/dist"
 cp "$DQ_SERVER_DIR/$APP_NAME" "$STAGE/out/server/"
+cp "$DQ_SERVER_DIR/$APP_NAME-cli" "$STAGE/out/server/"
+cp "$DQ_SERVER_DIR/$APP_NAME-tui" "$STAGE/out/server/"
 cp -R "$DQ_FRONTEND_DIST/." "$STAGE/out/frontend/dist/"
 
 ARCHIVE="$DQ_RELEASE_DIST/${APP_NAME}-${OS}-${ARCH}-${VERSION}.tar.gz"
 tar -czf "$ARCHIVE" -C "$STAGE" .
 rm -rf "$STAGE"
-echo "==> Linux server archive -> $ARCHIVE"
+echo "==> Server archive -> $ARCHIVE"

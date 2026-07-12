@@ -1,0 +1,84 @@
+data:
+    dir: /Users/nil.luo/Workspace/coding/DanQing-Teams/data
+    database: /Users/nil.luo/Workspace/coding/DanQing-Teams/data/teams.db
+    store: sqlite
+instance:
+    id: ""
+llm:
+    providers:
+        - id: openai
+          name: OpenAI
+          provider: openai
+          baseurl: https://api.openai.com/v1
+          icon: "\U0001F7E2"
+          description: GPT 系列、o 系列推理模型
+        - id: anthropic
+          name: Anthropic
+          provider: anthropic
+          baseurl: https://api.anthropic.com
+          icon: "\U0001F7E0"
+          description: Claude Sonnet、Opus、Haiku
+        - id: deepseek
+          name: DeepSeek
+          provider: openai
+          baseurl: https://api.deepseek.com
+          icon: "\U0001F535"
+          description: DeepSeek 系列
+        - id: google
+          name: Google Gemini
+          provider: openai
+          baseurl: https://generativelanguage.googleapis.com/v1beta/openai
+          icon: "\U0001F537"
+          description: Gemini Pro、Flash
+        - id: zhipu
+          name: 智谱 (Zhipu)
+          provider: openai
+          baseurl: https://open.bigmodel.cn/api/paas/v4
+          icon: "\U0001F7E3"
+          description: GLM 系列
+        - id: qwen
+          name: 通义千问 (Qwen)
+          provider: openai
+          baseurl: https://dashscope.aliyuncs.com/compatible-mode/v1
+          icon: "\U0001F7E1"
+          description: Qwen Max、Plus、Turbo
+        - id: moonshot
+          name: Moonshot (Kimi)
+          provider: openai
+          baseurl: https://api.moonshot.cn/v1
+          icon: "\U0001F319"
+          description: Kimi 系列
+        - id: ollama
+          name: Ollama (Local)
+          provider: openai
+          baseurl: http://localhost:11434/v1
+          icon: "\U0001F999"
+          description: 本地模型，通过 Ollama 运行
+runtime:
+    autoapprove: false
+    turn:
+        doomloopthreshold: 3
+        maxstepsdefault: 20
+    team:
+        maxdelegationdepth: 3
+    memory:
+        recalltopk: 3
+    knowledge:
+        searchtopk: 3
+    compaction:
+        enabled: true
+        model: ""
+        maxtokens: 128000
+        triggerratio: 0.85
+        cuttokens: 16000
+        turninterval: 6
+        subinterval: 4
+        tooltruncate: 2000
+search:
+    provider: duckduckgo
+    baseurl: ""
+    apikey: ""
+    timeoutms: 15000
+    maxresults: 5
+server:
+    listenaddr: 0.0.0.0:7801

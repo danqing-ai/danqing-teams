@@ -73,22 +73,69 @@ Checks out `danqing-ai/dq-ui` alongside the repo (same layout as local dev).
 
 ## Architecture
 
+Spring Cloud-style layered architecture. Dependency direction: top → down.
+
 ```
-api/rest/controller + api/mcp
-    → application/port (interfaces)
-    → application/service (implementations)
-    → domain/repository (interfaces)
-    → persistence/sqlite|memory
+api/rest/controller     ← HTTP handlers (thin, delegates to port)
+    ↓ depends on
+application/port        ← Service interfaces (TeamService, TaskService, …)
+    ↑ implemented by
+application/service     ← Service impls (orchestration, crud, events)
+    ↓ depends on
+domain/repository       ← Persistence interfaces (TeamRepository, TaskRepository, …)
+    ↑ implemented by
+persistence/sqlstore    ← GORM + SQLite (production)
+persistence/memory      ← In-memory (dev/test)
 
-api/rest/dto + application/assembler  (HTTP JSON ↔ domain/model)
+api/rest/dto            ← HTTP JSON types (standalone)
+application/assembler   ← DTO ↔ domain/model converter
 
-domain/model — entities & value objects (no JSON tags)
-core/orchestration | core/worker | core/policy — pure domain logic
-provider/llm — LLM adapters
-OrchestrationWorker — multi-instance job consumer
+domain/model            ← Entities & value objects (no JSON tags, zero deps)
+core/orchestration      ← Controller dispatch + persona matching (pure logic)
+core/worker             ← Worker execution plan selection (pure logic)
+core/policy             ← Risk evaluation from skills/tools (pure logic)
+provider/llm            ← LLM adapters (local/mock/remote)
+
+cmd/server              ← Entry point: wires services, starts server + worker
 ```
 
-Layer boundaries: `make check-layers` or `make test`.
+### Layer boundaries enforced by `make check-layers`:
+
+| Package | Forbidden imports |
+|---------|------------------|
+| `api/rest/controller` | `application/service`, `persistence/`, `provider/`, `domain/repository` |
+| `api/rest/dto` | `persistence/`, `provider/`, `application/service` |
+| `application/port` | `persistence/`, `provider/`, `api/rest/controller` |
+| `application/service` | `api/rest/controller`, `persistence/sqlstore`, `persistence/memory`, `provider/` |
+| `domain/` | `application/`, `api/`, `persistence/`, `provider/` |
+| `core/` | `application/`, `api/`, `persistence/`, `provider/` |
+
+### Request flow
+
+```
+HTTP Request → controller (de-Serialize DTO)
+    → assembler (DTO → domain model)
+    → port interface → service impl
+    → domain/repository interface
+    → persistence (SQLite / Memory)
+```
+
+Response serializes via `assembler.To*(domain model) → DTO → JSON`.
+
+### Key runtime components
+
+| Component | File | Role |
+|-----------|------|------|
+| **OrchestrationService** | `application/service/orchestration_service.go` | Task lifecycle: dispatch, plan, execute, report |
+| **OrchestrationWorker** | `application/service/orchestration_worker.go` | Multi-instance Job consumer (DB lease queue) |
+| **ControllerDispatch** | `core/orchestration/controller_dispatch.go` | LLM-driven worker selection + rule fallback |
+| **MatchWorker** | `core/orchestration/match.go` | Persona keyword matching |
+| **PlanExecution** | `core/worker/plan.go` | Select skills/tools from worker private profile |
+| **EvaluatePlan** | `core/policy/risk.go` | Cross-check risk: plan items vs profile risk levels |
+
+Multi-instance coordination via `orchestration_jobs` table:
+- Enqueue (dedup by `dedup_key`) → ClaimNext (CAS via `lease_owner`+`lease_until`) → Complete/Fail
+- Recovery: `ReleaseExpiredLeases` on startup, re-enqueue orphan tasks
 
 ## Notes
 

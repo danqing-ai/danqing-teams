@@ -1,0 +1,28 @@
+package service
+
+import (
+	"context"
+
+	"danqing-teams/core/domain"
+	"danqing-teams/core/port"
+)
+
+type TurnManager struct {
+	repo port.TurnRepo
+}
+
+func NewTurnManager(repo port.TurnRepo) *TurnManager {
+	return &TurnManager{repo: repo}
+}
+
+func (m *TurnManager) Create(ctx context.Context, t domain.TurnLog) error {
+	return m.repo.Create(ctx, t)
+}
+
+func (m *TurnManager) UpdateStatus(ctx context.Context, id string, status domain.TurnStatus) error {
+	return m.repo.UpdateStatus(ctx, id, status)
+}
+
+func (m *TurnManager) ListBySession(ctx context.Context, sessionID string) ([]domain.TurnLog, error) {
+	return m.repo.ListBySession(ctx, sessionID)
+}

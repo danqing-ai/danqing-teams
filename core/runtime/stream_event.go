@@ -1,0 +1,86 @@
+package runtime
+
+import (
+	"context"
+	"encoding/json"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"danqing-teams/core/domain"
+	"danqing-teams/core/port"
+)
+
+var _ port.EventStream = (*StreamEventManager)(nil)
+
+type StreamEventManager struct {
+	mu    sync.RWMutex
+	seq   atomic.Int64
+	subs  map[string][]chan domain.StreamEvent
+	store port.StreamEventRepo
+}
+
+func NewStreamEventManager(repo port.StreamEventRepo) *StreamEventManager {
+	m := &StreamEventManager{
+		subs:  make(map[string][]chan domain.StreamEvent),
+		store: repo,
+	}
+	if repo != nil {
+		m.seq.Store(repo.MaxSeq())
+	}
+	return m
+}
+
+func (m *StreamEventManager) Publish(ctx context.Context, sessionID, turnID, typ string, payload any) domain.StreamEvent {
+	raw, _ := json.Marshal(payload)
+	seq := m.seq.Add(1)
+	ev := domain.StreamEvent{
+		Seq: seq, Type: typ, SessionID: sessionID, TurnID: turnID,
+		Payload: raw, CreatedAt: time.Now().UTC(),
+	}
+
+	if m.store != nil {
+		_ = m.store.Save(ctx, ev)
+	}
+
+	m.mu.RLock()
+	for _, ch := range m.subs[sessionID] {
+		select {
+		case ch <- ev:
+		default:
+		}
+	}
+	m.mu.RUnlock()
+
+	return ev
+}
+
+func (m *StreamEventManager) Subscribe(sessionID string) chan domain.StreamEvent {
+	ch := make(chan domain.StreamEvent, 64)
+	m.mu.Lock()
+	m.subs[sessionID] = append(m.subs[sessionID], ch)
+	m.mu.Unlock()
+	return ch
+}
+
+func (m *StreamEventManager) Unsubscribe(sessionID string, ch chan domain.StreamEvent) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	subs := m.subs[sessionID]
+	out := subs[:0]
+	for _, c := range subs {
+		if c != ch {
+			out = append(out, c)
+		}
+	}
+	m.subs[sessionID] = out
+	close(ch)
+}
+
+func (m *StreamEventManager) ListSince(sessionID string, since int64) []domain.StreamEvent {
+	events, err := m.store.ListBySession(context.Background(), sessionID, since)
+	if err != nil {
+		return nil
+	}
+	return events
+}

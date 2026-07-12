@@ -1,0 +1,105 @@
+# DanQing Teams configuration file
+# Copy this file to danqing-teams.yaml and edit values as needed.
+# All entry points (server, cli, tui) read from this file.
+
+# Data and persistence paths.
+data:
+  dir: "./data"
+  database: "./data/teams.db"
+  store: "sqlite"      # sqlite only today; memory backend reserved for future use.
+
+# HTTP API server settings.
+server:
+  listen_addr: "0.0.0.0:7801"
+
+# Instance identity used for job-lease coordination.
+instance:
+  id: ""
+
+# Runtime behaviour tuning.
+runtime:
+  auto_approve: false
+  turn:
+    doom_loop_threshold: 3   # fail a turn after N repeated calls to the same tool
+    max_steps_default: 20    # fallback step limit when agent.steps is 0
+  team:
+    max_delegation_depth: 3  # maximum sub-agent delegation chain length
+  memory:
+    recall_top_k: 3          # episodic memories recalled per turn
+  knowledge:
+    search_top_k: 3          # knowledge-base hits injected per turn
+
+# Search backend for the web_search tool.
+search:
+  # Supported: duckduckgo (default), bing, tavily, bocha, metaso, searxng, baidu, volcengine, sofya
+  provider: "duckduckgo"
+
+  # Optional endpoint override.
+  # For duckduckgo: a DuckDuckGo-compatible HTML endpoint.
+  # For searxng: the SearXNG instance root or /search endpoint (required).
+  # Unused for other providers.
+  base_url: ""
+
+  # API key. Required for tavily, bocha, baidu, volcengine, and sofya.
+  # Optional for metaso (raises quota). Unused for duckduckgo, bing, and searxng.
+  api_key: ""
+
+  # Timeout in milliseconds for each search request (default 15000, min 1000, max 60000).
+  timeout_ms: 15000
+
+  # Maximum number of search results returned per query (default 5, max 10).
+  max_results: 5
+
+# LLM provider presets — shown as quick-start templates when adding a provider.
+# These are defaults; edit or add entries to customise. The frontend "Add Provider"
+# dialog lets users pick from these presets or enter a custom configuration.
+llm:
+  providers:
+    - id: openai
+      name: OpenAI
+      provider: openai
+      base_url: "https://api.openai.com/v1"
+      icon: "\U0001F7E2"
+      description: "GPT \u7CFB\u5217\u3001o \u7CFB\u5217\u63A8\u7406\u6A21\u578B"
+    - id: anthropic
+      name: Anthropic
+      provider: anthropic
+      base_url: "https://api.anthropic.com"
+      icon: "\U0001F7E0"
+      description: "Claude Sonnet\u3001Opus\u3001Haiku"
+    - id: deepseek
+      name: DeepSeek
+      provider: openai
+      base_url: "https://api.deepseek.com"
+      icon: "\U0001F535"
+      description: "DeepSeek \u7CFB\u5217"
+    - id: google
+      name: Google Gemini
+      provider: openai
+      base_url: "https://generativelanguage.googleapis.com/v1beta/openai"
+      icon: "\U0001F537"
+      description: "Gemini Pro\u3001Flash"
+    - id: zhipu
+      name: "\u667A\u8C31 (Zhipu)"
+      provider: openai
+      base_url: "https://open.bigmodel.cn/api/paas/v4"
+      icon: "\U0001F7E3"
+      description: "GLM \u7CFB\u5217"
+    - id: qwen
+      name: "\u901A\u4E49\u5343\u95EE (Qwen)"
+      provider: openai
+      base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+      icon: "\U0001F7E1"
+      description: "Qwen Max\u3001Plus\u3001Turbo"
+    - id: moonshot
+      name: Moonshot (Kimi)
+      provider: openai
+      base_url: "https://api.moonshot.cn/v1"
+      icon: "\U0001F319"
+      description: "Kimi \u7CFB\u5217"
+    - id: ollama
+      name: Ollama (Local)
+      provider: openai
+      base_url: "http://localhost:11434/v1"
+      icon: "\U0001F999"
+      description: "\u672C\u5730\u6A21\u578B\uFF0C\u901A\u8FC7 Ollama \u8FD0\u884C"

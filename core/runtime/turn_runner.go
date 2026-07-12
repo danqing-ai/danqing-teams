@@ -1,0 +1,676 @@
+package runtime
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"sync"
+	"time"
+
+	"danqing-teams/core/domain"
+	"danqing-teams/core/port"
+	"danqing-teams/core/runtime/permission"
+	"danqing-teams/core/runtime/tool"
+)
+
+const (
+	turnToolTextMaxChars     = 2000
+	turnFileContentMaxChars  = 4000
+	turnDelegateMaxChars     = 2000
+	turnHugeResultThreshold  = 60000
+	turnTokenEstimateDivisor = 4
+	doomPatternWindow        = 8
+	doomDescribeMaxLen       = 200
+	toolErrorHint            = "\n[Analyze the error above and try a different approach.]"
+)
+
+const maxStepsPrompt = `<system-reminder>
+CRITICAL - MAXIMUM STEPS REACHED
+
+This agent has reached its maximum step limit. Tools are NO LONGER available.
+
+STRICT REQUIREMENTS:
+1. Do NOT attempt any more tool calls
+2. MUST provide a text-only response summarizing what was accomplished
+3. List any remaining tasks that were NOT completed
+4. Recommend what the user should do next
+
+This is your FINAL response for this turn.
+</system-reminder>`
+
+type Role string
+
+const (
+	RoleSystem    Role = "system"
+	RoleUser      Role = "user"
+	RoleAssistant Role = "assistant"
+	RoleTool      Role = "tool"
+)
+
+type Message struct {
+	Role       Role       `json:"role"`
+	Content    string     `json:"content,omitempty"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string     `json:"tool_call_id,omitempty"`
+	Name       string     `json:"name,omitempty"`
+}
+
+type ToolCall struct {
+	ID        string         `json:"id"`
+	Name      string         `json:"function_name,omitempty"`
+	Arguments map[string]any `json:"arguments,omitempty"`
+}
+
+func toPortMessages(msgs []Message) []port.ChatMessage {
+	out := make([]port.ChatMessage, len(msgs))
+	for i, m := range msgs {
+		out[i] = port.ChatMessage{
+			Role: string(m.Role), Content: m.Content,
+			ToolCalls:  toPortToolCalls(m.ToolCalls),
+			ToolCallID: m.ToolCallID, Name: m.Name,
+		}
+	}
+	return out
+}
+
+func toPortToolCalls(calls []ToolCall) []port.ChatToolCall {
+	out := make([]port.ChatToolCall, len(calls))
+	for i, c := range calls {
+		out[i] = port.ChatToolCall{ID: c.ID, Name: c.Name, Arguments: c.Arguments}
+	}
+	return out
+}
+
+type TurnContext struct {
+	SessionID string
+	TurnID    string
+	Agent     domain.Agent
+	Model     string
+	MaxSteps  int
+	WorkDir   string
+	OnReport  func(domain.Report)
+	Messages  []Message
+}
+
+type approvalGate interface {
+	WaitApproval(ctx context.Context, approvalID string) (approved bool, err error)
+	CreateApproval(sessionID, toolName, description string) string
+}
+
+type TurnRunner struct {
+	LLM               port.LLMProvider
+	Stream            port.EventStream
+	Perm              *permission.Gate
+	Registry          *tool.Registry
+	SkillList         []domain.Skill
+	ToolBindings      []domain.ToolBinding
+	Approval          approvalGate
+	ConfigStore       port.ConfigStore
+	Log               func(typ string, data map[string]any)
+	mu                sync.Mutex
+	doomCounter       map[string]map[string]int
+	doomPatterns      map[string][]string
+}
+
+type turnRunCfg struct {
+	autoApprove            bool
+	doomLoopThreshold      int
+	maxStepsDefault        int
+	compactionEnabled      bool
+	compactionMaxTokens    int
+	compactionTriggerRatio float64
+}
+
+func NewTurnRunner(llm port.LLMProvider, stream port.EventStream, perm *permission.Gate, reg *tool.Registry, configStore port.ConfigStore) *TurnRunner {
+	return &TurnRunner{
+		LLM: llm, Stream: stream, Perm: perm, Registry: reg,
+		ConfigStore:  configStore,
+		doomCounter:  make(map[string]map[string]int),
+		doomPatterns: make(map[string][]string),
+	}
+}
+
+func (p *TurnRunner) loadRunCfg(ctx context.Context) turnRunCfg {
+	cfg := turnRunCfg{
+		doomLoopThreshold:      5,
+		maxStepsDefault:        20,
+		compactionMaxTokens:    128000,
+		compactionTriggerRatio: 0.85,
+	}
+	if p.ConfigStore != nil {
+		if c, err := p.ConfigStore.Load(ctx); err == nil {
+			rt := c.Runtime
+			cfg.autoApprove = rt.AutoApprove
+			cfg.doomLoopThreshold = rt.Turn.DoomLoopThreshold
+			cfg.maxStepsDefault = rt.Turn.MaxStepsDefault
+			cfg.compactionEnabled = rt.Compaction.Enabled
+			cfg.compactionMaxTokens = rt.Compaction.MaxTokens
+			cfg.compactionTriggerRatio = rt.Compaction.TriggerRatio
+		}
+	}
+	return cfg
+}
+
+func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, []Message, error) {
+	cfg := p.loadRunCfg(ctx)
+
+	if tctx.MaxSteps <= 0 {
+		tctx.MaxSteps = cfg.maxStepsDefault
+	}
+
+	messages := tctx.Messages
+
+	// Turn context: appended only for LLM calls, NOT persisted in messages
+	// (KV cache friendly: static system prompt prefix stays identical across turns).
+	turnCtxMsg := buildTurnContextMessage(tctx.WorkDir, tctx.Model)
+
+	tools := p.Registry.Schemas()
+	skillTools := skillToolSchemas(p.SkillList, p.ToolBindings)
+	if len(skillTools) > 0 {
+		tools = mergeSchemas(tools, skillTools)
+		for _, sk := range p.SkillList {
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventCapabilityActive, domain.CapabilityActivatedPayload{
+				Name: sk.Name,
+				Kind: "skill",
+			})
+		}
+	}
+
+	var finalReport domain.Report
+	reportCaptured := false
+
+	for step := 1; step <= tctx.MaxSteps; step++ {
+		select {
+		case <-ctx.Done():
+			// Return context error so afterTurn can distinguish cancel from normal completion.
+			// Do NOT publish EventTurnFailed here — afterTurn handles it.
+			return domain.Report{}, messages, ctx.Err()
+		default:
+		}
+
+		if cfg.compactionEnabled && step > 1 {
+			messages = p.compactMessages(messages, cfg)
+		}
+
+		isLastStep := step == tctx.MaxSteps
+
+		if isLastStep {
+			messages = append(messages, Message{Role: RoleUser, Content: maxStepsPrompt})
+		}
+
+		p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepStarted, domain.StepPayload{Step: step})
+		llmReq := port.LLMChatRequest{
+			Model:    tctx.Model,
+			Messages: appendTurnContext(toPortMessages(messages), turnCtxMsg),
+			Tools:    tools,
+		}
+		if isLastStep {
+			llmReq.ToolChoice = "none"
+		}
+		resp, err := p.LLM.Chat(ctx, llmReq)
+		if err != nil {
+			// Don't terminate — feed the error back to LLM as user message.
+			// doom loop / max steps will catch repeated failures.
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventError, domain.ErrorPayload{Message: err.Error(), Kind: "llm"})
+			messages = append(messages, Message{Role: RoleUser, Content: "[System: LLM call failed — " + err.Error() + ". Please retry or respond in text.]"})
+			continue
+		}
+		if resp.Usage != nil {
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventLLMUsage, domain.LLMUsagePayload{
+				PromptTokens:     resp.Usage.PromptTokens,
+				CompletionTokens: resp.Usage.CompletionTokens,
+				TotalTokens:      resp.Usage.TotalTokens,
+			})
+		}
+
+		if len(resp.ToolCalls) == 0 {
+			finalReport = domain.Report{
+				Status: domain.ReportDone, Summary: resp.Content,
+				Confidence: 0.8, StepsUsed: step,
+			}
+			if tctx.OnReport != nil {
+				tctx.OnReport(finalReport)
+			}
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventAgentMessage, domain.AgentMessagePayload{Text: resp.Content})
+			messages = append(messages, Message{Role: RoleAssistant, Content: resp.Content})
+			reportCaptured = true
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepEnded, domain.StepPayload{Step: step})
+			break
+		}
+
+		processedCalls := make([]ToolCall, 0, len(resp.ToolCalls))
+
+		// IMPORTANT: Append the assistant message with tool_calls BEFORE any
+		// tool result messages. OpenAI-compatible APIs require the message
+		// order: assistant(tool_calls) → tool(result) → tool(result) → ...
+		assistantToolCalls := make([]ToolCall, len(resp.ToolCalls))
+		for i, tc := range resp.ToolCalls {
+			assistantToolCalls[i] = ToolCall{ID: tc.ID, Name: tc.Name, Arguments: tc.Arguments}
+		}
+		messages = append(messages, Message{Role: RoleAssistant, ToolCalls: assistantToolCalls})
+
+		for _, call := range resp.ToolCalls {
+			handler, ok := p.Registry.Get(call.Name)
+			describe := call.Name
+			if ok {
+				describe = handler.Describe(call.Arguments)
+			}
+
+			if p.trackDoom(tctx.TurnID, call.Name, describe, cfg.doomLoopThreshold) >= cfg.doomLoopThreshold {
+				finalReport = domain.Report{Status: domain.ReportFailed, Summary: "doom loop for " + call.Name}
+				p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepEnded, domain.StepPayload{Step: step})
+				p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventTurnFailed, domain.TurnEndedPayload{
+					TurnID: tctx.TurnID, Status: "failed", Summary: "doom loop for " + call.Name,
+				})
+				p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventError, domain.ErrorPayload{
+					Message: "doom loop for " + call.Name, Kind: "doom_loop",
+				})
+				// Synthetic tool result to maintain assistant(tool_calls) ↔ tool pairing.
+				messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: "doom loop detected"})
+				reportCaptured = true
+				break
+			}
+
+			if !ok {
+				messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: "unknown tool: " + call.Name + toolErrorHint})
+				processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
+				continue
+			}
+
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolPending, domain.ToolPart{
+				CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolPending,
+			})
+
+			decision := p.Perm.Check(call.Name, handler.RiskLevel())
+			if decision == permission.DecisionDeny {
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolError, domain.ToolPart{
+				CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: "permission denied",
+			})
+			messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: "permission denied" + toolErrorHint})
+			processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
+			continue
+			}
+
+			if decision == permission.DecisionAsk && !cfg.autoApprove && p.Approval != nil {
+				description := describe
+				approvalID := p.Approval.CreateApproval(tctx.SessionID, call.Name, description)
+				p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventPermissionAsk, domain.PermissionAskPayload{
+					ApprovalID: approvalID, Tool: call.Name, Description: description,
+				})
+				approved, err := p.Approval.WaitApproval(ctx, approvalID)
+				if err != nil || !approved {
+					finalReport = domain.Report{Status: domain.ReportFailed, Summary: "approval rejected"}
+					p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepEnded, domain.StepPayload{Step: step})
+					p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventTurnFailed, domain.TurnEndedPayload{
+						TurnID: tctx.TurnID, Status: "failed", Summary: "approval rejected",
+					})
+					p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventError, domain.ErrorPayload{
+						Message: "approval rejected", Kind: "approval",
+					})
+					// Synthetic tool result to maintain assistant(tool_calls) ↔ tool pairing.
+					messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: "approval rejected"})
+					reportCaptured = true
+					break
+				}
+				// approved — continue to execute tool
+			}
+
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolRunning, domain.ToolPart{
+				CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolRunning, Input: call.Arguments,
+			})
+
+			if p.Log != nil {
+				p.Log("tool_call", map[string]any{"call_id": call.ID, "name": call.Name, "input": call.Arguments})
+			}
+
+			args := cloneMap(call.Arguments)
+			if args == nil {
+				args = map[string]any{}
+			}
+			args["__session_id"] = tctx.SessionID
+			args["__turn_id"] = tctx.TurnID
+			args["__agent_id"] = tctx.Agent.ID
+			args["__model_id"] = tctx.Model
+			args["__work_dir"] = tctx.WorkDir
+			args["__call_id"] = call.ID
+
+		result, err := handler.Execute(ctx, args)
+		if err != nil {
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolError, domain.ToolPart{
+				CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: err.Error(),
+			})
+			messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: err.Error() + toolErrorHint})
+			processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
+			continue
+		}
+
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolCompleted, domain.ToolPart{
+				CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolCompleted, Output: result.Content,
+			})
+			messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: result.Content})
+			processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
+
+			if p.Log != nil {
+				p.Log("tool_result", map[string]any{"call_id": call.ID, "name": call.Name, "output": result.Content})
+			}
+		}
+		if reportCaptured {
+			break
+		}
+		if !reportCaptured {
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepEnded, domain.StepPayload{Step: step})
+		}
+	}
+
+	if !reportCaptured {
+		finalReport = domain.Report{Status: domain.ReportFailed, Summary: "max steps reached", Confidence: 0.3}
+	}
+
+	reportPayload := finalReport
+	if reportCaptured {
+		reportPayload = domain.Report{
+			Status:     finalReport.Status,
+			Confidence: finalReport.Confidence,
+			StepsUsed:  finalReport.StepsUsed,
+		}
+	}
+	p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventReport, reportPayload)
+	p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventTurnEnded, domain.TurnEndedPayload{
+		TurnID: tctx.TurnID, Status: string(finalReport.Status), Summary: finalReport.Summary,
+	})
+	return finalReport, messages, nil
+}
+
+func (p *TurnRunner) trackDoom(turnID, tool, describe string, threshold int) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.doomCounter[turnID] == nil {
+		p.doomCounter[turnID] = map[string]int{}
+	}
+	if len(describe) > doomDescribeMaxLen {
+		describe = describe[:doomDescribeMaxLen]
+	}
+	key := tool + "\x00" + describe
+	p.doomCounter[turnID][key]++
+
+	p.doomPatterns[turnID] = append(p.doomPatterns[turnID], key)
+	if len(p.doomPatterns[turnID]) > doomPatternWindow {
+		p.doomPatterns[turnID] = p.doomPatterns[turnID][1:]
+	}
+
+	if p.detectAlternatingLoop(turnID, threshold) {
+		return threshold
+	}
+
+	return p.doomCounter[turnID][key]
+}
+
+func (p *TurnRunner) detectAlternatingLoop(turnID string, threshold int) bool {
+	patterns := p.doomPatterns[turnID]
+	if len(patterns) < doomPatternWindow {
+		return false
+	}
+
+	recent := patterns[len(patterns)-doomPatternWindow:]
+	seen := make(map[string]int)
+	for _, t := range recent {
+		seen[t]++
+	}
+
+	for _, count := range seen {
+		if count >= threshold {
+			return true
+		}
+	}
+
+	if len(recent) >= 4 {
+		a, b := recent[len(recent)-1], recent[len(recent)-2]
+		if a != b {
+			altCount := 0
+			for i := len(recent) - 1; i >= 0; i-- {
+				if (len(recent)-1-i)%2 == 0 && recent[i] == a {
+					altCount++
+				} else if (len(recent)-1-i)%2 == 1 && recent[i] == b {
+					altCount++
+				} else {
+					break
+				}
+			}
+			if altCount >= threshold {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func (p *TurnRunner) compactMessages(messages []Message, cfg turnRunCfg) []Message {
+	if len(messages) <= 1 {
+		return messages
+	}
+	messages = p.dedupToolResults(messages)
+	messages = p.truncateToolResults(messages)
+	messages = p.enforceToolPairing(messages)
+	budget := budgetTokens(cfg)
+	if estimateTurnTokens(messages) > budget && budget > 0 {
+		messages = p.snipHead(messages, budget)
+	}
+	return messages
+}
+
+func budgetTokens(cfg turnRunCfg) int {
+	if cfg.compactionMaxTokens > 0 {
+		return int(float64(cfg.compactionMaxTokens) * cfg.compactionTriggerRatio)
+	}
+	return 0
+}
+
+func (p *TurnRunner) dedupToolResults(messages []Message) []Message {
+	keyToIDs := make(map[string][]string)
+	for _, m := range messages {
+		if m.Role == RoleAssistant {
+			for _, tc := range m.ToolCalls {
+				key := tc.Name + "|" + ToolInputKey(tc.Arguments)
+				keyToIDs[key] = append(keyToIDs[key], tc.ID)
+			}
+		}
+	}
+
+	dupIDs := make(map[string]bool)
+	for _, ids := range keyToIDs {
+		if len(ids) <= 1 {
+			continue
+		}
+		for i := 0; i < len(ids)-1; i++ {
+			dupIDs[ids[i]] = true
+		}
+	}
+
+	if len(dupIDs) == 0 {
+		return messages
+	}
+
+	result := make([]Message, len(messages))
+	copy(result, messages)
+	for i := range result {
+		if result[i].Role == RoleTool && dupIDs[result[i].ToolCallID] {
+			result[i].Content = fmt.Sprintf("[dedup] %s: 重复调用，同输入，参见最新结果", result[i].Name)
+		}
+	}
+	return result
+}
+
+func (p *TurnRunner) truncateToolResults(messages []Message) []Message {
+	result := make([]Message, len(messages))
+	copy(result, messages)
+	for i := range result {
+		if result[i].Role != RoleTool {
+			continue
+		}
+		content := result[i].Content
+		limit := turnToolTextMaxChars
+
+		if isFileContentTool(result[i].Name) {
+			limit = turnFileContentMaxChars
+		}
+		if isHugeResult(content) {
+			limit = turnHugeResultThreshold
+		}
+
+		if len(content) > limit {
+			result[i].Content = content[:limit] + fmt.Sprintf("\n...[truncated, %d total chars]", len(content))
+		}
+	}
+	return result
+}
+
+func isFileContentTool(name string) bool {
+	return name == "read_file" || name == "get_kb_doc" || name == "web_fetch"
+}
+
+func isHugeResult(content string) bool {
+	return len(content) > turnHugeResultThreshold
+}
+
+func (p *TurnRunner) enforceToolPairing(messages []Message) []Message {
+	callIdx := make(map[string]int)
+	for i, m := range messages {
+		if m.Role == RoleAssistant {
+			for _, tc := range m.ToolCalls {
+				callIdx[tc.ID] = i
+			}
+		}
+	}
+
+	out := make([]Message, 0, len(messages))
+	for _, m := range messages {
+		if m.Role == RoleTool && m.ToolCallID != "" {
+			if _, ok := callIdx[m.ToolCallID]; !ok {
+				continue
+			}
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+func (p *TurnRunner) snipHead(messages []Message, budget int) []Message {
+	systemCount := 0
+	for _, m := range messages {
+		if m.Role == RoleSystem {
+			systemCount++
+		} else {
+			break
+		}
+	}
+
+	result := make([]Message, len(messages))
+	copy(result, messages)
+
+	i := systemCount
+	for i < len(result) {
+		cur := estimateTurnTokens(result)
+		if cur <= budget {
+			break
+		}
+
+		m := result[i]
+		if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
+			ids := make(map[string]bool)
+			for _, tc := range m.ToolCalls {
+				ids[tc.ID] = true
+			}
+			result = removeAt(result, i)
+			for j := i; j < len(result); {
+				rj := result[j]
+				if rj.Role == RoleTool && ids[rj.ToolCallID] {
+					result = removeAt(result, j)
+				} else {
+					j++
+				}
+			}
+		} else {
+			result = removeAt(result, i)
+		}
+	}
+	return result
+}
+
+func removeAt(msgs []Message, idx int) []Message {
+	return append(msgs[:idx], msgs[idx+1:]...)
+}
+
+func estimateTurnTokens(messages []Message) int {
+	total := 0
+	for _, m := range messages {
+		total += turnEstimateMessageTokens(m)
+	}
+	return total
+}
+
+func turnEstimateMessageTokens(m Message) int {
+	n := 0
+	n += len(m.Role) / turnTokenEstimateDivisor
+	n += len(m.Content) / turnTokenEstimateDivisor
+	n += len(m.Name) / turnTokenEstimateDivisor
+	n += len(m.ToolCallID) / turnTokenEstimateDivisor
+	for _, tc := range m.ToolCalls {
+		n += len(tc.ID) / turnTokenEstimateDivisor
+		n += len(tc.Name) / turnTokenEstimateDivisor
+		raw, _ := json.Marshal(tc.Arguments)
+		n += len(raw) / turnTokenEstimateDivisor
+	}
+	return n
+}
+
+func cloneMap(in map[string]any) map[string]any {
+	if in == nil {
+		return map[string]any{}
+	}
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func mergeSchemas(base, extra []domain.ToolSchema) []domain.ToolSchema {
+	seen := map[string]struct{}{}
+	var out []domain.ToolSchema
+	for _, s := range base {
+		if _, ok := seen[s.Name]; !ok {
+			seen[s.Name] = struct{}{}
+			out = append(out, s)
+		}
+	}
+	for _, s := range extra {
+		if _, ok := seen[s.Name]; !ok {
+			seen[s.Name] = struct{}{}
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// buildTurnContextMessage creates a system message with dynamic per-turn context.
+// NOT persisted in messages — only appended temporarily for LLM calls.
+func buildTurnContextMessage(workDir, model string) Message {
+	now := time.Now()
+	content := "<turn-context>\n" +
+		"Current time: " + now.Format("2006-01-02T15:04:05Z07:00") + " (" + now.Weekday().String() + ")\n" +
+		"Working directory: " + workDir + "\n" +
+		"Model: " + model + "\n" +
+		"</turn-context>"
+	return Message{Role: RoleSystem, Content: content}
+}
+
+// appendTurnContext appends the turn context message to the LLM request messages.
+// This is a temporary append — the original messages slice is not modified.
+func appendTurnContext(msgs []port.ChatMessage, tc Message) []port.ChatMessage {
+	out := make([]port.ChatMessage, len(msgs)+1)
+	copy(out, msgs)
+	out[len(msgs)] = port.ChatMessage{Role: string(tc.Role), Content: tc.Content}
+	return out
+}

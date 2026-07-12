@@ -1,0 +1,63 @@
+package service
+
+import (
+	"context"
+	"fmt"
+
+	"danqing-teams/core/domain"
+	"danqing-teams/core/port"
+)
+
+// ConfigManager exposes the full user-editable configuration file to API
+// handlers and other callers. It delegates persistence to a port.ConfigStore.
+type ConfigManager struct {
+	store port.ConfigStore
+}
+
+func NewConfigManager(store port.ConfigStore) *ConfigManager {
+	return &ConfigManager{store: store}
+}
+
+func (m *ConfigManager) Get(ctx context.Context) (*domain.ConfigFile, error) {
+	return m.store.Load(ctx)
+}
+
+func (m *ConfigManager) Update(ctx context.Context, req domain.UpdateConfigFileRequest) (*domain.ConfigFile, error) {
+	cfg, err := m.store.Load(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load config: %w", err)
+	}
+
+	if req.Data != nil {
+		cfg.Data = *req.Data
+	}
+	if req.Server != nil {
+		cfg.Server = *req.Server
+	}
+	if req.Instance != nil {
+		cfg.Instance = *req.Instance
+	}
+	if req.Runtime != nil {
+		cfg.Runtime = *req.Runtime
+	}
+	if req.Search != nil {
+		if req.Search.Provider == "" {
+			return nil, fmt.Errorf("search provider required")
+		}
+		if !isValidSearchProvider(req.Search.Provider) {
+			return nil, fmt.Errorf("invalid search provider: %s", req.Search.Provider)
+		}
+		cfg.Search = domain.SearchConfig{
+			Provider:   req.Search.Provider,
+			BaseURL:    req.Search.BaseURL,
+			APIKey:     req.Search.APIKey,
+			TimeoutMs:  req.Search.TimeoutMs,
+			MaxResults: req.Search.MaxResults,
+		}
+	}
+
+	if err := m.store.Save(ctx, cfg); err != nil {
+		return nil, fmt.Errorf("save config: %w", err)
+	}
+	return cfg, nil
+}

@@ -1,37 +1,43 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { asArray, fetchJSON } from '@/api/client'
-import type { Agent, AgentRole, CreateAgentPayload, UpdateAgentPayload } from '@/types'
+import { fetchJSON, asArray } from '@/api/client'
+import type { Agent, CreateAgentPayload, UpdateAgentPayload } from '@/types'
 
 export const useGlobalAgentsStore = defineStore('globalAgents', () => {
   const items = ref<Agent[]>([])
 
-  async function load(role?: AgentRole) {
-    const q = role ? `?role=${role}` : ''
-    items.value = asArray(await fetchJSON<Agent[] | null>(`/agents${q}`))
+  async function load() {
+    items.value = asArray(await fetchJSON<Agent[]>('/agents'))
   }
 
   async function get(agentId: string) {
-    return fetchJSON<Agent>(`/agents/${agentId}`)
+    return fetchJSON<Agent>(`/agents/${agentId}`).catch(() => undefined)
   }
 
   async function create(payload: CreateAgentPayload) {
-    const agent = await fetchJSON<Agent>('/agents', {
+    const agent: Agent = {
+      ...payload,
+      description: payload.description ?? '',
+      mode: payload.mode ?? 'primary',
+      steps: payload.steps ?? 10,
+    }
+    const saved = await fetchJSON<Agent>('/agents', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(agent),
     })
-    items.value.push(agent)
-    return agent
+    items.value.push(saved)
+    return saved
   }
 
   async function update(agentId: string, payload: UpdateAgentPayload) {
-    const agent = await fetchJSON<Agent>(`/agents/${agentId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    })
     const i = items.value.findIndex((a) => a.id === agentId)
-    if (i >= 0) items.value[i] = agent
-    return agent
+    if (i < 0) throw new Error('Agent not found')
+    const updated = await fetchJSON<Agent>(`/agents/${agentId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ ...items.value[i], ...payload }),
+    })
+    items.value[i] = updated
+    return updated
   }
 
   async function remove(agentId: string) {
@@ -39,5 +45,13 @@ export const useGlobalAgentsStore = defineStore('globalAgents', () => {
     items.value = items.value.filter((a) => a.id !== agentId)
   }
 
-  return { items, load, get, create, update, remove }
+  async function reset(agentId: string) {
+    const i = items.value.findIndex((a) => a.id === agentId)
+    if (i < 0) throw new Error('Agent not found')
+    const resetAgent = await fetchJSON<Agent>(`/agents/${agentId}/reset`, { method: 'POST' })
+    items.value[i] = resetAgent
+    return resetAgent
+  }
+
+  return { items, load, get, create, update, remove, reset }
 })
