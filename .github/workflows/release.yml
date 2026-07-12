@@ -84,7 +84,6 @@ jobs:
           name: danqing-teams-desktop-macos
           path: |
             ${{ env.REPO_DIR }}/out/desktop/bundle/**/*.dmg
-            ${{ env.REPO_DIR }}/out/desktop/bundle/**/*.app
           if-no-files-found: error
 
   linux-server:
@@ -254,7 +253,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release-assets/macos/**/*
+            release-assets/macos/**/*.dmg
             release-assets/linux/**/*.tar.gz
             release-assets/windows/**/*.exe
           fail_on_unmatched_files: true

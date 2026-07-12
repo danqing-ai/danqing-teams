@@ -99,6 +99,8 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.GET("/mcp/servers/:id", getMCPServer(h))
 	api.PUT("/mcp/servers/:id", updateMCPServer(h))
 	api.DELETE("/mcp/servers/:id", deleteMCPServer(h))
+	api.POST("/mcp/servers/:id/refresh-tools", refreshMCPTools(h))
+	api.PATCH("/mcp/servers/:id/tools/:toolName", toggleMCPTool(h))
 
 	if cfg.FrontendDir != "" {
 		r.Static("/app", cfg.FrontendDir)
@@ -737,5 +739,34 @@ func deleteMCPServer(h *Handler) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	}
+}
+
+func refreshMCPTools(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tools, err := h.MCPServers.RefreshTools(c, c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"tools": tools})
+	}
+}
+
+func toggleMCPTool(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			Enabled bool `json:"enabled"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		srv, err := h.MCPServers.ToggleTool(c, c.Param("id"), c.Param("toolName"), req.Enabled)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, srv)
 	}
 }

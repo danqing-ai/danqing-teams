@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import WorkspaceShell from '@/components/common/WorkspaceShell.vue'
 import { useMcpServersStore } from '@/stores/mcpServers'
 import { confirm, toast } from '@/utils/feedback'
-import type { MCPServer } from '@/types'
+import type { MCPServer, MCPToolDef } from '@/types'
 
 type Transport = 'stdio' | 'sse' | 'streamable-http'
 
@@ -14,6 +14,7 @@ const mcp = useMcpServersStore()
 const selectedId = ref<string | null>(null)
 const isCreating = ref(false)
 const saving = ref(false)
+const refreshingTools = ref(false)
 
 const transportOptions: { value: Transport; label: string }[] = [
   { value: 'stdio', label: 'STDIO' },
@@ -55,15 +56,10 @@ const headersText = computed({
   },
 })
 
-/** Editable text for enabledTools (one per line) */
-const enabledToolsText = computed({
-  get() {
-    return (form.value.enabledTools ?? ['*']).join('\n')
-  },
-  set(val: string) {
-    const tools = val.split('\n').map(l => l.trim()).filter(Boolean)
-    form.value.enabledTools = tools.length > 0 ? tools : ['*']
-  },
+/** Discovered tools list from the selected server */
+const discoveredTools = computed<MCPToolDef[]>(() => {
+  if (!selected.value?.discoveredTools) return []
+  return selected.value.discoveredTools
 })
 
 const sortedServers = computed(() =>
@@ -149,6 +145,30 @@ async function toggleEnabled() {
   const next = !selected.value.enabled
   await mcp.update(selected.value.id, { enabled: next })
   selectServer(selected.value.id)
+}
+
+async function handleRefreshTools() {
+  if (!selected.value || refreshingTools.value) return
+  refreshingTools.value = true
+  try {
+    await mcp.refreshTools(selected.value.id)
+    selectServer(selected.value.id)
+    toast.success(t('mcpServers.toolsRefreshed'))
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('mcpServers.refreshToolsFailed'))
+  } finally {
+    refreshingTools.value = false
+  }
+}
+
+async function handleToggleTool(toolName: string, enabled: boolean) {
+  if (!selected.value) return
+  try {
+    await mcp.toggleTool(selected.value.id, toolName, enabled)
+    selectServer(selected.value.id)
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
+  }
 }
 
 function initial(name: string) {
@@ -259,10 +279,25 @@ function onKeydown(e: KeyboardEvent) {
           <span class="resource-field__label">{{ $t('mcpServers.headers') }}</span>
           <DqInput v-model="headersText" class="resource-input-mono" type="textarea" :rows="3" :placeholder="$t('mcpServers.headersPlaceholder')" />
         </label>
-        <label class="resource-field resource-field--block">
-          <span class="resource-field__label">{{ $t('mcpServers.enabledTools') }}</span>
-          <DqInput v-model="enabledToolsText" class="resource-input-mono" type="textarea" :rows="2" :placeholder="$t('mcpServers.enabledToolsPlaceholder')" />
-        </label>
+        <!-- Discovered Tools -->
+        <div v-if="!isCreating" class="resource-section__tools">
+          <div class="resource-section__tools-header">
+            <span class="resource-field__label">{{ $t('mcpServers.discoveredTools') }}</span>
+            <DqButton size="small" :disabled="refreshingTools" @click="handleRefreshTools">
+              {{ refreshingTools ? $t('common.refreshing') : $t('mcpServers.refreshTools') }}
+            </DqButton>
+          </div>
+          <div v-if="discoveredTools.length === 0" class="resource-section__tools-empty">
+            {{ $t('mcpServers.noToolsDiscovered') }}
+          </div>
+          <div v-else class="resource-section__tools-list">
+            <label v-for="tool in discoveredTools" :key="tool.name" class="resource-tool-row">
+              <input type="checkbox" :checked="tool.enabled" @change="handleToggleTool(tool.name, ($event.target as HTMLInputElement).checked)" />
+              <span class="resource-tool-row__name">{{ tool.name }}</span>
+              <span v-if="tool.description" class="resource-tool-row__desc">{{ tool.description }}</span>
+            </label>
+          </div>
+        </div>
         <div v-if="!isCreating" class="resource-form-grid resource-form-grid--2">
           <label class="resource-field resource-field--toggle">
             <input type="checkbox" v-model="form.enabled" />

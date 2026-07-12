@@ -90,6 +90,12 @@ export interface KnowledgeDocument {
   updatedAt: string
 }
 
+export interface MCPToolDef {
+  name: string
+  description: string
+  enabled: boolean
+}
+
 export interface MCPServer {
   id: string
   name: string
@@ -101,6 +107,7 @@ export interface MCPServer {
   env?: string
   headers?: Record<string, string>
   enabledTools?: string[]
+  discoveredTools?: MCPToolDef[]
   toolTimeout?: number
   status: 'connected' | 'disconnected' | 'error'
   enabled: boolean

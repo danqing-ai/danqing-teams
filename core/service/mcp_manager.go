@@ -97,3 +97,97 @@ func (m *MCPManager) Update(ctx context.Context, id string, req domain.UpsertMCP
 func (m *MCPManager) Delete(ctx context.Context, id string) error {
 	return m.repo.Delete(ctx, id)
 }
+
+// RefreshTools connects to the MCP server and discovers available tools.
+// It merges the discovered tools with existing enabled state.
+func (m *MCPManager) RefreshTools(ctx context.Context, id string) ([]domain.MCPToolDef, error) {
+	srv, err := m.repo.Get(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("MCP server not found: %w", err)
+	}
+
+	timeout := time.Duration(srv.ToolTimeout) * time.Second
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	discovered, err := discoverTools(ctx, srv)
+	if err != nil {
+		return nil, fmt.Errorf("discover tools: %w", err)
+	}
+
+	// Merge with existing enabled state
+	prevEnabled := make(map[string]bool)
+	for _, t := range srv.DiscoveredTools {
+		prevEnabled[t.Name] = t.Enabled
+	}
+	for i := range discovered {
+		if wasEnabled, ok := prevEnabled[discovered[i].Name]; ok {
+			discovered[i].Enabled = wasEnabled
+		}
+	}
+
+	srv.DiscoveredTools = discovered
+
+	// Update enabledTools to reflect newly enabled tools
+	enabledSet := make(map[string]bool)
+	for _, t := range discovered {
+		if t.Enabled {
+			enabledSet[t.Name] = true
+		}
+	}
+	if len(enabledSet) > 0 {
+		names := make([]string, 0, len(enabledSet))
+		for name := range enabledSet {
+			names = append(names, name)
+		}
+		srv.EnabledTools = names
+	} else {
+		srv.EnabledTools = []string{"*"}
+	}
+
+	if err := m.repo.Upsert(ctx, srv); err != nil {
+		return nil, err
+	}
+	return discovered, nil
+}
+
+// ToggleTool enables or disables a single discovered tool.
+func (m *MCPManager) ToggleTool(ctx context.Context, id string, toolName string, enabled bool) (domain.MCPServer, error) {
+	srv, err := m.repo.Get(ctx, id)
+	if err != nil {
+		return domain.MCPServer{}, fmt.Errorf("MCP server not found: %w", err)
+	}
+
+	found := false
+	for i, t := range srv.DiscoveredTools {
+		if t.Name == toolName {
+			srv.DiscoveredTools[i].Enabled = enabled
+			found = true
+			break
+		}
+	}
+	if !found {
+		return domain.MCPServer{}, fmt.Errorf("tool not found: %s", toolName)
+	}
+
+	// Rebuild enabledTools list
+	enabledNames := make([]string, 0)
+	for _, t := range srv.DiscoveredTools {
+		if t.Enabled {
+			enabledNames = append(enabledNames, t.Name)
+		}
+	}
+	if len(enabledNames) > 0 {
+		srv.EnabledTools = enabledNames
+	} else {
+		srv.EnabledTools = []string{"*"}
+	}
+
+	if err := m.repo.Upsert(ctx, srv); err != nil {
+		return domain.MCPServer{}, err
+	}
+	return srv, nil
+}

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { MCPServer } from '@/types'
+import type { MCPServer, MCPToolDef } from '@/types'
 import { fetchJSON, asArray } from '@/api/client'
 
 export const useMcpServersStore = defineStore('mcpServers', () => {
@@ -35,5 +35,23 @@ export const useMcpServersStore = defineStore('mcpServers', () => {
     items.value = items.value.filter((s) => s.id !== id)
   }
 
-  return { items, load, create, update, remove }
+  async function refreshTools(id: string): Promise<MCPToolDef[]> {
+    const res = await fetchJSON<{ tools: MCPToolDef[] }>(`/mcp/servers/${id}/refresh-tools`, {
+      method: 'POST',
+    })
+    await load()
+    return res?.tools ?? []
+  }
+
+  async function toggleTool(id: string, toolName: string, enabled: boolean) {
+    const server = await fetchJSON<MCPServer>(`/mcp/servers/${id}/tools/${encodeURIComponent(toolName)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled }),
+    })
+    const i = items.value.findIndex((s) => s.id === id)
+    if (i >= 0) items.value[i] = server
+    return server
+  }
+
+  return { items, load, create, update, remove, refreshTools, toggleTool }
 })

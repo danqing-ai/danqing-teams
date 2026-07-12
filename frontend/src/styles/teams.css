@@ -2937,3 +2937,69 @@ body.teams-is-resizing {
   gap: 6px;
 }
 
+/* —— MCP discovered tools list —— */
+.resource-section__tools {
+  margin-top: 14px;
+  margin-bottom: 14px;
+}
+
+.resource-section__tools-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.resource-section__tools-empty {
+  font-size: 12px;
+  color: var(--dq-label-quaternary);
+  padding: 12px 0;
+}
+
+.resource-section__tools-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid var(--dq-separator-light);
+  border-radius: 6px;
+  padding: 4px 0;
+}
+
+.resource-tool-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+
+.resource-tool-row:hover {
+  background: var(--dq-hover-bg, rgba(0, 0, 0, 0.03));
+}
+
+.resource-tool-row input[type="checkbox"] {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  accent-color: var(--dq-accent, #4f6ef7);
+}
+
+.resource-tool-row__name {
+  font-weight: 500;
+  color: var(--dq-label-primary);
+  white-space: nowrap;
+}
+
+.resource-tool-row__desc {
+  color: var(--dq-label-quaternary);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+

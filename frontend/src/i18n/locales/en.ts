@@ -305,6 +305,11 @@ export default {
     headersPlaceholder: 'KEY=VALUE (one per line, e.g. Authorization=Bearer xxx)',
     enabledTools: 'Enabled Tools',
     enabledToolsPlaceholder: 'Tool names (one per line, * for all)',
+    discoveredTools: 'Discovered Tools',
+    refreshTools: 'Refresh Tools',
+    toolsRefreshed: 'Tools refreshed successfully',
+    refreshToolsFailed: 'Failed to refresh tools',
+    noToolsDiscovered: 'No tools discovered. Click "Refresh Tools" to fetch.',
   },
   sessions: {
     noAgent: 'Please create at least one Agent first',

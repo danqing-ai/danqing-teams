@@ -305,6 +305,11 @@ export default {
     headersPlaceholder: 'KEY=VALUE（每行一个，如 Authorization=Bearer xxx）',
     enabledTools: '启用工具',
     enabledToolsPlaceholder: '工具名称（每行一个，* 表示全部）',
+    discoveredTools: '已发现工具',
+    refreshTools: '刷新工具',
+    toolsRefreshed: '工具刷新成功',
+    refreshToolsFailed: '刷新工具失败',
+    noToolsDiscovered: '暂无已发现工具，点击「刷新工具」获取。',
   },
   sessions: {
     noAgent: '请先创建至少一个 Agent',
