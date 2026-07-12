@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import WorkspaceShell from '@/components/common/WorkspaceShell.vue'
 import { useMcpServersStore } from '@/stores/mcpServers'
 import { confirm, toast } from '@/utils/feedback'
-import type { MCPServer, Tool } from '@/types'
+import type { MCPServer } from '@/types'
 
 type Transport = 'stdio' | 'sse' | 'streamable-http'
 
@@ -14,7 +14,6 @@ const mcp = useMcpServersStore()
 const selectedId = ref<string | null>(null)
 const isCreating = ref(false)
 const saving = ref(false)
-const activeTab = ref<'info' | 'tools'>('info')
 
 const transportOptions: { value: Transport; label: string }[] = [
   { value: 'stdio', label: 'STDIO' },
@@ -31,16 +30,40 @@ const form = ref<MCPServer>({
   args: '',
   url: '',
   env: '',
-  tools: [],
   status: 'disconnected',
+  enabled: true,
 })
 
-const pendingTool = ref<Omit<Tool, 'id'>>({
-  name: '',
-  description: '',
-  type: 'mcp',
-  riskLevel: 'low',
-  schema: '',
+/** Editable text for headers (KEY=VALUE per line) */
+const headersText = computed({
+  get() {
+    const h = form.value.headers
+    if (!h || Object.keys(h).length === 0) return ''
+    return Object.entries(h).map(([k, v]) => `${k}=${v}`).join('\n')
+  },
+  set(val: string) {
+    const map: Record<string, string> = {}
+    for (const line of val.split('\n')) {
+      const trimmed = line.trim()
+      if (!trimmed) continue
+      const eqIdx = trimmed.indexOf('=')
+      if (eqIdx > 0) {
+        map[trimmed.slice(0, eqIdx).trim()] = trimmed.slice(eqIdx + 1).trim()
+      }
+    }
+    form.value.headers = map
+  },
+})
+
+/** Editable text for enabledTools (one per line) */
+const enabledToolsText = computed({
+  get() {
+    return (form.value.enabledTools ?? ['*']).join('\n')
+  },
+  set(val: string) {
+    const tools = val.split('\n').map(l => l.trim()).filter(Boolean)
+    form.value.enabledTools = tools.length > 0 ? tools : ['*']
+  },
 })
 
 const sortedServers = computed(() =>
@@ -53,7 +76,8 @@ const headerTitle = computed(() => {
   return selected.value?.name.trim() || t('mcpServers.untitled')
 })
 
-onMounted(() => {
+onMounted(async () => {
+  await mcp.load()
   if (sortedServers.value.length && !selectedId.value) {
     selectServer(sortedServers.value[0].id)
   }
@@ -62,7 +86,6 @@ onMounted(() => {
 function selectServer(id: string) {
   isCreating.value = false
   selectedId.value = id
-  activeTab.value = 'info'
   const server = mcp.items.find((s) => s.id === id)
   if (server) form.value = { ...server }
 }
@@ -70,7 +93,6 @@ function selectServer(id: string) {
 function openCreate() {
   isCreating.value = true
   selectedId.value = null
-  activeTab.value = 'info'
   form.value = {
     id: '',
     name: '',
@@ -80,12 +102,12 @@ function openCreate() {
     args: '',
     url: '',
     env: '',
-    tools: [],
     status: 'disconnected',
+    enabled: true,
   }
 }
 
-function save() {
+async function save() {
   if (!form.value.name.trim()) {
     toast.warning(t('mcpServers.namePlaceholder'))
     return
@@ -93,12 +115,12 @@ function save() {
   saving.value = true
   try {
     if (isCreating.value) {
-      const server = mcp.create({ ...form.value, name: form.value.name.trim() })
+      const server = await mcp.create({ ...form.value, name: form.value.name.trim() })
       toast.success(t('mcpServers.created'))
       isCreating.value = false
       selectServer(server.id)
     } else if (selected.value) {
-      mcp.update(selected.value.id, { ...form.value })
+      await mcp.update(selected.value.id, { ...form.value })
       toast.success(t('mcpServers.saved'))
       selectServer(selected.value.id)
     }
@@ -116,30 +138,16 @@ async function removeSelected() {
   } catch {
     return
   }
-  mcp.remove(selected.value.id)
+  await mcp.remove(selected.value.id)
   selectedId.value = null
   isCreating.value = false
   toast.success(t('mcpServers.deleted'))
 }
 
-function addTool() {
-  if (!selected.value || !pendingTool.value.name.trim() || !pendingTool.value.description?.trim()) return
-  mcp.addTool(selected.value.id, { ...pendingTool.value, name: pendingTool.value.name.trim() })
-  pendingTool.value = { name: '', description: '', type: 'mcp', riskLevel: 'low', schema: '' }
-  toast.success(t('mcpServers.toolAdded'))
-}
-
-function removeTool(toolId: string) {
+async function toggleEnabled() {
   if (!selected.value) return
-  mcp.removeTool(selected.value.id, toolId)
-  toast.success(t('mcpServers.toolDeleted'))
-}
-
-function toggleStatus() {
-  if (!selected.value) return
-  const next = selected.value.status === 'connected' ? 'disconnected' : 'connected'
-  mcp.update(selected.value.id, { status: next })
-  toast.success(next === 'connected' ? t('mcpServers.connected') : t('mcpServers.disconnected'))
+  const next = !selected.value.enabled
+  await mcp.update(selected.value.id, { enabled: next })
   selectServer(selected.value.id)
 }
 
@@ -207,32 +215,10 @@ function onKeydown(e: KeyboardEvent) {
           </span>
         </div>
       </div>
-      <nav v-if="!isCreating" class="resource-workspace__tabs" role="tablist">
-        <button
-          type="button"
-          class="resource-workspace__tab"
-          :class="{ 'is-active': activeTab === 'info' }"
-          role="tab"
-          :aria-selected="activeTab === 'info'"
-          @click="activeTab = 'info'"
-        >
-          {{ $t('mcpServers.connectionConfig') }}
-        </button>
-        <button
-          type="button"
-          class="resource-workspace__tab"
-          :class="{ 'is-active': activeTab === 'tools' }"
-          role="tab"
-          :aria-selected="activeTab === 'tools'"
-          @click="activeTab = 'tools'"
-        >
-          {{ $t('common.tools') }}
-        </button>
-      </nav>
     </template>
 
     <template #body>
-      <section v-show="activeTab === 'info'" class="resource-section">
+      <section class="resource-section">
         <div class="resource-form-grid resource-form-grid--2">
           <label class="resource-field">
             <span class="resource-field__label">{{ $t('common.name') }}</span>
@@ -269,47 +255,19 @@ function onKeydown(e: KeyboardEvent) {
           <span class="resource-field__label">{{ $t('mcpServers.envVars') }}</span>
           <DqInput v-model="form.env" class="resource-input-mono" type="textarea" :rows="4" :placeholder="$t('mcpServers.envVarsPlaceholder')" />
         </label>
-      </section>
-
-      <section v-show="activeTab === 'tools'" class="resource-section">
-        <div class="resource-form-grid resource-form-grid--2">
-          <label class="resource-field">
-            <span class="resource-field__label">{{ $t('mcpServers.toolName') }}</span>
-            <DqInput v-model="pendingTool.name" placeholder="query" />
-          </label>
-          <label class="resource-field">
-            <span class="resource-field__label">{{ $t('common.riskLevel') }}</span>
-            <select v-model="pendingTool.riskLevel" class="resource-field__select">
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-            </select>
-          </label>
-        </div>
-        <label class="resource-field resource-field--block">
-          <span class="resource-field__label">{{ $t('common.description') }}</span>
-          <DqInput v-model="pendingTool.description" type="textarea" :rows="3" :placeholder="$t('mcpServers.toolDescriptionPlaceholder')" />
+        <label v-if="form.transport !== 'stdio'" class="resource-field resource-field--block">
+          <span class="resource-field__label">{{ $t('mcpServers.headers') }}</span>
+          <DqInput v-model="headersText" class="resource-input-mono" type="textarea" :rows="3" :placeholder="$t('mcpServers.headersPlaceholder')" />
         </label>
         <label class="resource-field resource-field--block">
-          <span class="resource-field__label">{{ $t('common.jsonSchema') }}</span>
-          <DqInput v-model="pendingTool.schema" class="resource-input-mono" type="textarea" :rows="5" placeholder="{}" />
+          <span class="resource-field__label">{{ $t('mcpServers.enabledTools') }}</span>
+          <DqInput v-model="enabledToolsText" class="resource-input-mono" type="textarea" :rows="2" :placeholder="$t('mcpServers.enabledToolsPlaceholder')" />
         </label>
-        <div class="resource-form-grid resource-form-grid--2" style="margin-bottom: var(--space-md);">
-          <div />
-          <div class="resource-field resource-field--action">
-            <DqButton @click="addTool">{{ $t('common.addTool') }}</DqButton>
-          </div>
-        </div>
-        <div class="resource-list-card">
-          <div v-for="tool in selected?.tools" :key="tool.id" class="resource-list-card__item">
-            <div class="resource-list-card__meta">
-              <span class="resource-list-card__name">{{ tool.name }}</span>
-              <span class="resource-list-card__desc">{{ tool.description }}</span>
-            </div>
-            <div class="resource-list-card__actions">
-              <button type="button" class="resource-list-card__action resource-list-card__action--danger" @click="removeTool(tool.id)">{{ $t('common.delete') }}</button>
-            </div>
-          </div>
+        <div v-if="!isCreating" class="resource-form-grid resource-form-grid--2">
+          <label class="resource-field resource-field--toggle">
+            <input type="checkbox" v-model="form.enabled" />
+            <span class="resource-field__label">{{ $t('mcpServers.enabled') }}</span>
+          </label>
         </div>
       </section>
     </template>
@@ -318,8 +276,8 @@ function onKeydown(e: KeyboardEvent) {
       <span class="resource-workspace__hint">{{ $t('common.saveShortcut') }}</span>
       <div class="resource-workspace__footer-actions">
         <DqButton v-if="isCreating" @click="isCreating = false; selectedId = null">{{ $t('common.cancel') }}</DqButton>
-        <DqButton v-if="!isCreating" @click="toggleStatus">
-          {{ selected?.status === 'connected' ? $t('mcpServers.disconnect') : $t('mcpServers.connect') }}
+        <DqButton v-if="!isCreating" @click="toggleEnabled">
+          {{ selected?.enabled ? $t('mcpServers.disable') : $t('mcpServers.enable') }}
         </DqButton>
         <DqButton v-if="!isCreating" @click="removeSelected">{{ $t('common.delete') }}</DqButton>
         <DqButton type="primary" :disabled="saving" @click="save">

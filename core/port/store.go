@@ -14,6 +14,7 @@ type Repository interface {
 	Approvals()    ApprovalRepo
 	StreamEvents() StreamEventRepo
 	Turns()        TurnRepo
+	MCPServers()   MCPServerRepo
 }
 
 type AgentRepo interface {
@@ -79,6 +80,13 @@ type TurnRepo interface {
 	UpdateStatus(ctx context.Context, id string, status domain.TurnStatus) error
 	Get(ctx context.Context, id string) (domain.TurnLog, error)
 	ListBySession(ctx context.Context, sessionID string) ([]domain.TurnLog, error)
+}
+
+type MCPServerRepo interface {
+	List(ctx context.Context) ([]domain.MCPServer, error)
+	Get(ctx context.Context, id string) (domain.MCPServer, error)
+	Upsert(ctx context.Context, s domain.MCPServer) error
+	Delete(ctx context.Context, id string) error
 }
 
 // TurnLogStore persists turn-level JSONL entries used exclusively for LLM

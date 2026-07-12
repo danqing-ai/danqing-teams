@@ -31,7 +31,7 @@ echo "==> Building backend sidecar..."
 "$SCRIPT_DIR/build_sidecar.sh"
 
 echo "==> Tauri build ($APP_NAME) -> $CARGO_TARGET_DIR"
-npm run tauri build
+npm run tauri build -- -b nsis
 
 BUNDLE_SRC=""
 for candidate in \

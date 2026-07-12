@@ -298,6 +298,13 @@ export default {
     connect: '连接',
     disconnect: '断开',
     createServer: '创建 MCP Server',
+    enabled: '已启用',
+    enable: '启用',
+    disable: '禁用',
+    headers: '请求头',
+    headersPlaceholder: 'KEY=VALUE（每行一个，如 Authorization=Bearer xxx）',
+    enabledTools: '启用工具',
+    enabledToolsPlaceholder: '工具名称（每行一个，* 表示全部）',
   },
   sessions: {
     noAgent: '请先创建至少一个 Agent',

@@ -52,6 +52,7 @@ func (s *Store) migrate() error {
 		&knowledgeDocModel{},
 		&streamEventModel{},
 		&turnModel{},
+		&mcpServerModel{},
 	); err != nil {
 		return err
 	}
@@ -77,6 +78,7 @@ func (s *Store) LLMConfig() port.LLMConfigRepo { return &llmConfigRepo{s} }
 func (s *Store) Approvals() port.ApprovalRepo { return &approvalRepo{s} }
 func (s *Store) StreamEvents() port.StreamEventRepo { return &streamEventRepo{s} }
 func (s *Store) Turns() port.TurnRepo             { return &turnRepo{s} }
+func (s *Store) MCPServers() port.MCPServerRepo  { return &mcpServerRepo{s} }
 
 func (s *Store) KnowledgeDocs() []KnowledgeDoc {
 	var rows []knowledgeDocModel
@@ -383,4 +385,41 @@ func (r *turnRepo) ListBySession(ctx context.Context, sessionID string) ([]domai
 		out[i] = turnToDomain(row)
 	}
 	return out, nil
+}
+
+// ---- MCPServerRepo ----
+
+type mcpServerRepo struct{ s *Store }
+
+func (r *mcpServerRepo) List(ctx context.Context) ([]domain.MCPServer, error) {
+	var rows []mcpServerModel
+	if err := r.s.db.WithContext(ctx).Order("rowid asc").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.MCPServer, len(rows))
+	for i, row := range rows {
+		out[i] = mcpServerToDomain(row)
+	}
+	return out, nil
+}
+
+func (r *mcpServerRepo) Get(ctx context.Context, id string) (domain.MCPServer, error) {
+	var row mcpServerModel
+	if err := r.s.db.WithContext(ctx).First(&row, "id = ?", id).Error; err != nil {
+		return domain.MCPServer{}, err
+	}
+	return mcpServerToDomain(row), nil
+}
+
+func (r *mcpServerRepo) Upsert(ctx context.Context, s domain.MCPServer) error {
+	m := mcpServerFromDomain(s)
+	var existing mcpServerModel
+	if err := r.s.db.WithContext(ctx).First(&existing, "id = ?", s.ID).Error; err != nil {
+		return r.s.db.WithContext(ctx).Create(&m).Error
+	}
+	return r.s.db.WithContext(ctx).Model(&existing).Updates(&m).Error
+}
+
+func (r *mcpServerRepo) Delete(ctx context.Context, id string) error {
+	return r.s.db.WithContext(ctx).Delete(&mcpServerModel{}, "id = ?", id).Error
 }

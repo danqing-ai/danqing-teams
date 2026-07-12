@@ -99,8 +99,11 @@ export interface MCPServer {
   args?: string
   url?: string
   env?: string
-  tools?: Tool[]
+  headers?: Record<string, string>
+  enabledTools?: string[]
+  toolTimeout?: number
   status: 'connected' | 'disconnected' | 'error'
+  enabled: boolean
 }
 
 export type AutomationTrigger = 'schedule' | 'event' | 'webhook' | 'manual'

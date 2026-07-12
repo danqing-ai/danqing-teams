@@ -23,6 +23,7 @@ type Handler struct {
 	Agents       *service.AgentManager
 	Skills       *service.SkillManager
 	TurnLogs     *service.TurnLogManager
+	MCPServers   *service.MCPManager
 	Store        port.Repository
 }
 
@@ -93,6 +94,11 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.PUT("/agents/:id", updateAgent(h))
 	api.POST("/agents/:id/reset", resetAgent(h))
 	api.DELETE("/agents/:id", deleteAgent(h))
+	api.GET("/mcp/servers", listMCPServers(h))
+	api.POST("/mcp/servers", createMCPServer(h))
+	api.GET("/mcp/servers/:id", getMCPServer(h))
+	api.PUT("/mcp/servers/:id", updateMCPServer(h))
+	api.DELETE("/mcp/servers/:id", deleteMCPServer(h))
 
 	if cfg.FrontendDir != "" {
 		r.Static("/app", cfg.FrontendDir)
@@ -665,5 +671,71 @@ func readProjectFile(h *Handler) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, fc)
+	}
+}
+
+// ---- MCP Servers ----
+
+func listMCPServers(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		servers, err := h.MCPServers.List(c)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, servers)
+	}
+}
+
+func createMCPServer(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req domain.UpsertMCPServerRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		s, err := h.MCPServers.Create(c, req)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusCreated, s)
+	}
+}
+
+func getMCPServer(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		s, err := h.MCPServers.Get(c, c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, s)
+	}
+}
+
+func updateMCPServer(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req domain.UpsertMCPServerRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		s, err := h.MCPServers.Update(c, c.Param("id"), req)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, s)
+	}
+}
+
+func deleteMCPServer(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := h.MCPServers.Delete(c, c.Param("id")); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	}
 }

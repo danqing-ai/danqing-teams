@@ -42,6 +42,7 @@ type Core struct {
 	Agents        *service.AgentManager
 	Skills        *service.SkillManager
 	TurnLogs      *service.TurnLogManager
+	MCPServers    *service.MCPManager
 }
 
 func New(cfg Config) *Core {
@@ -109,6 +110,7 @@ func New(cfg Config) *Core {
 	turnManager := service.NewTurnManager(st.Turns())
 	turnLogManager := service.NewTurnLogManager(turnLog)
 	approvalManager := service.NewApprovalManager(st.Approvals())
+	mcpManager := service.NewMCPManager(st.MCPServers())
 
 	llmConfigRepo := st.LLMConfig()
 	llmConfig := service.NewLLMConfigManager(llmConfigRepo)
@@ -166,6 +168,7 @@ func New(cfg Config) *Core {
 		Agents:        agents,
 		Skills:        skills,
 		TurnLogs:      turnLogManager,
+		MCPServers:    mcpManager,
 	}
 }
 

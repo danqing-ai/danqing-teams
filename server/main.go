@@ -18,6 +18,7 @@ func main() {
 		Agents:       core.Agents,
 		Skills:       core.Skills,
 		TurnLogs:     core.TurnLogs,
+		MCPServers:   core.MCPServers,
 		Store:        core.Store,
 	}
 	apiv1.NewRouter(h, apiv1.RouterConfig{}).Run(core.Config.Server.ListenAddr)

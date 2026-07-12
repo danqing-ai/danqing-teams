@@ -298,6 +298,13 @@ export default {
     connect: 'Connect',
     disconnect: 'Disconnect',
     createServer: 'Create MCP Server',
+    enabled: 'Enabled',
+    enable: 'Enable',
+    disable: 'Disable',
+    headers: 'Headers',
+    headersPlaceholder: 'KEY=VALUE (one per line, e.g. Authorization=Bearer xxx)',
+    enabledTools: 'Enabled Tools',
+    enabledToolsPlaceholder: 'Tool names (one per line, * for all)',
   },
   sessions: {
     noAgent: 'Please create at least one Agent first',

@@ -220,6 +220,107 @@ func turnFromDomain(t domain.TurnLog) turnModel {
 	}
 }
 
+// ---- MCPServer ----
+
+type mcpServerModel struct {
+	ID                 string `gorm:"primaryKey"`
+	Name               string
+	Description        string
+	Transport          string
+	Command            string
+	Args               string
+	URL                string
+	Env                string
+	HeadersJSON        string `gorm:"column:headers"`
+	EnabledToolsJSON   string `gorm:"column:enabled_tools"`
+	DiscoveredToolsJSON string `gorm:"column:discovered_tools"`
+	ToolTimeout        int    `gorm:"column:tool_timeout"`
+	Status             string
+	Enabled            bool
+}
+
+func (mcpServerModel) TableName() string { return "mcp_servers" }
+
+func (m *mcpServerModel) BeforeSave(_ *gorm.DB) error {
+	if m.HeadersJSON == "" {
+		m.HeadersJSON = "{}"
+	}
+	if m.EnabledToolsJSON == "" {
+		m.EnabledToolsJSON = `["*"]`
+	}
+	return nil
+}
+
+func mcpServerToDomain(m mcpServerModel) domain.MCPServer {
+	var headers map[string]string
+	_ = json.Unmarshal([]byte(m.HeadersJSON), &headers)
+	var enabledTools []string
+	_ = json.Unmarshal([]byte(m.EnabledToolsJSON), &enabledTools)
+	if len(enabledTools) == 0 {
+		enabledTools = []string{"*"}
+	}
+	var discovered []domain.MCPToolDef
+	_ = json.Unmarshal([]byte(m.DiscoveredToolsJSON), &discovered)
+	return domain.MCPServer{
+		ID:              m.ID,
+		Name:            m.Name,
+		Description:     m.Description,
+		Transport:       m.Transport,
+		Command:         m.Command,
+		Args:            m.Args,
+		URL:             m.URL,
+		Env:             m.Env,
+		Headers:         headers,
+		EnabledTools:    enabledTools,
+		DiscoveredTools: discovered,
+		ToolTimeout:     m.ToolTimeout,
+		Status:          m.Status,
+		Enabled:         m.Enabled,
+	}
+}
+
+func mcpServerFromDomain(s domain.MCPServer) mcpServerModel {
+	headersJSON := "{}"
+	if len(s.Headers) > 0 {
+		b, _ := json.Marshal(s.Headers)
+		headersJSON = string(b)
+	}
+	enabledToolsJSON := `["*"]`
+	if len(s.EnabledTools) > 0 {
+		b, _ := json.Marshal(s.EnabledTools)
+		enabledToolsJSON = string(b)
+	}
+	discoveredJSON := "[]"
+	if len(s.DiscoveredTools) > 0 {
+		b, _ := json.Marshal(s.DiscoveredTools)
+		discoveredJSON = string(b)
+	}
+	timeout := s.ToolTimeout
+	if timeout <= 0 {
+		timeout = 300
+	}
+	status := s.Status
+	if status == "" {
+		status = "disconnected"
+	}
+	return mcpServerModel{
+		ID:                  s.ID,
+		Name:                s.Name,
+		Description:         s.Description,
+		Transport:           s.Transport,
+		Command:             s.Command,
+		Args:                s.Args,
+		URL:                 s.URL,
+		Env:                 s.Env,
+		HeadersJSON:         headersJSON,
+		EnabledToolsJSON:    enabledToolsJSON,
+		DiscoveredToolsJSON: discoveredJSON,
+		ToolTimeout:         timeout,
+		Status:              status,
+		Enabled:             s.Enabled,
+	}
+}
+
 // ---- Helpers ----
 
 func unmarshalSlice[T any](raw string) []T {
