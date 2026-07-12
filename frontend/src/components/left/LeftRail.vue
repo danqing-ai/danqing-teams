@@ -202,11 +202,6 @@ watch(() => projects.projects.length, (len) => {
 
     <template v-else>
       <aside class="module-sidebar__panel">
-        <header class="module-sidebar__brand">
-          <DqIcon class="module-sidebar__brand-icon" :size="20"><Grid /></DqIcon>
-          <span class="module-sidebar__brand-title">DanQing Teams</span>
-        </header>
-
         <div class="module-sidebar__top">
           <DqButton type="primary" class="module-sidebar__new-session" @click="onNewSession()">
             <DqIcon :size="16"><Plus /></DqIcon>
@@ -433,7 +428,6 @@ watch(() => projects.projects.length, (len) => {
   height: 44px;
   padding: 0 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
-  -webkit-app-region: drag;
 }
 
 .module-sidebar__brand-icon {

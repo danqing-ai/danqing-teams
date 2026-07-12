@@ -34,12 +34,15 @@ fn spawn_backend(app: &AppHandle) -> Result<(), String> {
     std::fs::create_dir_all(&data_dir)
         .map_err(|e| format!("failed to create data dir: {e}"))?;
 
+    let config_path = data_dir.join("danqing-teams.yaml");
+
     let binary = find_sidecar_binary()?;
     eprintln!("[sidecar] using binary: {}", binary.display());
 
     let child = std::process::Command::new(&binary)
         .env("TEAMS_ADDR", "127.0.0.1:7801")
         .env("TEAMS_DB_PATH", data_dir.join("teams.db").to_string_lossy().as_ref())
+        .env("TEAMS_CONFIG", config_path.to_string_lossy().as_ref())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()

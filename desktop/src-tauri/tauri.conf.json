@@ -15,8 +15,9 @@
         "title": "DanQing Teams",
         "width": 1280,
         "height": 800,
-        "titleBarStyle": "Overlay",
-        "url": "/"
+        "titleBarStyle": "Visible",
+        "url": "/",
+        "visible": true
       }
     ],
     "security": {
