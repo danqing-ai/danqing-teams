@@ -4,34 +4,42 @@
 
 | Item | Location |
 |------|----------|
-| API entry | `cmd/server/main.go` |
-| HTTP routes | `internal/api/rest/router.go` |
-| Controllers | `internal/api/rest/controller/` |
-| DTOs | `internal/api/rest/dto/` |
-| App services | `internal/application/service/` |
-| Ports | `internal/application/port/` |
-| Domain model | `internal/domain/model/` |
-| Repositories | `internal/domain/repository/` |
-| Persistence | `internal/persistence/` |
+| API entry | `server/main.go` |
+| HTTP routes | `server/api/v1/` |
+| Bootstrap | `core/bootstrap/bootstrap.go` |
+| Domain model | `core/domain/` |
+| Port interfaces | `core/port/` |
+| Runtime | `core/runtime/` |
+| Services | `core/service/` |
+| Adapters | `core/adapter/` |
+| Store | `core/store/` |
+| CLI entry | `cli/main.go` |
+| TUI entry | `tui/main.go` |
 | Frontend | `frontend/` → build to `out/frontend/dist/` |
-| Dev scripts | `scripts/start.sh`, `scripts/stop.sh`, `scripts/dev_process.sh` |
+| Dev scripts | `scripts/start_backend.sh`, `scripts/start_web.sh`, `scripts/start_desktop.sh`, `scripts/stop.sh` |
 | Paths | `scripts/out_paths.sh` |
 
 ## Commands
 
 ```bash
-make dev              # backend :7801 + Vite :5801 (same as make start)
-make stop
-make check-layers
-make test              # check-layers + go test ./...
-make test-integration
-make build-all        # out/frontend/dist + out/server/danqing-teams
+make dev-web              # backend :7801 + Vite :5801
+make dev-desktop          # backend + Tauri webview
+make backend              # backend only (for debugger)
+make dev-cli              # CLI
+make dev-tui              # TUI
+make stop                 # stop all dev processes
+make test                 # go test ./...
+make test-integration     # integration tests
+make build-all            # out/frontend/dist + out/server/* (3 binaries)
+make build-go             # all 3 Go binaries
+make build-server         # server only
+make build-cli            # cli only
+make build-tui            # tui only
 make pack-linux-server
 make pack-macos-desktop
-make clean            # rm -rf out/
+make pack-windows-desktop
+make clean                # rm -rf out/
 ```
-
-`make dev` and `make start` are aliases.
 
 ## Dev ports
 
@@ -41,8 +49,9 @@ Backend **7801**, frontend **5801** (`78xx` / `58xx`, suffix `01` = Teams). See 
 
 ```
 out/frontend/dist/   # Vite production
-out/server/          # Go binary
+out/server/          # Go binaries (danqing-teams, danqing-teams-cli, danqing-teams-tui)
 out/desktop/bundle/  # Tauri installers
+out/desktop/cargo/   # Cargo intermediate
 out/dist/            # pack-linux-server tar.gz
 out/run/             # dev PIDs, logs, wrappers (DQ_DEV markers)
 ```
@@ -51,94 +60,67 @@ out/run/             # dev PIDs, logs, wrappers (DQ_DEV markers)
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `TEAMS_ADDR` | `0.0.0.0:7801` | API listen address |
-| `TEAMS_DB_PATH` | `./data/teams.db` | SQLite path |
-| `TEAMS_AUTO_APPROVE` | `false` | Auto-approve risky actions (tests) |
-| `DQ_BACKEND_PORT` | `7801` | Injected by `make dev` |
-| `DQ_FRONTEND_PORT` | `5801` | Injected by `make dev` |
+| `TEAMS_CONFIG` | — | YAML config path (`config.example.yaml`) |
+| `DQ_BACKEND_PORT` | `7801` | Injected by dev scripts |
+| `DQ_FRONTEND_PORT` | `5801` | Injected by dev scripts |
+| `DQ_APP_NAME` | `danqing-teams` | App name for build scripts |
 
 ## Desktop (Tauri)
 
-Thin shell — backend must run separately (`make dev`). Then `cd desktop && npm run tauri dev`.
+Thin shell — backend must run separately. Then `cd desktop && npm run tauri dev`.
+
+Builds Go backend as a Tauri sidecar binary (`scripts/build_sidecar.sh`), injected into `.app` bundle with re-sign on macOS.
 
 ## CI
 
 `.github/workflows/release.yml` builds on tag `v*` or `workflow_dispatch`:
 
-- macOS desktop → `out/desktop/bundle/` (.app / .dmg)
+- macOS desktop → `out/desktop/bundle/**/*.dmg, *.app`
 - Linux server → `out/dist/danqing-teams-linux-*.tar.gz`
 - Windows desktop → `out/desktop/bundle/**/*.exe`
 
-Checks out `danqing-ai/dq-ui` alongside the repo (same layout as local dev).
+Checks out `danqing-ai/dq-ui` alongside the repo.
 
 ## Architecture
 
-Spring Cloud-style layered architecture. Dependency direction: top → down.
-
 ```
-api/rest/controller     ← HTTP handlers (thin, delegates to port)
-    ↓ depends on
-application/port        ← Service interfaces (TeamService, TaskService, …)
-    ↑ implemented by
-application/service     ← Service impls (orchestration, crud, events)
-    ↓ depends on
-domain/repository       ← Persistence interfaces (TeamRepository, TaskRepository, …)
-    ↑ implemented by
-persistence/sqlstore    ← GORM + SQLite (production)
-persistence/memory      ← In-memory (dev/test)
-
-api/rest/dto            ← HTTP JSON types (standalone)
-application/assembler   ← DTO ↔ domain/model converter
-
-domain/model            ← Entities & value objects (no JSON tags, zero deps)
-core/orchestration      ← Controller dispatch + persona matching (pure logic)
-core/worker             ← Worker execution plan selection (pure logic)
-core/policy             ← Risk evaluation from skills/tools (pure logic)
-provider/llm            ← LLM adapters (local/mock/remote)
-
-cmd/server              ← Entry point: wires services, starts server + worker
+server/   cli/   tui/    frontend/ (Vue 3 + Vite)
+    \       \     /       /
+     \       \   /       /
+      ---- core/bootstrap ----
+              |
+  core/service ─── core/runtime ─── core/adapter
+       |              |                 |
+  core/port ←─────────┘    core/adapter/llm
+       |                  (Anthropic / Mock)
+  core/store/sqlite
+  core/store/turnlog
 ```
 
-### Layer boundaries enforced by `make check-layers`:
+### Layer descriptions
 
-| Package | Forbidden imports |
-|---------|------------------|
-| `api/rest/controller` | `application/service`, `persistence/`, `provider/`, `domain/repository` |
-| `api/rest/dto` | `persistence/`, `provider/`, `application/service` |
-| `application/port` | `persistence/`, `provider/`, `api/rest/controller` |
-| `application/service` | `api/rest/controller`, `persistence/sqlstore`, `persistence/memory`, `provider/` |
-| `domain/` | `application/`, `api/`, `persistence/`, `provider/` |
-| `core/` | `application/`, `api/`, `persistence/`, `provider/` |
+| Layer | Directory | Role |
+|-------|-----------|------|
+| Entry points | `server/`, `cli/`, `tui/` | HTTP API (Gin), CLI, TUI |
+| Bootstrap | `core/bootstrap/` | DI wiring, global config assembly |
+| Services | `core/service/` | SessionManager, ProjectManager, AgentManager, SkillManager, LLMConfigManager, etc. |
+| Runtime | `core/runtime/` | SessionRunner, TurnRunner, PromptBuilder, Compaction, Permission, Tool exec |
+| Domain | `core/domain/` | Agent, Session, Project, Skill, Knowledge, MCPServer, LLMConfig, Turn, StreamEvent, etc. |
+| Ports | `core/port/` | Engine, LLMProvider, Repository, Stream interfaces |
+| Adapters | `core/adapter/` | LLM providers (Anthropic, mock), config loader |
+| Store | `core/store/` | SQLite persistence, turn log |
 
 ### Request flow
 
 ```
-HTTP Request → controller (de-Serialize DTO)
-    → assembler (DTO → domain model)
-    → port interface → service impl
-    → domain/repository interface
-    → persistence (SQLite / Memory)
+HTTP Request → server/api/v1 handler → port interface
+    → service impl (core/service/)
+    → port.Repository interface
+    → core/store/sqlite (SQLite)
 ```
-
-Response serializes via `assembler.To*(domain model) → DTO → JSON`.
-
-### Key runtime components
-
-| Component | File | Role |
-|-----------|------|------|
-| **OrchestrationService** | `application/service/orchestration_service.go` | Task lifecycle: dispatch, plan, execute, report |
-| **OrchestrationWorker** | `application/service/orchestration_worker.go` | Multi-instance Job consumer (DB lease queue) |
-| **ControllerDispatch** | `core/orchestration/controller_dispatch.go` | LLM-driven worker selection + rule fallback |
-| **MatchWorker** | `core/orchestration/match.go` | Persona keyword matching |
-| **PlanExecution** | `core/worker/plan.go` | Select skills/tools from worker private profile |
-| **EvaluatePlan** | `core/policy/risk.go` | Cross-check risk: plan items vs profile risk levels |
-
-Multi-instance coordination via `orchestration_jobs` table:
-- Enqueue (dedup by `dedup_key`) → ClaimNext (CAS via `lease_owner`+`lease_until`) → Complete/Fail
-- Recovery: `ReleaseExpiredLeases` on startup, re-enqueue orphan tasks
 
 ## Notes
 
 - Static UI served from `./out/frontend/dist` at `/app/` when built
-- Process stop uses `DQ_DEV` / `DQ_DEV_ROOT` markers + process groups (`scripts/dev_process.sh`)
+- Process stop uses `DQ_DEV` / `DQ_DEV_ROOT` markers (`scripts/stop.sh`)
 - Requires sibling `dq-ui` repo for frontend (`file:../../dq-ui/packages/*`)
