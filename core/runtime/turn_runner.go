@@ -107,6 +107,7 @@ type TurnRunner struct {
 	Approval          approvalGate
 	ConfigStore       port.ConfigStore
 	Log               func(typ string, data map[string]any)
+	FileTracker       *tool.FileTracker
 	mu                sync.Mutex
 	doomCounter       map[string]map[string]int
 	doomPatterns      map[string][]string
@@ -153,6 +154,8 @@ func (p *TurnRunner) loadRunCfg(ctx context.Context) turnRunCfg {
 
 func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, []Message, error) {
 	cfg := p.loadRunCfg(ctx)
+
+	p.FileTracker = tool.NewFileTracker(tctx.WorkDir)
 
 	if tctx.MaxSteps <= 0 {
 		tctx.MaxSteps = cfg.maxStepsDefault
@@ -327,12 +330,13 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			if args == nil {
 				args = map[string]any{}
 			}
-			args["__session_id"] = tctx.SessionID
-			args["__turn_id"] = tctx.TurnID
-			args["__agent_id"] = tctx.Agent.ID
-			args["__model_id"] = tctx.Model
-			args["__work_dir"] = tctx.WorkDir
-			args["__call_id"] = call.ID
+		args["__session_id"] = tctx.SessionID
+		args["__turn_id"] = tctx.TurnID
+		args["__agent_id"] = tctx.Agent.ID
+		args["__model_id"] = tctx.Model
+		args["__work_dir"] = tctx.WorkDir
+		args["__call_id"] = call.ID
+		args["__file_tracker"] = p.FileTracker
 
 		result, err := handler.Execute(ctx, args)
 		if err != nil {

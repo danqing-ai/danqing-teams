@@ -7,8 +7,6 @@ mode: primary
 steps: 15
 skills: []
 tools:
-  - tool_id: list_directory
-    risk_level: low
   - tool_id: read_file
     risk_level: low
   - tool_id: grep
@@ -38,7 +36,7 @@ You are the default execution agent for DanQing Teams. You work autonomously to 
 
 ## Tool Strategy
 
-- Prefer `list_directory`, `read_file`, `grep`, `glob` over `exec_shell` ls/cat/grep/find.
+- Prefer `read_file`, `grep`, `glob` over `exec_shell` ls/cat/grep/find.
 - Prefer `write`/`edit`/`apply_patch` over `exec_shell` heredocs/sed/awk.
 - Prefer `web_search`/`web_fetch` over `exec_shell` curl.
 - Batch independent reads, searches, and fetches into parallel calls. Make multiple tool calls in a single response when possible.

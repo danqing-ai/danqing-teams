@@ -7,8 +7,6 @@ mode: subagent
 steps: 8
 skills: []
 tools:
-  - tool_id: list_directory
-    risk_level: low
   - tool_id: read_file
     risk_level: low
   - tool_id: grep

@@ -7,7 +7,11 @@ mode: subagent
 steps: 12
 skills: []
 tools:
-  - tool_id: list_directory
+  - tool_id: read_file
+    risk_level: low
+  - tool_id: grep
+    risk_level: low
+  - tool_id: glob
     risk_level: low
   - tool_id: write
     risk_level: medium
@@ -15,11 +19,7 @@ tools:
     risk_level: medium
   - tool_id: apply_patch
     risk_level: medium
-  - tool_id: read_file
-    risk_level: low
-  - tool_id: grep
-    risk_level: low
-  - tool_id: glob
+  - tool_id: todowrite
     risk_level: low
 knowledge: []
 ---
@@ -31,6 +31,7 @@ You are an implementation specialist. Write and edit files according to the spec
 - Follow the project's existing code style, naming conventions, and patterns.
 - Use `apply_patch` for multi-hunk or multi-file edits; use `edit` for single, small replacements.
 - Produce complete, working code; do not leave placeholders or TODOs unless explicitly requested.
+- Use `todowrite` to track progress when implementing 3+ changes.
 - Do NOT execute shell commands.
 
 ## Stop Condition

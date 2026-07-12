@@ -7,8 +7,6 @@ mode: primary
 steps: 25
 skills: []
 tools:
-  - tool_id: list_directory
-    risk_level: low
   - tool_id: read_file
     risk_level: low
   - tool_id: grep
@@ -59,7 +57,7 @@ Delegate when it reduces total effort or improves quality. Act directly when a s
 ## Tool Strategy
 
 When acting directly (not delegating):
-- Prefer `list_directory`, `read_file`, `grep`, `glob` over `exec_shell` ls/cat/grep/find.
+- Prefer `read_file`, `grep`, `glob` over `exec_shell` ls/cat/grep/find.
 - Prefer `write`/`edit`/`apply_patch` over `exec_shell` heredocs/sed/awk.
 - Prefer `web_search`/`web_fetch` over `exec_shell` curl.
 - Batch independent tool calls into parallel calls when possible.

@@ -6,11 +6,12 @@ import (
 	"path/filepath"
 
 	"danqing-teams/core/adapter/config"
+	"danqing-teams/core/adapter/container"
 	"danqing-teams/core/adapter/llm"
 	"danqing-teams/core/service"
 	"danqing-teams/core/domain"
 	"danqing-teams/core/port"
-	"danqing-teams/core/runtime"
+	dqruntime "danqing-teams/core/runtime"
 	"danqing-teams/core/runtime/prompt"
 	"danqing-teams/core/runtime/tool/builtin"
 	sqlitestore "danqing-teams/core/store/sqlite"
@@ -131,11 +132,20 @@ func New(cfg Config) *Core {
 
 	ensureBuiltinAgents(agents)
 
-	stream := runtime.NewStreamEventManager(st.StreamEvents())
+	stream := dqruntime.NewStreamEventManager(st.StreamEvents())
 	checkpointStore := turnlog.NewCheckpointStore(pm.ProjectDir)
 
+	// Container runtime: select OS-specific adapter.
+	var containerMgr *service.ContainerManager
+	if appCfg.Runtime.Container.Enabled {
+		rt := container.NewForPlatform()
+		if rt != nil && rt.Available() {
+			containerMgr = service.NewContainerManager(rt, appCfg.Runtime.Container.Image)
+		}
+	}
+
 	sessions := service.NewSessionManager(st, nil, provider)
-	eng := runtime.NewEngine(sessions, turnManager, pm, approvalManager, turnLogManager, agents, skills, knowledge, provider, stream, checkpointStore, loader, appCfg.Data.Dir)
+	eng := dqruntime.NewEngine(sessions, turnManager, pm, approvalManager, turnLogManager, agents, skills, knowledge, provider, stream, checkpointStore, containerMgr, loader, appCfg.Data.Dir)
 	sessions.SetEngine(eng)
 
 	eng.RegisterTool(&builtin.ExecShell{})
@@ -145,7 +155,6 @@ func New(cfg Config) *Core {
 	eng.RegisterTool(&builtin.ApplyPatch{})
 	eng.RegisterTool(&builtin.Grep{})
 	eng.RegisterTool(&builtin.Glob{})
-	eng.RegisterTool(&builtin.ListDir{})
 	eng.RegisterTool(&builtin.TodoWrite{})
 	eng.RegisterTool(&builtin.WebFetch{})
 	eng.RegisterTool(&builtin.WebSearch{ConfigFunc: func(ctx context.Context) (domain.SearchConfig, error) {

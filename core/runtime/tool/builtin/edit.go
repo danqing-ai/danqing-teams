@@ -25,19 +25,21 @@ func (h *Edit) Describe(args map[string]any) string {
 	if len(newStr) > 40 {
 		newShort = newStr[:40] + "..."
 	}
-	return path + " (" + oldShort + " → " + newShort + ")"
+	return path + " (" + oldShort + " -> " + newShort + ")"
 }
 func (h *Edit) Schema() domain.ToolSchema {
 	return domain.ToolSchema{
 		Name: "edit",
 		Description: "Performs exact string replacements in an existing file.\n\n" +
 			"**Important**: All paths are relative to the project root directory. Use relative paths like 'src/main.go' instead of absolute paths.\n\n" +
-			"- You MUST use read_file first — the edit will fail if you haven't read the file.\n" +
-			"- oldString must match exactly one occurrence in the file. If it matches multiple times, set replaceAll=true or provide more surrounding context to make it unique.\n" +
+			"- You MUST use read_file first -- the edit will fail if you haven't read the file in this turn.\n" +
+			"- When editing text from read_file output, ensure you preserve the exact indentation (tabs/spaces) as it appears in the file.\n" +
+			"- oldString must match the file content, including all whitespace and indentation. The line number prefix from read_file (e.g., '1: ') is NOT part of the file content.\n" +
+			"- If exact matching fails, the tool will automatically try fuzzy matching: stripping leading whitespace, then normalizing all whitespace.\n" +
 			"- newString must be different from oldString.\n" +
-			"- Preserve exact indentation (tabs/spaces) as it appears in the file.\n" +
 			"- Use replaceAll for replacing and renaming strings across the file.\n" +
-			"- For multi-hunk or multi-file edits, prefer apply_patch instead.",
+			"- For multi-hunk or multi-file edits, prefer apply_patch instead.\n" +
+			"- The result includes a unified diff showing what was changed.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -72,29 +74,47 @@ func (h *Edit) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 		return domain.ToolResult{}, err
 	}
 
+	if err := requireFreshRead(input, path); err != nil {
+		return domain.ToolResult{}, err
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return domain.ToolResult{}, fmt.Errorf("cannot read file %q: %w", path, err)
 	}
 	content := string(data)
 
-	count := strings.Count(content, oldStr)
-	if count == 0 {
-		return domain.ToolResult{}, fmt.Errorf("oldString not found in file %q", path)
-	}
-	if !replaceAll && count > 1 {
-		return domain.ToolResult{}, fmt.Errorf("found %d occurrences of oldString in %q; set replaceAll=true to replace all, or use more context to make oldString unique", count, path)
+	replacement, count, matchErr := tryExactReplace(content, oldStr, newStr, replaceAll)
+
+	if matchErr != nil {
+		if !strings.Contains(matchErr.Error(), "not found") {
+			return domain.ToolResult{}, matchErr
+		}
+		replacement, count, matchErr = tryIndentFuzzyReplace(content, oldStr, newStr, replaceAll)
 	}
 
-	if replaceAll {
-		content = strings.ReplaceAll(content, oldStr, newStr)
-	} else {
-		content = strings.Replace(content, oldStr, newStr, 1)
+	if matchErr != nil {
+		replacement, count, matchErr = tryWhitespaceFuzzyReplace(content, oldStr, newStr, replaceAll)
 	}
 
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if matchErr != nil {
+		if strings.Contains(matchErr.Error(), "not found") {
+			return domain.ToolResult{}, fmt.Errorf("oldString not found in %q after exact and fuzzy matching", path)
+		}
+		return domain.ToolResult{}, matchErr
+	}
+
+	if err := checkDisproportionateMatch(content, oldStr); err != nil {
+		return domain.ToolResult{}, err
+	}
+
+	if err := os.WriteFile(path, []byte(replacement), 0644); err != nil {
 		return domain.ToolResult{}, fmt.Errorf("cannot write file %q: %w", path, err)
 	}
 
-	return domain.ToolResult{Content: fmt.Sprintf("Edited file %q, replaced %d occurrence(s)", path, map[bool]int{true: count, false: 1}[replaceAll])}, nil
+	diff := generateUnifiedDiff(path, content, replacement)
+	return domain.ToolResult{
+		Content: fmt.Sprintf("Edited file %q, replaced %d occurrence(s):\n%s", path, count, diff),
+		Meta:    map[string]any{"replacements": count},
+	}, nil
 }
