@@ -8,6 +8,7 @@ import PlanPanel from '@/components/center/PlanPanel.vue'
 import FileTree from '@/components/center/FileTree.vue'
 import FileViewer from '@/components/center/FileViewer.vue'
 import ExpertsPanel from '@/components/center/ExpertsPanel.vue'
+import ChangesPanel from '@/components/center/ChangesPanel.vue'
 import { renderMarkdown } from '@/utils/markdown-render'
 import { toast } from '@/utils/feedback'
 import { apiBaseUrl } from '@/utils/desktop'
@@ -16,7 +17,7 @@ import type { StreamEvent, TurnLog } from '@/types/mission'
 
 const router = useRouter()
 const sessions = useSessionsStore()
-const rightTab = ref<'plan' | 'files' | 'experts'>('plan')
+const rightTab = ref<'plan' | 'files' | 'experts' | 'changes'>('plan')
 const selectedFilePath = ref<string | null>(null)
 const fileTreeRef = ref<InstanceType<typeof FileTree> | null>(null)
 const isEditingTitle = ref(false)
@@ -1172,6 +1173,11 @@ function onTitleKeydown(e: KeyboardEvent) {
             :class="{ 'is-active': rightTab === 'experts' }"
             @click="rightTab = 'experts'"
           >{{ $t('sessions.expertsTab') }}</button>
+          <button
+            class="session-workspace__right-tab"
+            :class="{ 'is-active': rightTab === 'changes' }"
+            @click="rightTab = 'changes'"
+          >变更</button>
         </div>
         <PlanPanel v-if="rightTab === 'plan'" :stream-events="sessions.streamEvents" />
         <template v-else-if="rightTab === 'files'">
@@ -1186,6 +1192,7 @@ function onTitleKeydown(e: KeyboardEvent) {
           </div>
         </template>
         <ExpertsPanel v-else-if="rightTab === 'experts'" :stream-events="sessions.streamEvents" />
+        <ChangesPanel v-else-if="rightTab === 'changes'" />
         <button type="button" class="session-workspace__right-resize" aria-label="调整宽度" @pointerdown="onRightResizePointerDown" />
       </div>
     </div>

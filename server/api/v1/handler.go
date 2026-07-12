@@ -73,6 +73,7 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.GET("/projects/:id/sessions", listProjectSessions(h))
 	api.GET("/projects/:id/files", listProjectFiles(h))
 	api.GET("/projects/:id/files/content", readProjectFile(h))
+	api.GET("/projects/:id/git-changes", getProjectGitChanges(h))
 	api.GET("/llm/configs", getLLMConfigs(h))
 	api.POST("/llm/configs", createLLMConfig(h))
 	api.PUT("/llm/configs/:id", updateLLMConfig(h))
@@ -673,6 +674,17 @@ func readProjectFile(h *Handler) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, fc)
+	}
+}
+
+func getProjectGitChanges(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		changes, err := h.Projects.GetGitChanges(c, c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, changes)
 	}
 }
 

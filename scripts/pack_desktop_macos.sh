@@ -28,7 +28,8 @@ echo "==> Building backend sidecar..."
 "$SCRIPT_DIR/build_sidecar.sh"
 
 echo "==> Tauri build ($APP_NAME) -> $CARGO_TARGET_DIR"
-npm run tauri build -- -b app -b dmg
+# Build .app only first; DMG will be created after sidecar injection + re-sign
+npm run tauri build -- -b app
 
 BUNDLE_SRC=""
 for candidate in \
@@ -61,9 +62,23 @@ if [[ -n "$APP_BUNDLE" ]]; then
     echo "==> Injected sidecar: $(basename "$SIDECAR_BIN") -> $APP_BUNDLE/Contents/MacOS/"
     # Re-sign the .app after injecting sidecar (injection breaks code signature)
     codesign --force --deep --sign - "$APP_BUNDLE" 2>/dev/null && echo "==> Re-signed .app bundle" || echo "WARNING: codesign failed"
+    # Remove quarantine attribute so macOS doesn't show "damaged" dialog
+    xattr -cr "$APP_BUNDLE" 2>/dev/null && echo "==> Removed quarantine attribute" || true
   else
     echo "WARNING: sidecar binary not found at $SIDECAR_BIN"
   fi
+fi
+
+# Create DMG from the signed .app bundle
+if [[ -n "$APP_BUNDLE" ]] && [[ -d "$APP_BUNDLE" ]]; then
+  DMG_DIR="$DQ_DESKTOP_BUNDLE/dmg"
+  rm -rf "$DMG_DIR"
+  mkdir -p "$DMG_DIR"
+  APP_VERSION=$(plutil -extract CFBundleShortVersionString raw "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || echo "0.0.0")
+  ARCH=$(uname -m)
+  DMG_NAME="DanQing Teams_${APP_VERSION}_${ARCH}.dmg"
+  echo "==> Creating DMG: $DMG_NAME"
+  hdiutil create -volname "DanQing Teams" -srcfolder "$APP_BUNDLE" -ov -format UDZO "$DMG_DIR/$DMG_NAME" 2>/dev/null && echo "==> DMG created" || echo "WARNING: DMG creation failed"
 fi
 
 echo "==> Desktop bundle -> $DQ_DESKTOP_BUNDLE"

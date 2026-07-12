@@ -6,6 +6,7 @@ import (
 	"io"
 	"mime"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -273,6 +274,19 @@ func (m *ProjectManager) ReadFileContent(ctx context.Context, projectID, subPath
 	return fc, nil
 }
 
+type GitFileChange struct {
+	Status   string `json:"status"`
+	File     string `json:"file"`
+	OrigFile string `json:"origFile,omitempty"`
+	Staged   bool   `json:"staged"`
+}
+
+type GitChanges struct {
+	Branch  string           `json:"branch"`
+	Changes []*GitFileChange `json:"changes"`
+	Error   string           `json:"error,omitempty"`
+}
+
 func base64Encode(data []byte) string {
 	enc := make([]byte, ((len(data)+2)/3)*4)
 	encode(data, enc)
@@ -310,4 +324,88 @@ func encode(src, dst []byte) {
 		dst[di+2] = base64Table[val>>6&0x3F]
 		dst[di+3] = '='
 	}
+}
+
+func (m *ProjectManager) GetGitChanges(ctx context.Context, projectID string) (*GitChanges, error) {
+	root, err := m.resolveFilesRoot(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	cmd := exec.Command("git", "status", "--porcelain", "-b")
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		result := &GitChanges{}
+		if _, ok := err.(*exec.Error); ok {
+			result.Error = "git 未安装或不在 PATH 中"
+		} else {
+			result.Error = "不是 git 仓库"
+		}
+		return result, nil
+	}
+
+	return parseGitStatus(out), nil
+}
+
+func parseGitStatus(output []byte) *GitChanges {
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	result := &GitChanges{}
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "## ") {
+			branchInfo := strings.TrimPrefix(line, "## ")
+			result.Branch = strings.Split(branchInfo, "...")[0]
+			continue
+		}
+		if len(line) < 3 {
+			continue
+		}
+
+		statusX := line[0:1]
+		statusY := line[1:2]
+		rest := strings.TrimSpace(line[2:])
+
+		stagedStatus := string(statusX)
+		unstagedStatus := string(statusY)
+
+		if stagedStatus != " " {
+			change := &GitFileChange{
+				Status: stagedStatus,
+				Staged: true,
+			}
+			if stagedStatus == "R" || stagedStatus == "C" {
+				parts := strings.SplitN(rest, " -> ", 2)
+				if len(parts) == 2 {
+					change.OrigFile = parts[0]
+					change.File = parts[1]
+				} else {
+					change.File = rest
+				}
+			} else {
+				change.File = rest
+			}
+			result.Changes = append(result.Changes, change)
+		}
+
+		if unstagedStatus != " " && unstagedStatus != stagedStatus {
+			change := &GitFileChange{
+				Status: unstagedStatus,
+			}
+			if unstagedStatus == "R" || unstagedStatus == "C" {
+				parts := strings.SplitN(rest, " -> ", 2)
+				if len(parts) == 2 {
+					change.OrigFile = parts[0]
+					change.File = parts[1]
+				} else {
+					change.File = rest
+				}
+			} else {
+				change.File = rest
+			}
+			result.Changes = append(result.Changes, change)
+		}
+	}
+
+	return result
 }

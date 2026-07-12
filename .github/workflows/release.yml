@@ -72,6 +72,16 @@ jobs:
             echo "RELEASE_VERSION=$(git describe --tags --always --dirty)" >> "$GITHUB_ENV"
           fi
 
+      - name: Inject version into config files
+        working-directory: ${{ env.REPO_DIR }}
+        run: |
+          V="$RELEASE_VERSION"
+          sed -i.bak "s/\"version\": \"[^\"]*\"/\"version\": \"$V\"/" desktop/src-tauri/tauri.conf.json
+          sed -i.bak "s/^version = \"[^\"]*\"/version = \"$V\"/" desktop/src-tauri/Cargo.toml
+          sed -i.bak "s/\"version\": \"[^\"]*\"/\"version\": \"$V\"/" frontend/package.json
+          rm -f desktop/src-tauri/tauri.conf.json.bak desktop/src-tauri/Cargo.toml.bak frontend/package.json.bak
+          echo "Version set to $V"
+
       - name: Build macOS desktop
         working-directory: ${{ env.REPO_DIR }}
         run: |
@@ -133,6 +143,16 @@ jobs:
           else
             echo "RELEASE_VERSION=$(git describe --tags --always --dirty)" >> "$GITHUB_ENV"
           fi
+
+      - name: Inject version into config files
+        working-directory: ${{ env.REPO_DIR }}
+        run: |
+          V="$RELEASE_VERSION"
+          sed -i.bak "s/\"version\": \"[^\"]*\"/\"version\": \"$V\"/" desktop/src-tauri/tauri.conf.json
+          sed -i.bak "s/^version = \"[^\"]*\"/version = \"$V\"/" desktop/src-tauri/Cargo.toml
+          sed -i.bak "s/\"version\": \"[^\"]*\"/\"version\": \"$V\"/" frontend/package.json
+          rm -f desktop/src-tauri/tauri.conf.json.bak desktop/src-tauri/Cargo.toml.bak frontend/package.json.bak
+          echo "Version set to $V"
 
       - name: Build Linux server bundle
         working-directory: ${{ env.REPO_DIR }}
@@ -210,6 +230,16 @@ jobs:
           else
             echo "RELEASE_VERSION=$(git describe --tags --always --dirty)" >> "$GITHUB_ENV"
           fi
+
+      - name: Inject version into config files
+        working-directory: ${{ env.REPO_DIR }}
+        run: |
+          V="$RELEASE_VERSION"
+          sed -i.bak "s/\"version\": \"[^\"]*\"/\"version\": \"$V\"/" desktop/src-tauri/tauri.conf.json
+          sed -i.bak "s/^version = \"[^\"]*\"/version = \"$V\"/" desktop/src-tauri/Cargo.toml
+          sed -i.bak "s/\"version\": \"[^\"]*\"/\"version\": \"$V\"/" frontend/package.json
+          rm -f desktop/src-tauri/tauri.conf.json.bak desktop/src-tauri/Cargo.toml.bak frontend/package.json.bak
+          echo "Version set to $V"
 
       - name: Build Windows desktop
         working-directory: ${{ env.REPO_DIR }}
