@@ -25,17 +25,27 @@ case "$OS-$ARCH" in
     TRIPLE="x86_64-unknown-linux-gnu"
     GOOS=linux GOARCH=amd64
     ;;
+  MINGW*-x86_64|MSYS*-x86_64|CYGWIN*-x86_64)
+    TRIPLE="x86_64-pc-windows-msvc"
+    GOOS=windows GOARCH=amd64
+    ;;
   *)
-    echo "Unsupported platform: $OS-$ARCH"
+    echo "Unsupported platform: $OS-$ARCH" >&2
     exit 1
     ;;
 esac
 
 BINARY_NAME="danqing-teams-backend-$TRIPLE"
+# Go on Windows always produces .exe; Tauri externalBin expects it
+if [[ "$GOOS" == "windows" ]]; then
+  BINARY_NAME="${BINARY_NAME}.exe"
+fi
 echo "==> Building sidecar: $BINARY_NAME ($GOOS/$GOARCH)"
 
 cd "$ROOT_DIR"
 GOOS=$GOOS GOARCH=$GOARCH go build -o "$BIN_DIR/$BINARY_NAME" ./server
 
-chmod +x "$BIN_DIR/$BINARY_NAME"
+if [[ "$GOOS" != "windows" ]]; then
+  chmod +x "$BIN_DIR/$BINARY_NAME"
+fi
 echo "==> Sidecar binary: $BIN_DIR/$BINARY_NAME ($(du -h "$BIN_DIR/$BINARY_NAME" | cut -f1))"
