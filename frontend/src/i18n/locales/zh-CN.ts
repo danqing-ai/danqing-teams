@@ -27,7 +27,7 @@ export default {
     workers: '专家团',
     knowledge: '知识库',
     skills: '技能',
-    mcpServer: 'MCP Server',
+    mcpServer: 'MCP 工具',
     automations: '自动化',
     settings: '设置',
     newSession: '新会话',
@@ -269,7 +269,7 @@ export default {
     createAutomation: '创建自动化',
   },
   mcpServers: {
-    title: 'MCP Server',
+    title: 'MCP 工具',
     newServer: '新建 MCP Server',
     untitled: '未命名 MCP Server',
     namePlaceholder: '请输入 MCP Server 名称',

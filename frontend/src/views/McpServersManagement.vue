@@ -280,7 +280,7 @@ function onKeydown(e: KeyboardEvent) {
           <DqInput v-model="headersText" class="resource-input-mono" type="textarea" :rows="3" :placeholder="$t('mcpServers.headersPlaceholder')" />
         </label>
         <!-- Discovered Tools -->
-        <div v-if="!isCreating" class="resource-section__tools">
+        <div class="resource-section__tools">
           <div class="resource-section__tools-header">
             <span class="resource-field__label">{{ $t('mcpServers.discoveredTools') }}</span>
             <DqButton size="small" :disabled="refreshingTools" @click="handleRefreshTools">

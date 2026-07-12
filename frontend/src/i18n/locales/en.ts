@@ -27,7 +27,7 @@ export default {
     workers: 'Expert Team',
     knowledge: 'Knowledge',
     skills: 'Skills',
-    mcpServer: 'MCP Server',
+    mcpServer: 'MCP Tools',
     automations: 'Automations',
     settings: 'Settings',
     newSession: 'New Session',
@@ -269,7 +269,7 @@ export default {
     createAutomation: 'Create Automation',
   },
   mcpServers: {
-    title: 'MCP Server',
+    title: 'MCP Tools',
     newServer: 'New MCP Server',
     untitled: 'Untitled MCP Server',
     namePlaceholder: 'Enter MCP Server name',
