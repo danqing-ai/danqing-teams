@@ -105,7 +105,8 @@ func New(cfg Config) *Core {
 	turnLog := turnlog.NewTurnLogStore(pm.ProjectDir)
 	agents := service.NewAgentManager(st.Agents())
 	agents.SetTemplateLoader(prompt.LoadTemplateByID)
-	skills := service.NewSkillManager(st.Skills())
+	skills := service.NewSkillManager(st.Skills(), st.SkillFiles())
+	skills.SetTemplateLoader(prompt.LoadSkillTemplateByID)
 	knowledge := buildKnowledge(st)
 	turnManager := service.NewTurnManager(st.Turns())
 	turnLogManager := service.NewTurnLogManager(turnLog)
@@ -130,6 +131,7 @@ func New(cfg Config) *Core {
 	}
 
 	ensureBuiltinAgents(agents)
+	ensureBuiltinSkills(skills)
 
 	stream := dqruntime.NewStreamEventManager(st.StreamEvents())
 	checkpointStore := turnlog.NewCheckpointStore(pm.ProjectDir)
@@ -191,6 +193,26 @@ func ensureBuiltinAgents(agents *service.AgentManager) {
 			continue
 		}
 		agents.Upsert(ctx, tmpl.Agent)
+	}
+}
+
+func ensureBuiltinSkills(skills *service.SkillManager) {
+	ctx := context.Background()
+	templates, err := prompt.LoadSkillTemplates()
+	if err != nil {
+		return
+	}
+	for _, tmpl := range templates {
+		skill := tmpl.Skill
+		skill.Builtin = true
+		if existing, err := skills.Get(ctx, skill.ID); err == nil && existing != nil {
+			// Update builtin flag on existing record if needed
+			if !existing.Builtin {
+				skills.Upsert(ctx, skill)
+			}
+			continue
+		}
+		skills.Upsert(ctx, skill)
 	}
 }
 func buildKnowledge(st *sqlitestore.Store) *builtin.Knowledge {

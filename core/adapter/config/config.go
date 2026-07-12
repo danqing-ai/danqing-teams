@@ -16,7 +16,7 @@ import (
 var _ port.SearchConfigStore = (*Loader)(nil)
 var _ port.ConfigStore = (*Loader)(nil)
 
-// Loader reads and writes the user-editable danqing-teams.yaml configuration.
+// Loader reads and writes the user-editable .dq-teams/config.yaml configuration.
 // It is the source of truth for settings that should be readable and editable
 // by all entry points (server, cli, tui). Viper is used for loading, defaults,
 // and environment-variable binding; yaml.v3 is used for writing so that only
@@ -28,12 +28,12 @@ type Loader struct {
 }
 
 // NewLoader returns a config loader for the given path.
-// If path is empty, it defaults to ./danqing-teams.yaml.
-// The config file path is resolved to an absolute path so that
-// data paths can be derived relative to the config file directory.
+// If path is empty, it defaults to .dq-teams/config.yaml (config dir).
+// Data paths (data.dir, data.database) are always resolved relative to cwd,
+// keeping config (.dq-teams/) and data (data/) cleanly separated.
 func NewLoader(path string) *Loader {
 	if path == "" {
-		path = "./danqing-teams.yaml"
+		path = ".dq-teams/config.yaml"
 	}
 	if abs, err := filepath.Abs(path); err == nil {
 		path = abs
@@ -103,17 +103,19 @@ func (l *Loader) Load(_ context.Context) (*domain.ConfigFile, error) {
 		return nil, err
 	}
 
+	cwd, _ := os.Getwd()
+
 	if cfg.Data.Dir == "" {
 		cfg.Data.Dir = "./data"
 	}
 	if !filepath.IsAbs(cfg.Data.Dir) {
-		cfg.Data.Dir = filepath.Join(filepath.Dir(l.path), cfg.Data.Dir)
+		cfg.Data.Dir = filepath.Join(cwd, cfg.Data.Dir)
 	}
 	if cfg.Data.Database == "" {
 		cfg.Data.Database = cfg.Data.Dir + "/teams.db"
 	}
 	if !filepath.IsAbs(cfg.Data.Database) {
-		cfg.Data.Database = filepath.Join(filepath.Dir(l.path), cfg.Data.Database)
+		cfg.Data.Database = filepath.Join(cwd, cfg.Data.Database)
 	}
 
 	if cfg.Search.Provider == "" {
@@ -128,7 +130,7 @@ func (l *Loader) Load(_ context.Context) (*domain.ConfigFile, error) {
 }
 
 // defaultLLMPresets returns the built-in provider presets for mainstream
-// model vendors. Users can override these in danqing-teams.yaml.
+// model vendors. Users can override these in .dq-teams/config.yaml.
 func defaultLLMPresets() []domain.LLMProviderPreset {
 	return []domain.LLMProviderPreset{
 		{ID: "openai", Name: "OpenAI", Provider: "openai", BaseURL: "https://api.openai.com/v1", Icon: "🟢", Description: "GPT 系列、o 系列推理模型"},

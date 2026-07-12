@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"danqing-teams/core/bootstrap"
+	"danqing-teams/core/service"
 	apiv1 "danqing-teams/server/api/v1"
 )
 
@@ -17,6 +18,10 @@ func main() {
 		SearchConfig: core.SearchConfig,
 		Agents:       core.Agents,
 		Skills:       core.Skills,
+		SkillHandler: &apiv1.SkillHandler{
+			Skills:   core.Skills,
+			Importer: service.NewSkillImporter(),
+		},
 		TurnLogs:     core.TurnLogs,
 		MCPServers:   core.MCPServers,
 		Store:        core.Store,

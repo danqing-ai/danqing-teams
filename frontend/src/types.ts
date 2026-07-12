@@ -42,11 +42,16 @@ export interface Skill {
   id: string
   name: string
   description?: string
-  domainId?: string
+  license?: string
+  compatibility?: string
+  metadata?: Record<string, string>
+  allowedTools?: string
   keywords?: string[]
-  riskLevel?: RiskLevel
   toolIds?: string[]
   systemHint?: string
+  body?: string
+  sourcePath?: string
+  builtin?: boolean
 }
 
 export interface ToolBinding {
@@ -64,6 +69,14 @@ export interface Tool {
   mcpServer?: string
   riskLevel?: RiskLevel
   schema?: string
+}
+
+export interface SkillFile {
+  id: string
+  skillId: string
+  path: string
+  content?: string
+  size: number
 }
 
 export interface KnowledgeBase {

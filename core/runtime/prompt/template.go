@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"fmt"
 	"io/fs"
 	"strings"
 
@@ -65,7 +66,7 @@ type AgentTemplate struct {
 }
 
 func LoadTemplates() ([]AgentTemplate, error) {
-	entries, err := fs.ReadDir(Templates, "templates")
+	entries, err := fs.ReadDir(AgentTemplates, "agents")
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +75,7 @@ func LoadTemplates() ([]AgentTemplate, error) {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
 			continue
 		}
-		data, err := fs.ReadFile(Templates, "templates/"+entry.Name())
+		data, err := fs.ReadFile(AgentTemplates, "agents/"+entry.Name())
 		if err != nil {
 			return nil, err
 		}
@@ -121,4 +122,81 @@ func LoadTemplateByID(id string) (*domain.Agent, error) {
 		}
 	}
 	return nil, fs.ErrNotExist
+}
+
+type skillFrontmatter struct {
+	Name          string            `yaml:"name"`
+	Description   string            `yaml:"description"`
+	License       string            `yaml:"license"`
+	Compatibility string            `yaml:"compatibility"`
+	Metadata      map[string]string `yaml:"metadata"`
+	AllowedTools  string            `yaml:"allowed-tools"`
+}
+
+type SkillTemplate struct {
+	Skill  domain.Skill
+	Source string
+}
+
+func LoadSkillTemplates() ([]SkillTemplate, error) {
+	entries, err := fs.ReadDir(SkillTemplates, "skills")
+	if err != nil {
+		return nil, err
+	}
+	var result []SkillTemplate
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		skillDir := "skills/" + entry.Name()
+		data, err := fs.ReadFile(SkillTemplates, skillDir+"/SKILL.md")
+		if err != nil {
+			continue
+		}
+		skill, err := parseSkill(string(data), entry.Name())
+		if err != nil {
+			continue
+		}
+		result = append(result, SkillTemplate{Skill: *skill, Source: entry.Name()})
+	}
+	return result, nil
+}
+
+func LoadSkillTemplateByID(id string) (*domain.Skill, error) {
+	templates, err := LoadSkillTemplates()
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range templates {
+		if t.Skill.ID == id {
+			s := t.Skill
+			return &s, nil
+		}
+	}
+	return nil, fmt.Errorf("skill template %q not found", id)
+}
+
+func parseSkill(content, dirName string) (*domain.Skill, error) {
+	var fm skillFrontmatter
+	parts := strings.SplitN(content, "---", 3)
+	if len(parts) < 3 {
+		return nil, nil
+	}
+	if err := yaml.Unmarshal([]byte(strings.TrimSpace(parts[1])), &fm); err != nil {
+		return nil, err
+	}
+	if fm.Name == "" {
+		return nil, nil
+	}
+	return &domain.Skill{
+		ID:            fm.Name,
+		Name:          fm.Name,
+		Description:   fm.Description,
+		License:       fm.License,
+		Compatibility: fm.Compatibility,
+		Metadata:      fm.Metadata,
+		AllowedTools:  fm.AllowedTools,
+		Body:          strings.TrimSpace(parts[2]),
+		SourcePath:    ".dq-teams/skills/" + dirName,
+	}, nil
 }

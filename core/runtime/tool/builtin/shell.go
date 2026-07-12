@@ -61,11 +61,9 @@ func (h *ExecShell) Execute(_ context.Context, input map[string]any) (domain.Too
 	content := strings.TrimSpace(string(out))
 	if err != nil {
 		if content == "" {
-			content = err.Error()
-		} else {
-			content = content + "\nerror: " + err.Error()
+			return domain.ToolResult{}, fmt.Errorf("command failed: %w", err)
 		}
-		return domain.ToolResult{Content: content}, nil
+		return domain.ToolResult{}, fmt.Errorf("%s\ncommand failed: %w", content, err)
 	}
 	return domain.ToolResult{Content: content}, nil
 }

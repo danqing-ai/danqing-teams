@@ -326,18 +326,20 @@ watch(() => projects.projects.length, (len) => {
                     <DqInput v-model="renamingName" size="small" class="project-tree__rename-input" @keydown.enter="confirmRenameProject(p.id)" @blur="renamingProjectId = null" @click.stop />
                   </template>
                   <span v-else class="project-tree__name">{{ p.name }}</span>
-                  <DqDropdown class="project-tree__menu">
-                    <DqIconButton aria-label="项目菜单" @click.stop>
-                      <DqIcon :size="14"><MoreFilled /></DqIcon>
-                    </DqIconButton>
-                    <template #dropdown>
-                      <DqDropdownMenu>
-                        <DqDropdownItem @select="onNewSession(p.id)">{{ $t('navigation.newSession') }}</DqDropdownItem>
-                        <DqDropdownItem @select="startRenameProject(p)">{{ $t('navigation.rename') }}</DqDropdownItem>
-                        <DqDropdownItem @select="removeProject(p)">{{ $t('common.delete') }}</DqDropdownItem>
-                      </DqDropdownMenu>
-                    </template>
-                  </DqDropdown>
+                  <span @click.stop>
+                    <DqDropdown class="project-tree__menu">
+                      <DqIconButton aria-label="项目菜单" @click.stop>
+                        <DqIcon :size="14"><MoreFilled /></DqIcon>
+                      </DqIconButton>
+                      <template #dropdown>
+                        <DqDropdownMenu>
+                          <DqDropdownItem @select="onNewSession(p.id)">{{ $t('navigation.newSession') }}</DqDropdownItem>
+                          <DqDropdownItem @select="startRenameProject(p)">{{ $t('navigation.rename') }}</DqDropdownItem>
+                          <DqDropdownItem @select="removeProject(p)">{{ $t('common.delete') }}</DqDropdownItem>
+                        </DqDropdownMenu>
+                      </template>
+                    </DqDropdown>
+                  </span>
                 </div>
 
                 <div v-if="expandedProjects.has(p.id)" class="project-tree__sessions">

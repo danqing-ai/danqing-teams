@@ -18,3 +18,11 @@ func NewApprovalManager(store port.ApprovalRepo) *ApprovalManager {
 func (m *ApprovalManager) Create(ctx context.Context, a domain.Approval) error {
 	return m.store.Create(ctx, a)
 }
+
+func (m *ApprovalManager) Update(ctx context.Context, a domain.Approval) error {
+	return m.store.Update(ctx, a)
+}
+
+func (m *ApprovalManager) ListByStatus(ctx context.Context, status string) ([]domain.Approval, error) {
+	return m.store.ListByStatus(ctx, status)
+}

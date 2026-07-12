@@ -1,76 +1,96 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { Skill, Tool } from '@/types'
-
-const SKILLS_KEY = 'danqing-skills'
-const TOOLS_KEY = 'danqing-tools'
-
-function loadJSON<T>(key: string): T[] {
-  try {
-    const raw = localStorage.getItem(key)
-    return raw ? (JSON.parse(raw) as T[]) : []
-  } catch {
-    return []
-  }
-}
-
-function saveJSON<T>(key: string, items: T[]) {
-  localStorage.setItem(key, JSON.stringify(items))
-}
+import { fetchJSON, asArray } from '@/api/client'
+import type { Skill, SkillFile } from '@/types'
 
 export const useSkillsStore = defineStore('skills', () => {
-  const items = ref<Skill[]>(loadJSON<Skill>(SKILLS_KEY))
-  const tools = ref<Tool[]>(loadJSON<Tool>(TOOLS_KEY))
+  const items = ref<Skill[]>([])
   const loading = ref(false)
 
   async function load() {
     loading.value = true
     try {
-      // LocalStorage only; no backend wiring for now
+      items.value = asArray(await fetchJSON<Skill[]>('/skills'))
     } finally {
       loading.value = false
     }
   }
 
-  function createSkill(payload: Omit<Skill, 'id'> & { id: string }) {
-    const skill: Skill = { ...payload }
-    items.value.push(skill)
-    saveJSON(SKILLS_KEY, items.value)
-    return skill
+  async function get(skillId: string) {
+    return fetchJSON<Skill>(`/skills/${skillId}`).catch(() => undefined)
   }
 
-  function updateSkill(skillId: string, payload: Partial<Skill>) {
+  async function create(payload: Omit<Skill, 'id'> & { id: string }) {
+    const saved = await fetchJSON<Skill>('/skills', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+    items.value.push(saved)
+    return saved
+  }
+
+  async function update(skillId: string, payload: Skill) {
     const i = items.value.findIndex((s) => s.id === skillId)
-    if (i < 0) return undefined
-    items.value[i] = { ...items.value[i], ...payload }
-    saveJSON(SKILLS_KEY, items.value)
-    return items.value[i]
+    if (i < 0) throw new Error('Skill not found')
+    const updated = await fetchJSON<Skill>(`/skills/${skillId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ ...payload, id: skillId }),
+    })
+    items.value[i] = updated
+    return updated
   }
 
-  function removeSkill(skillId: string) {
+  async function remove(skillId: string) {
+    await fetchJSON(`/skills/${skillId}`, { method: 'DELETE' })
     items.value = items.value.filter((s) => s.id !== skillId)
-    saveJSON(SKILLS_KEY, items.value)
   }
 
-  function createTool(payload: Omit<Tool, 'id'> & { id: string }) {
-    const tool: Tool = { ...payload }
-    tools.value.push(tool)
-    saveJSON(TOOLS_KEY, tools.value)
-    return tool
+  async function importDir(dirPath: string) {
+    const result = await fetchJSON<{ skill: Skill; fileCount: number }>('/skills/import', {
+      method: 'POST',
+      body: JSON.stringify({ path: dirPath }),
+    })
+    items.value.push(result.skill)
+    return result
   }
 
-  function updateTool(toolId: string, payload: Partial<Tool>) {
-    const i = tools.value.findIndex((t) => t.id === toolId)
-    if (i < 0) return undefined
-    tools.value[i] = { ...tools.value[i], ...payload }
-    saveJSON(TOOLS_KEY, tools.value)
-    return tools.value[i]
+  async function getFiles(skillId: string) {
+    return fetchJSON<SkillFile[]>(`/skills/${skillId}/files`).catch(() => [] as SkillFile[])
   }
 
-  function removeTool(toolId: string) {
-    tools.value = tools.value.filter((t) => t.id !== toolId)
-    saveJSON(TOOLS_KEY, tools.value)
+  async function getFileContent(skillId: string, filePath: string): Promise<string> {
+    const resp = await fetch(`/api/v1/skills/${skillId}/files/${encodeURIComponent(filePath)}`)
+    if (!resp.ok) throw new Error('File not found')
+    return resp.text()
   }
 
-  return { items, tools, loading, load, createSkill, updateSkill, removeSkill, createTool, updateTool, removeTool }
+  async function getExportMD(skillId: string) {
+    const resp = await fetch(`/api/v1/skills/${skillId}/export`)
+    if (!resp.ok) throw new Error('Export failed')
+    return resp.text()
+  }
+
+  async function reset(skillId: string) {
+    const updated = await fetchJSON<Skill>(`/skills/${skillId}/reset`, {
+      method: 'POST',
+    })
+    const i = items.value.findIndex((s) => s.id === skillId)
+    if (i >= 0) items.value[i] = updated
+    return updated
+  }
+
+  return {
+    items,
+    loading,
+    load,
+    get,
+    create,
+    update,
+    remove,
+    importDir,
+    getFiles,
+    getFileContent,
+    getExportMD,
+    reset,
+  }
 })

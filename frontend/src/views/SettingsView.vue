@@ -637,7 +637,7 @@ const menuItems = computed(() => [
               <span class="model-limit-list__col">{{ item.maxOutput.toLocaleString() }}</span>
               <span class="model-limit-list__col model-limit-list__col--actions">
                 <DqButton size="small" @click="openEditModelLimit(idx)">{{ $t('settings.edit') }}</DqButton>
-                <DqButton size="small" type="danger" @click="removeModelLimit(idx)">{{ $t('common.delete') }}</DqButton>
+                <DqButton size="small" type="text" @click="removeModelLimit(idx)">{{ $t('common.delete') }}</DqButton>
               </span>
             </div>
           </div>
@@ -796,6 +796,70 @@ const menuItems = computed(() => [
   min-height: 0;
   overflow: hidden;
   background: var(--dq-bg-page);
+}
+
+/* ── Form control consistency ── */
+
+/* Make DqInput visible with solid bg + clear border */
+.settings-view :deep(.dq-input) {
+  background: var(--dq-glass-control-bg-solid, var(--dq-fill-secondary));
+  border-color: var(--teams-glass-border, color-mix(in srgb, var(--dq-label-primary) 12%, transparent));
+  height: 34px;
+  min-height: 34px;
+  font-size: 13px;
+}
+
+.settings-view :deep(.dq-input:hover:not(:disabled):not(:focus):not(:focus-visible)) {
+  border-color: color-mix(in srgb, var(--dq-label-primary) 22%, transparent);
+}
+
+.settings-view :deep(.dq-input:focus),
+.settings-view :deep(.dq-input:focus-visible) {
+  background: var(--dq-bg-primary);
+  border-color: var(--dq-accent);
+}
+
+.settings-view :deep(.dq-input:disabled) {
+  opacity: 0.5;
+}
+
+/* Unify native <select> with DqInput */
+.settings-field__input {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--teams-glass-border, color-mix(in srgb, var(--dq-label-primary) 12%, transparent));
+  background: var(--dq-glass-control-bg-solid, var(--dq-fill-secondary));
+  color: var(--dq-label-primary);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+}
+
+.settings-field__input:focus {
+  border-color: var(--dq-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dq-accent) 15%, transparent);
+  background: var(--dq-bg-primary);
+}
+
+.settings-field__input:hover:not(:focus) {
+  border-color: color-mix(in srgb, var(--dq-label-primary) 22%, transparent);
+}
+
+/* Unify DqButton height with inputs */
+.settings-view :deep(.dq-btn) {
+  height: 34px;
+  font-size: 13px;
+}
+
+.settings-view :deep(.dq-btn--sm) {
+  height: 28px;
+  font-size: 12px;
 }
 
 .settings-sidebar {
@@ -976,23 +1040,6 @@ const menuItems = computed(() => [
   font-size: 13px;
   font-weight: 500;
   color: var(--dq-label-primary);
-}
-
-.settings-field__input {
-  height: 34px;
-  padding: 0 12px;
-  border-radius: 8px;
-  border: 1px solid var(--teams-glass-border);
-  background: var(--dq-bg-primary);
-  color: var(--dq-label-primary);
-  font-size: 13px;
-  outline: none;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
-}
-
-.settings-field__input:focus {
-  border-color: var(--dq-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dq-accent) 15%, transparent);
 }
 
 .model-list {
@@ -1320,6 +1367,7 @@ const menuItems = computed(() => [
 }
 
 .model-limit-list__col--name {
+  flex: 2;
   font-weight: 500;
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
   font-size: 12px;
@@ -1330,5 +1378,17 @@ const menuItems = computed(() => [
   display: flex;
   gap: 6px;
   justify-content: flex-end;
+}
+
+/* Make action buttons in model-limit-list smaller */
+.model-limit-list__col--actions :deep(.dq-btn) {
+  height: 26px;
+  font-size: 12px;
+  padding: 0 10px;
+}
+
+/* Provider card border visibility */
+.provider-card {
+  border-color: color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
 }
 </style>

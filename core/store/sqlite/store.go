@@ -45,6 +45,7 @@ func (s *Store) migrate() error {
 	if err := s.db.AutoMigrate(
 		&agentModel{},
 		&skillModel{},
+		&skillFileModel{},
 		&sessionModel{},
 		&projectModel{},
 		&llmConfigModel{},
@@ -72,6 +73,7 @@ func (s *Store) migrate() error {
 
 func (s *Store) Agents() port.AgentRepo       { return &agentRepo{s} }
 func (s *Store) Skills() port.SkillRepo       { return &skillRepo{s} }
+func (s *Store) SkillFiles() port.SkillFileRepo { return &skillFileRepo{s} }
 func (s *Store) Sessions() port.SessionRepo   { return &sessionRepo{s} }
 func (s *Store) Projects() port.ProjectRepo   { return &projectRepo{s} }
 func (s *Store) LLMConfig() port.LLMConfigRepo { return &llmConfigRepo{s} }
@@ -161,6 +163,14 @@ func (r *skillRepo) List(ctx context.Context) ([]domain.Skill, error) {
 	return out, nil
 }
 
+func (r *skillRepo) Get(ctx context.Context, id string) (domain.Skill, error) {
+	var row skillModel
+	if err := r.s.db.WithContext(ctx).First(&row, "id = ?", id).Error; err != nil {
+		return domain.Skill{}, err
+	}
+	return skillToDomain(row), nil
+}
+
 func (r *skillRepo) Upsert(ctx context.Context, sk domain.Skill) error {
 	m := skillFromDomain(sk)
 	var existing skillModel
@@ -169,6 +179,49 @@ func (r *skillRepo) Upsert(ctx context.Context, sk domain.Skill) error {
 		return r.s.db.WithContext(ctx).Create(&m).Error
 	}
 	return r.s.db.WithContext(ctx).Model(&existing).Updates(&m).Error
+}
+
+func (r *skillRepo) Delete(ctx context.Context, id string) error {
+	return r.s.db.WithContext(ctx).Delete(&skillModel{}, "id = ?", id).Error
+}
+
+// ---- SkillFileRepo ----
+
+type skillFileRepo struct{ s *Store }
+
+func (r *skillFileRepo) ListBySkill(ctx context.Context, skillID string) ([]domain.SkillFile, error) {
+	var rows []skillFileModel
+	if err := r.s.db.WithContext(ctx).Where("skill_id = ?", skillID).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.SkillFile, len(rows))
+	for i, row := range rows {
+		out[i] = skillFileToDomain(row)
+	}
+	return out, nil
+}
+
+func (r *skillFileRepo) Get(ctx context.Context, skillID, path string) (domain.SkillFile, error) {
+	id := skillID + ":" + path
+	var row skillFileModel
+	if err := r.s.db.WithContext(ctx).First(&row, "id = ?", id).Error; err != nil {
+		return domain.SkillFile{}, err
+	}
+	return skillFileToDomain(row), nil
+}
+
+func (r *skillFileRepo) Upsert(ctx context.Context, f domain.SkillFile) error {
+	m := skillFileFromDomain(f)
+	var existing skillFileModel
+	err := r.s.db.WithContext(ctx).First(&existing, "id = ?", m.ID).Error
+	if err != nil {
+		return r.s.db.WithContext(ctx).Create(&m).Error
+	}
+	return r.s.db.WithContext(ctx).Model(&existing).Updates(&m).Error
+}
+
+func (r *skillFileRepo) DeleteBySkill(ctx context.Context, skillID string) error {
+	return r.s.db.WithContext(ctx).Delete(&skillFileModel{}, "skill_id = ?", skillID).Error
 }
 
 // ---- SessionRepo ----
@@ -316,6 +369,18 @@ func (r *approvalRepo) Update(ctx context.Context, a domain.Approval) error {
 	return r.s.db.WithContext(ctx).Model(&approvalModel{}).Where("id = ?", a.ID).Updates(approvalFromDomain(a)).Error
 }
 
+func (r *approvalRepo) ListByStatus(ctx context.Context, status string) ([]domain.Approval, error) {
+	var rows []approvalModel
+	if err := r.s.db.WithContext(ctx).Where("status = ?", status).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.Approval, len(rows))
+	for i, row := range rows {
+		out[i] = approvalToDomain(row)
+	}
+	return out, nil
+}
+
 // ---- StreamEventRepo ----
 
 type streamEventRepo struct{ s *Store }
@@ -378,6 +443,18 @@ func (r *turnRepo) Get(ctx context.Context, id string) (domain.TurnLog, error) {
 func (r *turnRepo) ListBySession(ctx context.Context, sessionID string) ([]domain.TurnLog, error) {
 	var rows []turnModel
 	if err := r.s.db.WithContext(ctx).Where("session_id = ?", sessionID).Order("id asc").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.TurnLog, len(rows))
+	for i, row := range rows {
+		out[i] = turnToDomain(row)
+	}
+	return out, nil
+}
+
+func (r *turnRepo) ListByStatus(ctx context.Context, status domain.TurnStatus) ([]domain.TurnLog, error) {
+	var rows []turnModel
+	if err := r.s.db.WithContext(ctx).Where("status = ?", string(status)).Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	out := make([]domain.TurnLog, len(rows))

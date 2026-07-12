@@ -66,12 +66,19 @@ func agentFromDomain(a domain.Agent) agentModel {
 // ---- Skill ----
 
 type skillModel struct {
-	ID           string `gorm:"primaryKey"`
-	Name         string
-	Description  string
-	KeywordsJSON string `gorm:"column:keywords"`
-	ToolIDsJSON  string `gorm:"column:tool_ids"`
-	SystemHint   string `gorm:"column:system_hint"`
+	ID            string `gorm:"primaryKey"`
+	Name          string
+	Description   string
+	License       string
+	Compatibility string
+	MetadataJSON  string `gorm:"column:metadata"`
+	AllowedTools  string `gorm:"column:allowed_tools"`
+	KeywordsJSON  string `gorm:"column:keywords"`
+	ToolIDsJSON   string `gorm:"column:tool_ids"`
+	SystemHint    string `gorm:"column:system_hint"`
+	Body          string `gorm:"column:body"`
+	SourcePath    string `gorm:"column:source_path"`
+	Builtin       bool   `gorm:"column:builtin"`
 }
 
 func (skillModel) TableName() string { return "skills" }
@@ -79,23 +86,60 @@ func (skillModel) TableName() string { return "skills" }
 func (m *skillModel) BeforeSave(_ *gorm.DB) error {
 	m.KeywordsJSON = marshalJSON(m.keywords())
 	m.ToolIDsJSON = marshalJSON(m.toolIDs())
+	m.MetadataJSON = marshalJSONMap(m.metadata())
 	return nil
 }
 
-func (m *skillModel) keywords() []string { return unmarshalSlice[string](m.KeywordsJSON) }
-func (m *skillModel) toolIDs() []string  { return unmarshalSlice[string](m.ToolIDsJSON) }
+func (m *skillModel) keywords() []string             { return unmarshalSlice[string](m.KeywordsJSON) }
+func (m *skillModel) toolIDs() []string              { return unmarshalSlice[string](m.ToolIDsJSON) }
+func (m *skillModel) metadata() map[string]string    { return unmarshalMap(m.MetadataJSON) }
 
 func skillToDomain(m skillModel) domain.Skill {
 	return domain.Skill{
 		ID: m.ID, Name: m.Name, Description: m.Description,
-		Keywords: m.keywords(), ToolIDs: m.toolIDs(), SystemHint: m.SystemHint,
+		License: m.License, Compatibility: m.Compatibility,
+		Metadata: m.metadata(), AllowedTools: m.AllowedTools,
+		Keywords: m.keywords(), ToolIDs: m.toolIDs(),
+		SystemHint: m.SystemHint, Body: m.Body, SourcePath: m.SourcePath,
+		Builtin: m.Builtin,
 	}
 }
 
 func skillFromDomain(s domain.Skill) skillModel {
 	return skillModel{
 		ID: s.ID, Name: s.Name, Description: s.Description,
-		KeywordsJSON: marshalJSON(s.Keywords), ToolIDsJSON: marshalJSON(s.ToolIDs), SystemHint: s.SystemHint,
+		License: s.License, Compatibility: s.Compatibility,
+		MetadataJSON: marshalJSONMap(s.Metadata), AllowedTools: s.AllowedTools,
+		KeywordsJSON: marshalJSON(s.Keywords), ToolIDsJSON: marshalJSON(s.ToolIDs),
+		SystemHint: s.SystemHint, Body: s.Body, SourcePath: s.SourcePath,
+		Builtin: s.Builtin,
+	}
+}
+
+// ---- SkillFile ----
+
+type skillFileModel struct {
+	ID      string `gorm:"primaryKey"`
+	SkillID string `gorm:"column:skill_id;index"`
+	Path    string
+	Content []byte
+	Size    int64
+}
+
+func (skillFileModel) TableName() string { return "skill_files" }
+
+func skillFileToDomain(m skillFileModel) domain.SkillFile {
+	return domain.SkillFile{
+		ID: m.ID, SkillID: m.SkillID, Path: m.Path, Content: m.Content, Size: m.Size,
+	}
+}
+
+func skillFileFromDomain(f domain.SkillFile) skillFileModel {
+	if f.ID == "" {
+		f.ID = f.SkillID + ":" + f.Path
+	}
+	return skillFileModel{
+		ID: f.ID, SkillID: f.SkillID, Path: f.Path, Content: f.Content, Size: f.Size,
 	}
 }
 
@@ -338,4 +382,21 @@ func marshalJSON(v any) string {
 	}
 	b, _ := json.Marshal(v)
 	return string(b)
+}
+
+func marshalJSONMap(m map[string]string) string {
+	if m == nil {
+		return "{}"
+	}
+	b, _ := json.Marshal(m)
+	return string(b)
+}
+
+func unmarshalMap(raw string) map[string]string {
+	if raw == "" || raw == "null" {
+		return nil
+	}
+	var v map[string]string
+	_ = json.Unmarshal([]byte(raw), &v)
+	return v
 }

@@ -8,6 +8,7 @@ import (
 type Repository interface {
 	Agents()       AgentRepo
 	Skills()       SkillRepo
+	SkillFiles()   SkillFileRepo
 	Sessions()     SessionRepo
 	Projects()     ProjectRepo
 	LLMConfig()    LLMConfigRepo
@@ -26,7 +27,16 @@ type AgentRepo interface {
 
 type SkillRepo interface {
 	List(ctx context.Context) ([]domain.Skill, error)
+	Get(ctx context.Context, id string) (domain.Skill, error)
 	Upsert(ctx context.Context, s domain.Skill) error
+	Delete(ctx context.Context, id string) error
+}
+
+type SkillFileRepo interface {
+	ListBySkill(ctx context.Context, skillID string) ([]domain.SkillFile, error)
+	Get(ctx context.Context, skillID, path string) (domain.SkillFile, error)
+	Upsert(ctx context.Context, f domain.SkillFile) error
+	DeleteBySkill(ctx context.Context, skillID string) error
 }
 
 type SessionRepo interface {
@@ -67,6 +77,7 @@ type ApprovalRepo interface {
 	Create(ctx context.Context, a domain.Approval) error
 	Get(ctx context.Context, id string) (domain.Approval, error)
 	Update(ctx context.Context, a domain.Approval) error
+	ListByStatus(ctx context.Context, status string) ([]domain.Approval, error)
 }
 
 type StreamEventRepo interface {
@@ -80,6 +91,7 @@ type TurnRepo interface {
 	UpdateStatus(ctx context.Context, id string, status domain.TurnStatus) error
 	Get(ctx context.Context, id string) (domain.TurnLog, error)
 	ListBySession(ctx context.Context, sessionID string) ([]domain.TurnLog, error)
+	ListByStatus(ctx context.Context, status domain.TurnStatus) ([]domain.TurnLog, error)
 }
 
 type MCPServerRepo interface {

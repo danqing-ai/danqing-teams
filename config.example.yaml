@@ -1,5 +1,5 @@
 # DanQing Teams configuration file
-# Copy this file to danqing-teams.yaml and edit values as needed.
+# Copy this file to .dq-teams/config.yaml and edit values as needed.
 # All entry points (server, cli, tui) read from this file.
 
 # Data and persistence paths.

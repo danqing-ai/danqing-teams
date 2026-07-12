@@ -22,6 +22,7 @@ type Handler struct {
 	SearchConfig *service.SearchConfigManager
 	Agents       *service.AgentManager
 	Skills       *service.SkillManager
+	SkillHandler *SkillHandler
 	TurnLogs     *service.TurnLogManager
 	MCPServers   *service.MCPManager
 	Store        port.Repository
@@ -104,6 +105,17 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.DELETE("/mcp/servers/:id", deleteMCPServer(h))
 	api.POST("/mcp/servers/:id/refresh-tools", refreshMCPTools(h))
 	api.PATCH("/mcp/servers/:id/tools/:toolName", toggleMCPTool(h))
+
+	api.GET("/skills", listSkills(h.SkillHandler))
+	api.POST("/skills", createSkill(h.SkillHandler))
+	api.GET("/skills/:id", getSkill(h.SkillHandler))
+	api.PUT("/skills/:id", updateSkill(h.SkillHandler))
+	api.DELETE("/skills/:id", deleteSkill(h.SkillHandler))
+	api.POST("/skills/import", importSkillDir(h.SkillHandler))
+	api.POST("/skills/:id/reset", resetSkill(h.SkillHandler))
+	api.GET("/skills/:id/export", exportSkillMD(h.SkillHandler))
+	api.GET("/skills/:id/files", listSkillFiles(h.SkillHandler))
+	api.GET("/skills/:id/files/*path", getSkillFile(h.SkillHandler))
 
 	if cfg.FrontendDir != "" {
 		r.Static("/app", cfg.FrontendDir)

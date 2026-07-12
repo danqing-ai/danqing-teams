@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"sync"
 	"time"
@@ -301,6 +302,65 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) {
 }
 
 func (e *Engine) RecoverRunning(ctx context.Context) {
+	// 1. Recover zombie turns: mark all "running" turns as failed.
+	runningTurns, err := e.turns.ListByStatus(ctx, domain.TurnRunning)
+	if err != nil {
+		log.Printf("[RecoverRunning] list running turns: %v", err)
+		return
+	}
+	if len(runningTurns) > 0 {
+		log.Printf("[RecoverRunning] found %d zombie running turn(s), marking as failed", len(runningTurns))
+	}
+	for _, t := range runningTurns {
+		if err := e.turns.UpdateStatus(ctx, t.ID, domain.TurnFailed); err != nil {
+			log.Printf("[RecoverRunning] update turn %s status: %v", t.ID, err)
+		}
+		e.turnLog.EndTurn(t.ID, domain.TurnFailed)
+	}
+
+	// 2. Recover stale approvals: mark all "pending" approvals as expired.
+	pendingApprovals, err := e.approvals.ListByStatus(ctx, "pending")
+	if err != nil {
+		log.Printf("[RecoverRunning] list pending approvals: %v", err)
+	} else if len(pendingApprovals) > 0 {
+		log.Printf("[RecoverRunning] found %d stale pending approval(s), marking as expired", len(pendingApprovals))
+		for _, a := range pendingApprovals {
+			a.Status = "expired"
+			if err := e.approvals.Update(ctx, a); err != nil {
+				log.Printf("[RecoverRunning] update approval %s: %v", a.ID, err)
+			}
+		}
+	}
+
+	// 3. Recover stuck sessions: sessions with status "active" that have no
+	//    running turns are stuck — mark them as failed.
+	sessions, err := e.sessions.List(ctx)
+	if err != nil {
+		log.Printf("[RecoverRunning] list sessions: %v", err)
+		return
+	}
+	for _, s := range sessions {
+		if s.Status != domain.SessionStatusActive {
+			continue
+		}
+		turns, err := e.turns.ListBySession(ctx, s.ID)
+		if err != nil {
+			continue
+		}
+		hasRunning := false
+		for _, t := range turns {
+			if t.Status == domain.TurnRunning {
+				hasRunning = true
+				break
+			}
+		}
+		if !hasRunning {
+			log.Printf("[RecoverRunning] session %s stuck in active with no running turns, marking as failed", s.ID)
+			s.Status = domain.SessionStatusFailed
+			s.UpdatedAt = time.Now().UTC()
+			_ = e.sessions.UpdateSession(ctx, s)
+		}
+	}
 }
 
 func (e *Engine) ListTurns(sessionID string) []domain.TurnLog {

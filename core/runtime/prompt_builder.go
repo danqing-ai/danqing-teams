@@ -68,6 +68,11 @@ func buildSkillMetadata(skills []domain.Skill) string {
 		if sk.SystemHint != "" {
 			fmt.Fprintf(&b, "    <hint>%s</hint>\n", escapeXML(sk.SystemHint))
 		}
+		if sk.Body != "" {
+			fmt.Fprintf(&b, "    <instructions>\n")
+			fmt.Fprintf(&b, "%s\n", escapeXML(sk.Body))
+			fmt.Fprintf(&b, "    </instructions>\n")
+		}
 		fmt.Fprintf(&b, "  </skill>\n")
 	}
 	b.WriteString("</available_skills>")

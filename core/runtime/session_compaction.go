@@ -164,7 +164,7 @@ func (m *CompactionManager) Checkpoint(sessionID string) *domain.CompactionCheck
 }
 
 func (m *CompactionManager) Recover(ctx context.Context, sessionID string) *domain.CompactionCheckpoint {
-	return m.Checkpoint(sessionID)
+	return m.getCheckpoint(sessionID)
 }
 
 func (m *CompactionManager) Compact(ctx context.Context, sessionID, turnID string, messages []Message, turnCount int, model string) int {

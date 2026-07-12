@@ -4,20 +4,10 @@ import { fetchJSON, asArray } from '@/api/client'
 import { apiBaseUrl } from '@/utils/desktop'
 import { i18n } from '@/i18n'
 import type { Session, TurnLog, StreamEvent, Agent, Skill, WorkerCard, AgentRun, UpdateSessionPayload, LLMModel } from '@/types/mission'
+import { useSkillsStore } from '@/stores/skills'
 
 const base = apiBaseUrl()
 const MODEL_KEY = 'teams-composer-model'
-
-const SKILLS_KEY = 'danqing-skills'
-
-function loadJSON<T>(key: string): T[] {
-  try {
-    const raw = localStorage.getItem(key)
-    return raw ? (JSON.parse(raw) as T[]) : []
-  } catch {
-    return []
-  }
-}
 
 export const useSessionsStore = defineStore('sessions', () => {
   const sessions = ref<Session[]>([])
@@ -106,7 +96,11 @@ export const useSessionsStore = defineStore('sessions', () => {
       agents.value = []
       throw e
     }
-    skills.value = loadJSON<Skill>(SKILLS_KEY)
+    try {
+      skills.value = asArray(await fetchJSON<Skill[]>('/skills'))
+    } catch {
+      skills.value = []
+    }
   }
 
   function defaultAgentId(): string {
