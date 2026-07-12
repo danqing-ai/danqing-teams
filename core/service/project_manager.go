@@ -327,14 +327,17 @@ func encode(src, dst []byte) {
 }
 
 func (m *ProjectManager) GetGitChanges(ctx context.Context, projectID string) (*GitChanges, error) {
-	root, err := m.resolveFilesRoot(ctx, projectID)
+	p, err := m.Get(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
+	root := p.Directory
+	if root == "" {
+		root = filepath.Join(m.ProjectDir(projectID), "files")
+	}
+	root = filepath.Clean(root)
 
-	cmd := exec.Command("git", "status", "--porcelain", "-b")
-	cmd.Dir = root
-	out, err := cmd.Output()
+	gitRoot, err := gitRepoRoot(root)
 	if err != nil {
 		result := &GitChanges{}
 		if _, ok := err.(*exec.Error); ok {
@@ -345,10 +348,35 @@ func (m *ProjectManager) GetGitChanges(ctx context.Context, projectID string) (*
 		return result, nil
 	}
 
-	return parseGitStatus(out), nil
+	cmd := exec.Command("git", "status", "--porcelain", "-b")
+	cmd.Dir = gitRoot
+	out, err := cmd.Output()
+	if err != nil {
+		return &GitChanges{}, nil
+	}
+
+	prefix := ""
+	if gitRoot != root {
+		rel, err := filepath.Rel(gitRoot, root)
+		if err == nil && rel != "." {
+			prefix = rel + "/"
+		}
+	}
+
+	return parseGitStatus(out, gitRoot, root, prefix), nil
 }
 
-func parseGitStatus(output []byte) *GitChanges {
+func gitRepoRoot(dir string) (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func parseGitStatus(output []byte, gitRoot, projectRoot, prefix string) *GitChanges {
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	result := &GitChanges{}
 
@@ -369,43 +397,59 @@ func parseGitStatus(output []byte) *GitChanges {
 		stagedStatus := string(statusX)
 		unstagedStatus := string(statusY)
 
-		if stagedStatus != " " {
-			change := &GitFileChange{
-				Status: stagedStatus,
-				Staged: true,
-			}
-			if stagedStatus == "R" || stagedStatus == "C" {
+		parseChange := func(status string, staged bool) *GitFileChange {
+			var file, origFile string
+			if status == "R" || status == "C" {
 				parts := strings.SplitN(rest, " -> ", 2)
 				if len(parts) == 2 {
-					change.OrigFile = parts[0]
-					change.File = parts[1]
+					origFile = parts[0]
+					file = parts[1]
 				} else {
-					change.File = rest
+					file = rest
 				}
 			} else {
-				change.File = rest
+				file = rest
 			}
-			result.Changes = append(result.Changes, change)
+			return &GitFileChange{
+				Status:   status,
+				File:     file,
+				OrigFile: origFile,
+				Staged:   staged,
+			}
+		}
+
+		if stagedStatus != " " {
+			change := parseChange(stagedStatus, true)
+			if changeInRoot(change.File, gitRoot, projectRoot) {
+				if prefix != "" {
+					change.File = strings.TrimPrefix(change.File, prefix)
+					if change.OrigFile != "" {
+						change.OrigFile = strings.TrimPrefix(change.OrigFile, prefix)
+					}
+				}
+				result.Changes = append(result.Changes, change)
+			}
 		}
 
 		if unstagedStatus != " " && unstagedStatus != stagedStatus {
-			change := &GitFileChange{
-				Status: unstagedStatus,
-			}
-			if unstagedStatus == "R" || unstagedStatus == "C" {
-				parts := strings.SplitN(rest, " -> ", 2)
-				if len(parts) == 2 {
-					change.OrigFile = parts[0]
-					change.File = parts[1]
-				} else {
-					change.File = rest
+			change := parseChange(unstagedStatus, false)
+			if changeInRoot(change.File, gitRoot, projectRoot) {
+				if prefix != "" {
+					change.File = strings.TrimPrefix(change.File, prefix)
+					if change.OrigFile != "" {
+						change.OrigFile = strings.TrimPrefix(change.OrigFile, prefix)
+					}
 				}
-			} else {
-				change.File = rest
+				result.Changes = append(result.Changes, change)
 			}
-			result.Changes = append(result.Changes, change)
 		}
 	}
 
 	return result
+}
+
+func changeInRoot(file, gitRoot, projectRoot string) bool {
+	abs := filepath.Join(gitRoot, file)
+	abs = filepath.Clean(abs)
+	return strings.HasPrefix(abs, projectRoot) && (abs == projectRoot || strings.HasPrefix(abs, projectRoot+string(filepath.Separator)))
 }
