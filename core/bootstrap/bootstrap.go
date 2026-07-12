@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 
 	"danqing-teams/core/adapter/config"
-	"danqing-teams/core/adapter/container"
 	"danqing-teams/core/adapter/llm"
 	"danqing-teams/core/service"
 	"danqing-teams/core/domain"
@@ -135,17 +134,8 @@ func New(cfg Config) *Core {
 	stream := dqruntime.NewStreamEventManager(st.StreamEvents())
 	checkpointStore := turnlog.NewCheckpointStore(pm.ProjectDir)
 
-	// Container runtime: select OS-specific adapter.
-	var containerMgr *service.ContainerManager
-	if appCfg.Runtime.Container.Enabled {
-		rt := container.NewForPlatform()
-		if rt != nil && rt.Available() {
-			containerMgr = service.NewContainerManager(rt, appCfg.Runtime.Container.Image)
-		}
-	}
-
 	sessions := service.NewSessionManager(st, nil, provider)
-	eng := dqruntime.NewEngine(sessions, turnManager, pm, approvalManager, turnLogManager, agents, skills, knowledge, provider, stream, checkpointStore, containerMgr, loader, appCfg.Data.Dir)
+	eng := dqruntime.NewEngine(sessions, turnManager, pm, approvalManager, turnLogManager, agents, skills, knowledge, provider, stream, checkpointStore, loader, appCfg.Data.Dir)
 	sessions.SetEngine(eng)
 
 	eng.RegisterTool(&builtin.ExecShell{})

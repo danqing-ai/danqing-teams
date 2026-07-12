@@ -91,12 +91,24 @@ cat > "$DMG_STAGING/阅读说明.txt" << 'README_EOF'
   2. 在 Finder 中右键点击 app → 选择「打开」
   3. 弹窗中点击「打开」确认
 
-方法二（终端命令）：
+方法二（一键修复）：
+  1. 在 Finder 中右键点击「修复并打开.command」→ 选择「打开」
+  2. 如果系统提示无法验证，前往「系统设置 → 隐私与安全性」
+  3. 点击「仍要打开」按钮（见截图 gatekeeper-privacy-security.png）
+  4. 脚本会自动移除隔离属性并启动应用
+
+  ┌─────────────────────────────────────────────┐
+  │  隐私与安全                                  │
+  │                                             │
+  │  已阻止"DanQing Teams"以保护 Mac。  [仍要打开] │
+  │                                             │
+  │  Apple无法验证"DanQing Teams"是否包含可能危  │
+  │  害Mac安全或泄漏隐私的恶意软件。              │
+  └─────────────────────────────────────────────┘
+
+方法三（终端命令）：
   打开终端，执行：
   xattr -cr /Applications/DanQing\ Teams.app
-
-方法三（一键修复）：
-  双击本 DMG 中的「修复并打开.command」脚本即可。
 README_EOF
 
 # Add one-click fix script
@@ -113,6 +125,9 @@ fi
 if [ ! -d "$APP_PATH" ]; then
   echo "❌ 未找到 DanQing Teams.app"
   echo "请先将 app 拖入应用程序文件夹"
+  echo ""
+  echo "提示：如果本脚本也被系统阻止，请前往："
+  echo "  系统设置 → 隐私与安全性 → 点击「仍要打开」"
   read -p "按回车退出..."
   exit 1
 fi
@@ -123,6 +138,13 @@ echo "==> 正在打开 DanQing Teams..."
 open "$APP_PATH"
 FIX_EOF
 chmod +x "$DMG_STAGING/修复并打开.command"
+
+# Copy screenshot into staging for README reference
+SCREENSHOT_SRC="$SCRIPT_DIR/../docs/gatekeeper-privacy-security.png"
+if [[ -f "$SCREENSHOT_SRC" ]]; then
+  cp "$SCREENSHOT_SRC" "$DMG_STAGING/"
+  echo "==> Copied screenshot to DMG staging"
+fi
 
 # Add Applications symlink
 ln -s /Applications "$DMG_STAGING/Applications"
