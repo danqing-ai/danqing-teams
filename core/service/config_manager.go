@@ -55,6 +55,14 @@ func (m *ConfigManager) Update(ctx context.Context, req domain.UpdateConfigFileR
 			MaxResults: req.Search.MaxResults,
 		}
 	}
+	if req.LLM != nil {
+		if req.LLM.Providers != nil {
+			cfg.LLM.Providers = req.LLM.Providers
+		}
+		if req.LLM.ModelLimits != nil {
+			cfg.LLM.ModelLimits = req.LLM.ModelLimits
+		}
+	}
 
 	if err := m.store.Save(ctx, cfg); err != nil {
 		return nil, fmt.Errorf("save config: %w", err)

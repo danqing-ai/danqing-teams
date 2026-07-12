@@ -181,6 +181,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 
 	var finalReport domain.Report
 	reportCaptured := false
+	maxPromptTokens := 0 // track actual max prompt tokens from LLM API
 
 	for step := 1; step <= tctx.MaxSteps; step++ {
 		select {
@@ -219,6 +220,9 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			continue
 		}
 		if resp.Usage != nil {
+			if resp.Usage.PromptTokens > maxPromptTokens {
+				maxPromptTokens = resp.Usage.PromptTokens
+			}
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventLLMUsage, domain.LLMUsagePayload{
 				PromptTokens:     resp.Usage.PromptTokens,
 				CompletionTokens: resp.Usage.CompletionTokens,
@@ -230,6 +234,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			finalReport = domain.Report{
 				Status: domain.ReportDone, Summary: resp.Content,
 				Confidence: 0.8, StepsUsed: step,
+				MaxPromptTokens: maxPromptTokens,
 			}
 			if tctx.OnReport != nil {
 				tctx.OnReport(finalReport)
@@ -260,7 +265,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			}
 
 			if p.trackDoom(tctx.TurnID, call.Name, describe, cfg.doomLoopThreshold) >= cfg.doomLoopThreshold {
-				finalReport = domain.Report{Status: domain.ReportFailed, Summary: "doom loop for " + call.Name}
+				finalReport = domain.Report{Status: domain.ReportFailed, Summary: "doom loop for " + call.Name, MaxPromptTokens: maxPromptTokens}
 				p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepEnded, domain.StepPayload{Step: step})
 				p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventTurnFailed, domain.TurnEndedPayload{
 					TurnID: tctx.TurnID, Status: "failed", Summary: "doom loop for " + call.Name,
@@ -302,7 +307,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 				})
 				approved, err := p.Approval.WaitApproval(ctx, approvalID)
 				if err != nil || !approved {
-					finalReport = domain.Report{Status: domain.ReportFailed, Summary: "approval rejected"}
+					finalReport = domain.Report{Status: domain.ReportFailed, Summary: "approval rejected", MaxPromptTokens: maxPromptTokens}
 					p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepEnded, domain.StepPayload{Step: step})
 					p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventTurnFailed, domain.TurnEndedPayload{
 						TurnID: tctx.TurnID, Status: "failed", Summary: "approval rejected",
@@ -367,7 +372,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 	}
 
 	if !reportCaptured {
-		finalReport = domain.Report{Status: domain.ReportFailed, Summary: "max steps reached", Confidence: 0.3}
+		finalReport = domain.Report{Status: domain.ReportFailed, Summary: "max steps reached", Confidence: 0.3, MaxPromptTokens: maxPromptTokens}
 	}
 
 	reportPayload := finalReport

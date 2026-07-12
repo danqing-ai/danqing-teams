@@ -41,6 +41,15 @@ type LLMModel struct {
 	Enabled    bool   `json:"enabled"`
 }
 
+// ModelLimit defines the context window and max output tokens for a specific
+// model. Entries are stored in the config file so users can add / edit them
+// from the settings page without touching Go code.
+type ModelLimit struct {
+	Model         string `json:"model" mapstructure:"model" yaml:"model"`
+	ContextWindow int    `json:"contextWindow" mapstructure:"context_window" yaml:"context_window"`
+	MaxOutput     int    `json:"maxOutput" mapstructure:"max_output" yaml:"max_output"`
+}
+
 // LLMProviderPreset is a template for quickly creating a provider config.
 // It ships via config.yaml or built-in defaults and is exposed to the frontend
 // so users can pick a preset instead of filling every field manually.

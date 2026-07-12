@@ -29,6 +29,7 @@ type CompactionManager struct {
 	configStore port.ConfigStore
 	stream      port.EventStream
 	store       CompactionCheckpointStore
+	modelLimits *ModelLimitsRegistry
 }
 
 type CompactionCheckpointStore interface {
@@ -46,19 +47,23 @@ type compactionCfg struct {
 	toolTruncate  int
 }
 
-func NewCompactionManager(llm port.LLMProvider, stream port.EventStream, configStore port.ConfigStore, store CompactionCheckpointStore) *CompactionManager {
+func NewCompactionManager(llm port.LLMProvider, stream port.EventStream, configStore port.ConfigStore, store CompactionCheckpointStore, modelLimits *ModelLimitsRegistry) *CompactionManager {
+	if modelLimits == nil {
+		modelLimits = NewModelLimitsRegistry()
+	}
 	return &CompactionManager{
 		checkpoints: make(map[string]*domain.CompactionCheckpoint),
 		llm:         llm,
 		configStore: configStore,
 		stream:      stream,
 		store:       store,
+		modelLimits: modelLimits,
 	}
 }
 
 func (m *CompactionManager) loadCfg(ctx context.Context) compactionCfg {
 	cfg := compactionCfg{
-		maxTokens:    defaultMaxTokens,
+		maxTokens:    0, // 0 means “use model context window”
 		triggerRatio: defaultTriggerRatio,
 		cutTokens:    defaultCutTokens,
 		turnInterval: defaultTurnInterval,
@@ -87,19 +92,57 @@ func (m *CompactionManager) loadCfg(ctx context.Context) compactionCfg {
 			if rt.ToolTruncate > 0 {
 				cfg.toolTruncate = rt.ToolTruncate
 			}
+			// Reload model limits from config into the registry.
+			m.modelLimits.SetLimits(c.LLM.ModelLimits)
 		}
 	}
 	return cfg
 }
 
-func (m *CompactionManager) ShouldCompact(sessionID string, turnCount int, tokenEstimate int) bool {
+func (m *CompactionManager) ShouldCompact(sessionID string, turnCount int, tokenEstimate int, maxPromptTokens int, model string) bool {
 	cfg := m.loadCfg(context.Background())
 	if !cfg.enabled {
 		return false
 	}
-	if cfg.maxTokens > 0 && tokenEstimate > int(float64(cfg.maxTokens)*cfg.triggerRatio) {
+
+	// Determine the effective context limit and actual token usage.
+	// Priority: actual API usage > char-based estimation.
+	contextLimit := cfg.maxTokens
+	actualTokens := tokenEstimate
+
+	// If we have actual prompt tokens from the LLM API, use them + model's real context window.
+	if maxPromptTokens > 0 {
+		actualTokens = maxPromptTokens
+		if modelLimit := m.modelLimits.ContextWindow(model); modelLimit > 0 {
+			// Reserve space for output tokens so we trigger before hitting the hard limit.
+			maxOutput := m.modelLimits.MaxOutputTokens(model)
+			usable := modelLimit - maxOutput
+			if usable > 0 {
+				// Use the smaller of config override and model-derived usable space.
+				if contextLimit == 0 || usable < contextLimit {
+					contextLimit = usable
+				}
+			}
+		}
+	}
+
+	// Token-based trigger: actual usage exceeds triggerRatio of context limit.
+	if contextLimit > 0 && actualTokens > int(float64(contextLimit)*cfg.triggerRatio) {
 		return true
 	}
+
+	// If no context limit is known, try model context window as fallback.
+	if contextLimit == 0 && model != "" {
+		if modelLimit := m.modelLimits.ContextWindow(model); modelLimit > 0 {
+			maxOutput := m.modelLimits.MaxOutputTokens(model)
+			usable := modelLimit - maxOutput
+			if usable > 0 && tokenEstimate > int(float64(usable)*cfg.triggerRatio) {
+				return true
+			}
+		}
+	}
+
+	// Turn-count-based trigger (fallback when token data is unreliable).
 	if cfg.turnInterval > 0 {
 		cp := m.getCheckpoint(sessionID)
 		if cp == nil {

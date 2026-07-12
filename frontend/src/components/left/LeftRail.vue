@@ -332,9 +332,9 @@ watch(() => projects.projects.length, (len) => {
                     </DqIconButton>
                     <template #dropdown>
                       <DqDropdownMenu>
-                        <DqDropdownItem @click="onNewSession(p.id)">{{ $t('navigation.newSession') }}</DqDropdownItem>
-                        <DqDropdownItem @click="startRenameProject(p)">{{ $t('navigation.rename') }}</DqDropdownItem>
-                        <DqDropdownItem @click="removeProject(p)">{{ $t('common.delete') }}</DqDropdownItem>
+                        <DqDropdownItem @select="onNewSession(p.id)">{{ $t('navigation.newSession') }}</DqDropdownItem>
+                        <DqDropdownItem @select="startRenameProject(p)">{{ $t('navigation.rename') }}</DqDropdownItem>
+                        <DqDropdownItem @select="removeProject(p)">{{ $t('common.delete') }}</DqDropdownItem>
                       </DqDropdownMenu>
                     </template>
                   </DqDropdown>
@@ -366,8 +366,8 @@ watch(() => projects.projects.length, (len) => {
                       </button>
                       <template #dropdown>
                         <DqDropdownMenu>
-                          <DqDropdownItem @click="archiveSession(t_.id)">归档</DqDropdownItem>
-                          <DqDropdownItem @click="deleteSession(t_.id)">
+                          <DqDropdownItem @select="archiveSession(t_.id)">归档</DqDropdownItem>
+                          <DqDropdownItem @select="deleteSession(t_.id)">
                             <span style="color:var(--dq-color-danger)">删除</span>
                           </DqDropdownItem>
                         </DqDropdownMenu>

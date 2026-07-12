@@ -121,6 +121,12 @@ export interface LLMModel {
   enabled: boolean
 }
 
+export interface ModelLimit {
+  model: string
+  contextWindow: number
+  maxOutput: number
+}
+
 export type SearchProvider =
   | 'duckduckgo'
   | 'bing'
@@ -189,6 +195,7 @@ export interface ConfigFile {
   search: SearchConfig
   llm: {
     providers: LLMProviderPreset[]
+    modelLimits?: ModelLimit[]
   }
 }
 

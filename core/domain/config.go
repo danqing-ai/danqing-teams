@@ -13,7 +13,8 @@ type ConfigFile struct {
 }
 
 type ConfigLLMSection struct {
-	Providers []LLMProviderPreset `json:"providers" mapstructure:"providers"`
+	Providers   []LLMProviderPreset `json:"providers" mapstructure:"providers" yaml:"providers"`
+	ModelLimits []ModelLimit        `json:"modelLimits,omitempty" mapstructure:"model_limits" yaml:"model_limits,omitempty"`
 }
 
 type ConfigDataSection struct {
@@ -80,4 +81,5 @@ type UpdateConfigFileRequest struct {
 	Instance *ConfigInstanceSection `json:"instance,omitempty"`
 	Runtime  *ConfigRuntimeSection  `json:"runtime,omitempty"`
 	Search   *UpsertSearchConfigRequest `json:"search,omitempty"`
+	LLM      *ConfigLLMSection      `json:"llm,omitempty"`
 }

@@ -5,16 +5,18 @@ import { Setting, Cpu, Search } from '@danqing/dq-shell'
 import { useLLMStore } from '@/stores/llm'
 import { useSearchConfigStore } from '@/stores/searchConfig'
 import { useRuntimeConfigStore } from '@/stores/runtimeConfig'
+import { useModelLimitsStore } from '@/stores/modelLimits'
 import { toast } from '@/utils/feedback'
-import type { LLMProviderType, LLMProviderConfig, LLMModelRef, LLMProviderPreset, SearchProvider } from '@/types/mission'
+import type { LLMProviderType, LLMProviderConfig, LLMModelRef, LLMProviderPreset, SearchProvider, ModelLimit } from '@/types/mission'
 
-type SettingsTab = 'runtime' | 'models' | 'search'
+type SettingsTab = 'runtime' | 'models' | 'modelLimits' | 'search'
 
 const { t } = useI18n()
 const activeTab = ref<SettingsTab>('models')
 const llm = useLLMStore()
 const searchConfig = useSearchConfigStore()
 const runtimeConfig = useRuntimeConfigStore()
+const modelLimits = useModelLimitsStore()
 
 const providerOptions = computed<{ value: LLMProviderType; label: string }[]>(() => [
   { value: 'openai', label: 'OpenAI' },
@@ -60,6 +62,11 @@ const runtimeForm = ref({
   compactionToolTruncate: 2000,
 })
 
+const modelLimitsForm = ref<ModelLimit[]>([])
+const showModelLimitForm = ref(false)
+const editingModelLimitIdx = ref<number | null>(null)
+const modelLimitForm = ref({ model: '', contextWindow: 128000, maxOutput: 8192 })
+
 onMounted(async () => {
   await Promise.all([
     llm.loadConfigs(),
@@ -67,6 +74,7 @@ onMounted(async () => {
     llm.loadPresets(),
     searchConfig.loadConfig(),
     runtimeConfig.loadConfig(),
+    modelLimits.load(),
   ])
   if (searchConfig.config) {
     searchForm.value = {
@@ -80,6 +88,7 @@ onMounted(async () => {
   if (runtimeConfig.config) {
     runtimeForm.value = { ...runtimeConfig.config }
   }
+  modelLimitsForm.value = [...modelLimits.limits]
 })
 
 const displayedModels = computed<LLMModelRef[]>(() => {
@@ -276,9 +285,56 @@ async function handleSaveRuntime() {
   }
 }
 
+function openAddModelLimit() {
+  editingModelLimitIdx.value = null
+  modelLimitForm.value = { model: '', contextWindow: 128000, maxOutput: 8192 }
+  showModelLimitForm.value = true
+}
+
+function openEditModelLimit(idx: number) {
+  editingModelLimitIdx.value = idx
+  const item = modelLimitsForm.value[idx]
+  modelLimitForm.value = { model: item.model, contextWindow: item.contextWindow, maxOutput: item.maxOutput }
+  showModelLimitForm.value = true
+}
+
+function saveModelLimitForm() {
+  if (!modelLimitForm.value.model.trim()) return
+  const entry: ModelLimit = {
+    model: modelLimitForm.value.model.trim(),
+    contextWindow: Number(modelLimitForm.value.contextWindow) || 128000,
+    maxOutput: Number(modelLimitForm.value.maxOutput) || 8192,
+  }
+  if (editingModelLimitIdx.value !== null) {
+    modelLimitsForm.value[editingModelLimitIdx.value] = entry
+  } else {
+    // Check for duplicate model name
+    const existing = modelLimitsForm.value.findIndex((l) => l.model === entry.model)
+    if (existing >= 0) {
+      modelLimitsForm.value[existing] = entry
+    } else {
+      modelLimitsForm.value.push(entry)
+    }
+  }
+  showModelLimitForm.value = false
+}
+
+function removeModelLimit(idx: number) {
+  modelLimitsForm.value.splice(idx, 1)
+}
+
+async function handleSaveModelLimits() {
+  try {
+    await modelLimits.save(modelLimitsForm.value)
+  } catch {
+    /* toast already shown in store */
+  }
+}
+
 const menuItems = computed(() => [
   { id: 'runtime' as SettingsTab, label: t('settings.runtime'), icon: Setting },
   { id: 'models' as SettingsTab, label: t('settings.models'), icon: Cpu },
+  { id: 'modelLimits' as SettingsTab, label: t('settings.modelLimits'), icon: Setting },
   { id: 'search' as SettingsTab, label: t('settings.search'), icon: Search },
 ])
 </script>
@@ -554,6 +610,73 @@ const menuItems = computed(() => [
           </div>
         </div>
       </div>
+
+      <div v-else-if="activeTab === 'modelLimits'" class="settings-section settings-section--wide">
+        <header class="settings-section__head">
+          <h2>{{ $t('settings.modelLimits') }}</h2>
+          <p>{{ $t('settings.modelLimitsDesc') }}</p>
+        </header>
+
+        <div v-if="modelLimits.loading" class="settings-empty">{{ $t('common.loading') }}</div>
+
+        <div v-else>
+          <div class="provider-list-actions">
+            <DqButton type="primary" @click="openAddModelLimit">{{ $t('settings.addModelLimit') }}</DqButton>
+          </div>
+
+          <div v-if="modelLimitsForm.length" class="model-limit-list">
+            <div class="model-limit-list__head">
+              <span class="model-limit-list__col">{{ $t('settings.modelName') }}</span>
+              <span class="model-limit-list__col">{{ $t('settings.contextWindow') }}</span>
+              <span class="model-limit-list__col">{{ $t('settings.maxOutput') }}</span>
+              <span class="model-limit-list__col model-limit-list__col--actions"></span>
+            </div>
+            <div v-for="(item, idx) in modelLimitsForm" :key="item.model" class="model-limit-list__row">
+              <span class="model-limit-list__col model-limit-list__col--name">{{ item.model }}</span>
+              <span class="model-limit-list__col">{{ item.contextWindow.toLocaleString() }}</span>
+              <span class="model-limit-list__col">{{ item.maxOutput.toLocaleString() }}</span>
+              <span class="model-limit-list__col model-limit-list__col--actions">
+                <DqButton size="small" @click="openEditModelLimit(idx)">{{ $t('settings.edit') }}</DqButton>
+                <DqButton size="small" type="danger" @click="removeModelLimit(idx)">{{ $t('common.delete') }}</DqButton>
+              </span>
+            </div>
+          </div>
+
+          <div v-else class="settings-empty">{{ $t('settings.noModelLimits') }}</div>
+
+          <div class="settings-actions" style="margin-top: 16px">
+            <DqButton type="primary" :disabled="modelLimits.saving" @click="handleSaveModelLimits">
+              {{ modelLimits.saving ? $t('common.saving') : $t('common.save_') }}
+            </DqButton>
+          </div>
+        </div>
+      </div>
+
+      <DqDialog
+        v-model:open="showModelLimitForm"
+        :title="editingModelLimitIdx !== null ? $t('settings.editModelLimit') : $t('settings.addModelLimit')"
+        variant="glass"
+        width="480px"
+        :closable="true"
+      >
+        <div class="settings-form">
+          <label class="settings-field">
+            <span class="settings-field__label">{{ $t('settings.modelName') }}</span>
+            <DqInput v-model="modelLimitForm.model" :placeholder="$t('settings.modelNamePlaceholder')" :disabled="editingModelLimitIdx !== null" />
+          </label>
+          <label class="settings-field">
+            <span class="settings-field__label">{{ $t('settings.contextWindow') }}</span>
+            <DqInput v-model.number="modelLimitForm.contextWindow" type="number" placeholder="128000" />
+          </label>
+          <label class="settings-field">
+            <span class="settings-field__label">{{ $t('settings.maxOutput') }}</span>
+            <DqInput v-model.number="modelLimitForm.maxOutput" type="number" placeholder="8192" />
+          </label>
+          <div class="settings-actions">
+            <DqButton type="primary" @click="saveModelLimitForm">{{ $t('common.save_') }}</DqButton>
+          </div>
+        </div>
+      </DqDialog>
 
       <DqDialog
         v-model:open="showForm"
@@ -1158,5 +1281,54 @@ const menuItems = computed(() => [
   font-weight: 500;
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
   color: var(--dq-label-secondary);
+}
+
+/* Model limits list */
+.model-limit-list {
+  margin-top: 12px;
+  border: 1px solid var(--teams-glass-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.model-limit-list__head {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
+  border-bottom: 1px solid var(--teams-glass-border);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dq-label-secondary);
+}
+
+.model-limit-list__row {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--dq-label-primary) 5%, transparent);
+  font-size: 13px;
+}
+
+.model-limit-list__row:last-child {
+  border-bottom: none;
+}
+
+.model-limit-list__col {
+  flex: 1;
+  min-width: 0;
+}
+
+.model-limit-list__col--name {
+  font-weight: 500;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+}
+
+.model-limit-list__col--actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
 }
 </style>

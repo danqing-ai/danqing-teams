@@ -38,6 +38,7 @@ type Engine struct {
 	turnRunner    *TurnRunner
 	toolCatalog   *tool.Registry
 	compactionMgr *CompactionManager
+	modelLimits   *ModelLimitsRegistry
 	configStore   port.ConfigStore
 	dataDir       string
 	turnMessages  map[string][]Message
@@ -78,6 +79,9 @@ func NewEngine(sessions *service.SessionManager, turns *service.TurnManager, pro
 	gate := permission.NewGate(nil)
 	turnRunner := NewTurnRunner(llm, stream, gate, tool.NewRegistry(), configStore)
 
+	modelLimits := NewModelLimitsRegistry()
+	modelLimits.LoadFromConfig(context.Background(), configStore)
+
 	e := &Engine{
 		sessions:      sessions,
 		turns:         turns,
@@ -91,7 +95,8 @@ func NewEngine(sessions *service.SessionManager, turns *service.TurnManager, pro
 		stream:        stream,
 		turnRunner:    turnRunner,
 		toolCatalog:   catalog,
-		compactionMgr: NewCompactionManager(llm, stream, configStore, checkpointStore),
+		compactionMgr: NewCompactionManager(llm, stream, configStore, checkpointStore, modelLimits),
+		modelLimits:   modelLimits,
 		configStore:   configStore,
 		dataDir:       dataDir,
 		turnMessages:  make(map[string][]Message),
@@ -424,7 +429,7 @@ func (e *Engine) afterTurn(sessionID, turnID, agentID string, rep domain.Report,
 		Summary: rep.Summary, Status: string(rep.Status),
 	})
 	turns, _ := e.turns.ListBySession(context.Background(), sessionID)
-	e.maybeCompact(context.Background(), sessionID, turnID, len(turns), messages, model)
+	e.maybeCompact(context.Background(), sessionID, turnID, len(turns), messages, model, rep.MaxPromptTokens)
 }
 
 func (e *Engine) updateSessionStatus(sessionID string, status domain.SessionStatus) {
@@ -437,9 +442,9 @@ func (e *Engine) updateSessionStatus(sessionID string, status domain.SessionStat
 	_ = e.sessions.UpdateSession(context.Background(), s)
 }
 
-func (e *Engine) maybeCompact(ctx context.Context, sessionID, turnID string, turnCount int, messages []Message, model string) {
+func (e *Engine) maybeCompact(ctx context.Context, sessionID, turnID string, turnCount int, messages []Message, model string, maxPromptTokens int) {
 	tokenEstimate := estimateTokenCount(messages)
-	if e.compactionMgr.ShouldCompact(sessionID, turnCount, tokenEstimate) {
+	if e.compactionMgr.ShouldCompact(sessionID, turnCount, tokenEstimate, maxPromptTokens, model) {
 		cutIdx := e.compactionMgr.Compact(ctx, sessionID, turnID, messages, turnCount, model)
 		if cutIdx > 0 {
 			e.mu.Lock()

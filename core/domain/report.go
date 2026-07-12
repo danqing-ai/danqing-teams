@@ -9,11 +9,12 @@ const (
 )
 
 type Report struct {
-	Status     ReportStatus `json:"status"`
-	Summary    string       `json:"summary"`
-	Confidence float64      `json:"confidence"`
-	StepsUsed  int          `json:"stepsUsed"`
-	TraceID    string       `json:"traceId,omitempty"`
-	WorkerID   string       `json:"workerId,omitempty"`
-	WorkerName string       `json:"workerName,omitempty"`
+	Status         ReportStatus `json:"status"`
+	Summary        string       `json:"summary"`
+	Confidence     float64      `json:"confidence"`
+	StepsUsed      int          `json:"stepsUsed"`
+	TraceID        string       `json:"traceId,omitempty"`
+	WorkerID       string       `json:"workerId,omitempty"`
+	WorkerName     string       `json:"workerName,omitempty"`
+	MaxPromptTokens int         `json:"maxPromptTokens,omitempty"` // actual max prompt tokens from LLM API
 }
