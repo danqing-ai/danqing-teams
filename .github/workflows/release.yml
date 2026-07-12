@@ -50,18 +50,15 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install dq-ui packages
-        run: |
-          npm install --no-audit --no-fund
-          npm run build
+      - name: Install & build dq-ui workspace
+        working-directory: dq-ui
+        run: npm install --no-audit --no-fund
+      - name: Build dq-ui packages
+        run: npm run build
         working-directory: dq-ui/packages/tokens
-      - run: |
-          npm install --no-audit --no-fund
-          npm run build
+      - run: npm run build
         working-directory: dq-ui/packages/ui
-      - run: |
-          npm install --no-audit --no-fund
-          npm run build
+      - run: npm run build
         working-directory: dq-ui/packages/shell
 
       - name: Set release version
@@ -116,18 +113,15 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Install dq-ui packages
-        run: |
-          npm install --no-audit --no-fund
-          npm run build
+      - name: Install & build dq-ui workspace
+        working-directory: dq-ui
+        run: npm install --no-audit --no-fund
+      - name: Build dq-ui packages
+        run: npm run build
         working-directory: dq-ui/packages/tokens
-      - run: |
-          npm install --no-audit --no-fund
-          npm run build
+      - run: npm run build
         working-directory: dq-ui/packages/ui
-      - run: |
-          npm install --no-audit --no-fund
-          npm run build
+      - run: npm run build
         working-directory: dq-ui/packages/shell
 
       - name: Set release version
@@ -192,18 +186,15 @@ jobs:
         run: choco install make -y --no-progress
         shell: pwsh
 
-      - name: Install dq-ui packages
-        run: |
-          npm install --no-audit --no-fund
-          npm run build
+      - name: Install & build dq-ui workspace
+        working-directory: dq-ui
+        run: npm install --no-audit --no-fund
+      - name: Build dq-ui packages
+        run: npm run build
         working-directory: dq-ui/packages/tokens
-      - run: |
-          npm install --no-audit --no-fund
-          npm run build
+      - run: npm run build
         working-directory: dq-ui/packages/ui
-      - run: |
-          npm install --no-audit --no-fund
-          npm run build
+      - run: npm run build
         working-directory: dq-ui/packages/shell
 
       - name: Verify dq-ui checkout
