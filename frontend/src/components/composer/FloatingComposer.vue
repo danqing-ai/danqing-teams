@@ -183,7 +183,7 @@ defineExpose({ focusInput })
 .composer-float {
   background: var(--dq-glass-popover-bg);
   border: 1px solid var(--dq-glass-border-strong);
-  border-radius: var(--dq-radius-menu, 18px);
+  border-radius: var(--dq-radius-menu);
   box-shadow: var(--dq-shadow-glass);
   -webkit-backdrop-filter: var(--dq-glass-blur-heavy);
   backdrop-filter: var(--dq-glass-blur-heavy);
@@ -207,7 +207,7 @@ defineExpose({ focusInput })
   background: transparent;
   box-shadow: none;
   padding: 16px 18px 10px;
-  font-size: 14px;
+  font-size: var(--dq-font-size-secondary);
   line-height: 1.55;
   color: var(--dq-label-primary);
 }
@@ -255,7 +255,7 @@ defineExpose({ focusInput })
   border-radius: 999px;
   background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
   color: var(--dq-label-secondary);
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   font-weight: 500;
   line-height: 1;
   cursor: pointer;
@@ -322,7 +322,7 @@ defineExpose({ focusInput })
   border: none;
   border-radius: 50%;
   background: var(--dq-accent);
-  color: var(--dq-bg-page, #fff);
+  color: var(--dq-color-white);
   cursor: pointer;
   transition: opacity 0.12s ease, transform 0.12s ease;
 }

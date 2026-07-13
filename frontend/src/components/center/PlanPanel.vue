@@ -67,9 +67,9 @@ function statusIcon(status: TodoItem['status']): string {
 
 function priorityColor(priority: TodoItem['priority']): string {
   switch (priority) {
-    case 'high': return '#e03e2d'
-    case 'medium': return '#d4a017'
-    case 'low': return '#2d8a56'
+    case 'high': return 'var(--dq-danger)'
+    case 'medium': return 'var(--dq-system-orange)'
+    case 'low': return 'var(--dq-success)'
   }
 }
 </script>
@@ -127,8 +127,8 @@ function priorityColor(priority: TodoItem['priority']): string {
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: var(--teams-glass-bg, rgba(255, 255, 255, 0.04));
-  font-size: 13px;
+  background: var(--teams-glass-bg);
+  font-size: var(--dq-font-size-body);
 }
 
 .plan-panel__head {
@@ -137,11 +137,11 @@ function priorityColor(priority: TodoItem['priority']): string {
   align-items: center;
   justify-content: flex-end;
   padding: 6px 12px 4px;
-  border-bottom: 1px solid var(--dq-separator-light, rgba(0, 0, 0, 0.06));
+  border-bottom: 1px solid var(--dq-separator-light);
 }
 
 .plan-panel__stats {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 500;
   color: var(--dq-label-secondary);
 }
@@ -154,7 +154,7 @@ function priorityColor(priority: TodoItem['priority']): string {
 
 .plan-panel__hint {
   margin-top: 6px;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-quaternary);
   line-height: 1.5;
 }
@@ -171,7 +171,7 @@ function priorityColor(priority: TodoItem['priority']): string {
 
 .plan-panel__group-label {
   padding: 6px 16px 2px;
-  font-size: 10px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -207,7 +207,7 @@ function priorityColor(priority: TodoItem['priority']): string {
 .plan-panel__item-icon {
   flex-shrink: 0;
   font-family: monospace;
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   line-height: 1.45;
 }
 
@@ -218,13 +218,13 @@ function priorityColor(priority: TodoItem['priority']): string {
 .plan-panel__progress {
   flex-shrink: 0;
   padding: 8px 16px;
-  border-top: 1px solid var(--dq-separator-light, rgba(0, 0, 0, 0.06));
+  border-top: 1px solid var(--dq-separator-light);
 }
 
 .plan-panel__progress-track {
   height: 3px;
   border-radius: 2px;
-  background: var(--dq-bg-container-hover, rgba(0, 0, 0, 0.06));
+  background: var(--dq-fill-on-glass-hover);
   overflow: hidden;
 }
 

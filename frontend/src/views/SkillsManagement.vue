@@ -495,7 +495,7 @@ function formatSize(bytes: number): string {
 }
 
 .resource-rail__section-title {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -515,7 +515,7 @@ function formatSize(bytes: number): string {
 
 .resource-rail__group-title {
   padding: 8px 12px 4px;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -539,7 +539,7 @@ function formatSize(bytes: number): string {
   border-radius: 9px;
   background: color-mix(in srgb, var(--dq-accent) 18%, transparent);
   color: var(--dq-accent);
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   margin-left: 4px;
 }
@@ -584,9 +584,9 @@ function formatSize(bytes: number): string {
   padding: 5px 8px;
   border: 1px solid var(--dq-border);
   border-radius: 6px;
-  background: var(--dq-bg-container);
+  background: var(--dq-fill-on-glass-subtle);
   color: var(--dq-label-primary);
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   font-family: inherit;
   outline: none;
 }
@@ -606,7 +606,7 @@ function formatSize(bytes: number): string {
   border-radius: 4px;
   background: transparent;
   color: var(--dq-label-tertiary);
-  font-size: 16px;
+  font-size: var(--dq-font-size-title);
   cursor: pointer;
 }
 
@@ -617,7 +617,7 @@ function formatSize(bytes: number): string {
   border-radius: 6px;
   background: transparent;
   color: var(--dq-accent);
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   font-weight: 500;
   cursor: pointer;
   transition: background 0.12s ease;
@@ -640,7 +640,7 @@ function formatSize(bytes: number): string {
 }
 
 .import-field__label {
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   font-weight: 500;
   color: var(--dq-label-secondary);
 }
@@ -650,15 +650,15 @@ function formatSize(bytes: number): string {
   padding: 8px 12px;
   border: 1px solid var(--dq-border);
   border-radius: 8px;
-  background: var(--dq-bg-container);
+  background: var(--dq-fill-on-glass-subtle);
   color: var(--dq-label-primary);
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   font-family: ui-monospace, monospace;
   outline: none;
 }
 
 .import-field__hint {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-tertiary);
 }
 
@@ -674,7 +674,7 @@ function formatSize(bytes: number): string {
   padding: 14px;
   border-radius: 8px;
   background: var(--dq-bg-page);
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   font-family: ui-monospace, monospace;
   line-height: 1.5;
   white-space: pre-wrap;

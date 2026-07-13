@@ -147,7 +147,7 @@ defineExpose({ refresh: loadRoot })
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
 }
 
 .file-tree__loading,
@@ -173,7 +173,7 @@ defineExpose({ refresh: loadRoot })
 
 .file-tree__item.is-selected > .file-tree__row {
   background: var(--dq-accent);
-  color: var(--dq-bg-page, #fff);
+  color: var(--dq-color-white)
 }
 
 .file-tree__row {
@@ -189,13 +189,13 @@ defineExpose({ refresh: loadRoot })
 }
 
 .file-tree__row:hover {
-  background: var(--dq-bg-container-hover, rgba(0, 0, 0, 0.04));
+  background: var(--dq-fill-on-glass-hover);
 }
 
 .file-tree__arrow {
   flex-shrink: 0;
   width: 14px;
-  font-size: 10px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-tertiary);
 }
 
@@ -207,7 +207,7 @@ defineExpose({ refresh: loadRoot })
 .file-tree__icon {
   flex-shrink: 0;
   width: 18px;
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   text-align: center;
 }
 
@@ -219,7 +219,7 @@ defineExpose({ refresh: loadRoot })
 
 .file-tree__size {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-quaternary);
 }
 </style>

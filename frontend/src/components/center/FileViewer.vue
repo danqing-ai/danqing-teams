@@ -104,9 +104,9 @@ function formatSize(bytes: number): string {
 .file-viewer__meta-bar {
   flex-shrink: 0;
   padding: 6px 12px;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-quaternary);
-  border-bottom: 1px solid var(--dq-separator-light, rgba(0, 0, 0, 0.06));
+  border-bottom: 1px solid var(--dq-separator-light);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -150,7 +150,7 @@ function formatSize(bytes: number): string {
   width: 100%;
   height: 100%;
   border: none;
-  background: var(--dq-bg-elevated, #fff);
+  background: var(--dq-bg-elevated);
 }
 
 .file-viewer__text {
@@ -159,12 +159,12 @@ function formatSize(bytes: number): string {
   margin: 0;
   padding: 12px 16px;
   font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-all;
   color: var(--dq-label-primary);
-  background: var(--dq-glass-bg, rgba(255, 255, 255, 0.03));
+  background: var(--dq-bg-base);
 }
 
 .file-viewer__binary {
@@ -175,7 +175,7 @@ function formatSize(bytes: number): string {
 
 .file-viewer__binary-meta {
   margin-top: 4px;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-quaternary);
 }
 </style>

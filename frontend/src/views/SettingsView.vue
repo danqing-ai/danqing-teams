@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Setting, Cpu, Search } from '@danqing/dq-shell'
+import { Setting, Cpu, Search, Brush } from '@danqing/dq-shell'
 import { useLLMStore } from '@/stores/llm'
 import { useSearchConfigStore } from '@/stores/searchConfig'
 import { useRuntimeConfigStore } from '@/stores/runtimeConfig'
 import { useModelLimitsStore } from '@/stores/modelLimits'
+import { useThemeStore, THEME_OPTIONS } from '@/stores/theme'
+import type { ThemeId } from '@/stores/theme'
 import { toast } from '@/utils/feedback'
 import type { LLMProviderType, LLMProviderConfig, LLMModelRef, LLMProviderPreset, SearchProvider, ModelLimit } from '@/types/mission'
 
-type SettingsTab = 'runtime' | 'models' | 'modelLimits' | 'search'
+type SettingsTab = 'runtime' | 'models' | 'modelLimits' | 'search' | 'appearance'
 
 const { t } = useI18n()
 const activeTab = ref<SettingsTab>('models')
@@ -17,6 +19,7 @@ const llm = useLLMStore()
 const searchConfig = useSearchConfigStore()
 const runtimeConfig = useRuntimeConfigStore()
 const modelLimits = useModelLimitsStore()
+const themeStore = useThemeStore()
 
 const providerOptions = computed<{ value: LLMProviderType; label: string }[]>(() => [
   { value: 'openai', label: 'OpenAI' },
@@ -142,18 +145,18 @@ function backToChoose() {
 }
 
 const presetColors: Record<string, string> = {
-  openai: '#10a37f',
-  anthropic: '#d97706',
-  deepseek: '#2563eb',
-  google: '#4285f4',
-  zhipu: '#7c3aed',
-  qwen: '#ea580c',
-  moonshot: '#6366f1',
-  ollama: '#475569',
+  openai: 'var(--dq-success)',
+  anthropic: 'var(--dq-warning)',
+  deepseek: 'var(--dq-accent)',
+  google: 'var(--dq-info)',
+  zhipu: 'var(--dq-danger)',
+  qwen: 'var(--dq-system-orange)',
+  moonshot: 'var(--dq-system-blue)',
+  ollama: 'var(--dq-label-secondary)',
 }
 
 function presetColor(id: string) {
-  return presetColors[id] ?? '#64748b'
+  return presetColors[id] ?? 'var(--dq-label-secondary)'
 }
 
 function presetAbbr(id: string) {
@@ -334,6 +337,7 @@ async function removeModelLimit(idx: number) {
 
 
 const menuItems = computed(() => [
+  { id: 'appearance' as SettingsTab, label: t('settings.appearance'), icon: Brush },
   { id: 'runtime' as SettingsTab, label: t('settings.runtime'), icon: Setting },
   { id: 'models' as SettingsTab, label: t('settings.models'), icon: Cpu },
   { id: 'modelLimits' as SettingsTab, label: t('settings.modelLimits'), icon: Setting },
@@ -365,7 +369,42 @@ const menuItems = computed(() => [
     </aside>
 
     <main class="settings-panel">
-      <div v-if="activeTab === 'runtime'" class="settings-section">
+      <div v-if="activeTab === 'appearance'" class="settings-section">
+        <header class="settings-section__head">
+          <h2>{{ $t('settings.appearance') }}</h2>
+          <p>{{ $t('settings.appearanceDesc') }}</p>
+        </header>
+
+        <div class="theme-grid">
+          <button
+            v-for="theme in THEME_OPTIONS"
+            :key="theme.id"
+            type="button"
+            class="theme-card"
+            :class="{ 'is-active': themeStore.currentTheme === theme.id }"
+            @click="themeStore.setTheme(theme.id as ThemeId)"
+          >
+            <div class="theme-card__preview">
+              <div class="theme-card__swatch" :style="{ background: theme.accent }"></div>
+              <div class="theme-card__bars">
+                <span class="theme-card__bar" :style="{ background: theme.accent, opacity: 0.8 }"></span>
+                <span class="theme-card__bar theme-card__bar--short" :style="{ background: theme.accent, opacity: 0.4 }"></span>
+              </div>
+            </div>
+            <div class="theme-card__info">
+              <span class="theme-card__name">{{ theme.label }}</span>
+              <span class="theme-card__desc">{{ theme.description }}</span>
+            </div>
+            <div v-if="themeStore.currentTheme === theme.id" class="theme-card__check">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <div v-else-if="activeTab === 'runtime'" class="settings-section">
         <header class="settings-section__head">
           <h2>{{ $t('settings.runtime') }}</h2>
           <p>{{ $t('settings.runtimeDesc') }}</p>
@@ -571,11 +610,14 @@ const menuItems = computed(() => [
         <div v-else class="settings-form">
           <label class="settings-field">
             <span class="settings-field__label">{{ $t('settings.searchProvider') }}</span>
-            <select v-model="searchForm.provider" class="settings-field__input">
-              <option v-for="opt in searchConfig.providerOptions" :key="opt.value" :value="opt.value">
-                {{ opt.label }}
-              </option>
-            </select>
+            <DqSelect v-model="searchForm.provider">
+              <DqOption
+                v-for="opt in searchConfig.providerOptions"
+                :key="opt.value"
+                :value="opt.value"
+                :label="opt.label"
+              />
+            </DqSelect>
           </label>
 
           <label class="settings-field">
@@ -714,9 +756,14 @@ const menuItems = computed(() => [
 
           <label v-if="!editingId" class="settings-field">
             <span class="settings-field__label">{{ $t('settings.protocolType') }}</span>
-            <select v-model="form.provider" class="settings-field__input">
-              <option v-for="opt in providerOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-            </select>
+            <DqSelect v-model="form.provider">
+              <DqOption
+                v-for="opt in providerOptions"
+                :key="opt.value"
+                :value="opt.value"
+                :label="opt.label"
+              />
+            </DqSelect>
           </label>
 
           <label class="settings-field">
@@ -798,11 +845,11 @@ const menuItems = computed(() => [
 
 /* Make DqInput visible with solid bg + clear border */
 .settings-view :deep(.dq-input) {
-  background: var(--dq-glass-control-bg-solid, var(--dq-fill-secondary));
-  border-color: var(--teams-glass-border, color-mix(in srgb, var(--dq-label-primary) 12%, transparent));
+  background: var(--dq-glass-control-bg-solid);
+  border-color: var(--teams-glass-border);
   height: 34px;
   min-height: 34px;
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
 }
 
 .settings-view :deep(.dq-input:hover:not(:disabled):not(:focus):not(:focus-visible)) {
@@ -811,7 +858,7 @@ const menuItems = computed(() => [
 
 .settings-view :deep(.dq-input:focus),
 .settings-view :deep(.dq-input:focus-visible) {
-  background: var(--dq-bg-primary);
+  background: var(--dq-bg-elevated);
   border-color: var(--dq-accent);
 }
 
@@ -819,50 +866,11 @@ const menuItems = computed(() => [
   opacity: 0.5;
 }
 
-/* Unify native <select> with DqInput */
-.settings-field__input {
-  height: 34px;
-  padding: 0 12px;
-  border-radius: 8px;
-  border: 1px solid var(--teams-glass-border, color-mix(in srgb, var(--dq-label-primary) 12%, transparent));
-  background: var(--dq-glass-control-bg-solid, var(--dq-fill-secondary));
-  color: var(--dq-label-primary);
-  font-size: 13px;
-  outline: none;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  padding-right: 28px;
-}
-
-.settings-field__input:focus {
-  border-color: var(--dq-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dq-accent) 15%, transparent);
-  background: var(--dq-bg-primary);
-}
-
-.settings-field__input:hover:not(:focus) {
-  border-color: color-mix(in srgb, var(--dq-label-primary) 22%, transparent);
-}
-
-/* Unify DqButton height with inputs */
-.settings-view :deep(.dq-btn) {
-  height: 34px;
-  font-size: 13px;
-}
-
-.settings-view :deep(.dq-btn--sm) {
-  height: 28px;
-  font-size: 12px;
-}
-
 .settings-sidebar {
   flex-shrink: 0;
   width: 200px;
-  border-right: 1px solid var(--teams-glass-border, rgba(0,0,0,0.06));
-  background: var(--teams-glass-bg, transparent);
+  border-right: 1px solid var(--teams-glass-border);
+  background: var(--teams-glass-bg);
   display: flex;
   flex-direction: column;
   padding: 16px 12px;
@@ -873,7 +881,7 @@ const menuItems = computed(() => [
 }
 
 .settings-sidebar__title {
-  font-size: 14px;
+  font-size: var(--dq-font-size-body);
   font-weight: 600;
   color: var(--dq-label-tertiary);
 }
@@ -893,7 +901,7 @@ const menuItems = computed(() => [
   border-radius: 8px;
   background: transparent;
   color: var(--dq-label-primary);
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   font-weight: 500;
   cursor: pointer;
   text-align: left;
@@ -930,14 +938,14 @@ const menuItems = computed(() => [
 
 .settings-section__head h2 {
   margin: 0 0 6px;
-  font-size: 20px;
+  font-size: var(--dq-font-size-heading);
   font-weight: 600;
   color: var(--dq-label-primary);
 }
 
 .settings-section__head p {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   color: var(--dq-label-tertiary);
 }
 
@@ -951,7 +959,7 @@ const menuItems = computed(() => [
   padding: 20px;
   border-radius: 12px;
   border: 1px solid var(--teams-glass-border);
-  background: var(--dq-bg-primary);
+  background: var(--dq-bg-elevated);
 }
 
 .settings-form-group + .settings-form-group {
@@ -960,14 +968,14 @@ const menuItems = computed(() => [
 
 .settings-form-group__title {
   margin: 0 0 4px;
-  font-size: 14px;
+  font-size: var(--dq-font-size-secondary);
   font-weight: 600;
   color: var(--dq-label-primary);
 }
 
 .settings-form-group__desc {
   margin: 0 0 16px;
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   color: var(--dq-label-tertiary);
   line-height: 1.5;
 }
@@ -1027,13 +1035,13 @@ const menuItems = computed(() => [
 }
 
 .settings-field__hint {
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   color: var(--dq-label-tertiary);
   line-height: 1.4;
 }
 
 .settings-field__label {
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   font-weight: 500;
   color: var(--dq-label-primary);
 }
@@ -1044,7 +1052,7 @@ const menuItems = computed(() => [
   gap: 10px;
   padding: 14px;
   border-radius: 12px;
-  background: var(--dq-bg-primary);
+  background: var(--dq-bg-elevated);
   border: 1px solid var(--teams-glass-border);
 }
 
@@ -1055,13 +1063,13 @@ const menuItems = computed(() => [
 }
 
 .model-list__title {
-  font-size: 13px;
+  font-size: var(--dq-font-size-secondary);
   font-weight: 600;
   color: var(--dq-label-primary);
 }
 
 .model-list__hint {
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   color: var(--dq-label-tertiary);
   line-height: 1.4;
 }
@@ -1097,7 +1105,7 @@ const menuItems = computed(() => [
   flex: 1;
   min-width: 0;
   color: var(--dq-label-primary);
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1120,7 +1128,7 @@ const menuItems = computed(() => [
 
 .settings-empty {
   padding: 20px;
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   color: var(--dq-label-tertiary);
   text-align: center;
   background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
@@ -1159,13 +1167,13 @@ const menuItems = computed(() => [
 }
 
 .provider-card__name {
-  font-size: 14px;
+  font-size: var(--dq-font-size-secondary);
   font-weight: 600;
   color: var(--dq-label-primary);
 }
 
 .provider-card__type {
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   color: var(--dq-label-tertiary);
 }
 
@@ -1187,9 +1195,9 @@ const menuItems = computed(() => [
   gap: 6px;
   padding: 5px 10px;
   border-radius: 8px;
-  background: var(--dq-bg-primary);
+  background: var(--dq-bg-elevated);
   border: 1px solid var(--teams-glass-border);
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
 }
 
 .provider-card__model.is-disabled {
@@ -1202,13 +1210,13 @@ const menuItems = computed(() => [
 }
 
 .provider-card__model-status {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-quaternary);
 }
 
 .provider-card__models-empty {
   padding: 8px 0;
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   color: var(--dq-label-tertiary);
   width: 100%;
 }
@@ -1221,7 +1229,7 @@ const menuItems = computed(() => [
 
 .preset-grid__hint {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   color: var(--dq-label-tertiary);
 }
 
@@ -1239,7 +1247,7 @@ const menuItems = computed(() => [
   padding: 16px 10px;
   border-radius: 12px;
   border: 1px solid var(--teams-glass-border);
-  background: var(--dq-bg-primary);
+  background: var(--dq-bg-elevated);
   cursor: pointer;
   transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
   text-align: center;
@@ -1247,7 +1255,7 @@ const menuItems = computed(() => [
 
 .preset-card:hover {
   border-color: var(--dq-accent);
-  background: color-mix(in srgb, var(--dq-accent) 4%, var(--dq-bg-primary));
+  background: color-mix(in srgb, var(--dq-accent) 4%, var(--dq-bg-elevated));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--dq-accent) 10%, transparent);
 }
 
@@ -1258,9 +1266,9 @@ const menuItems = computed(() => [
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   font-weight: 700;
-  color: var(--dq-bg-page, #fff);
+  color: var(--dq-color-white);
   letter-spacing: -0.5px;
 }
 
@@ -1269,13 +1277,13 @@ const menuItems = computed(() => [
 }
 
 .preset-card__name {
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   font-weight: 600;
   color: var(--dq-label-primary);
 }
 
 .preset-card__desc {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-tertiary);
   line-height: 1.3;
 }
@@ -1296,7 +1304,7 @@ const menuItems = computed(() => [
   border: none;
   background: none;
   padding: 4px 0;
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   color: var(--dq-accent);
   cursor: pointer;
 }
@@ -1320,7 +1328,7 @@ const menuItems = computed(() => [
   flex-shrink: 0;
   min-width: 36px;
   text-align: right;
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   font-weight: 500;
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
   color: var(--dq-label-secondary);
@@ -1340,7 +1348,7 @@ const menuItems = computed(() => [
   padding: 8px 12px;
   background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
   border-bottom: 1px solid var(--teams-glass-border);
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   font-weight: 600;
   color: var(--dq-label-secondary);
 }
@@ -1350,7 +1358,7 @@ const menuItems = computed(() => [
   align-items: center;
   padding: 10px 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--dq-label-primary) 5%, transparent);
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
 }
 
 .model-limit-list__row:last-child {
@@ -1366,7 +1374,7 @@ const menuItems = computed(() => [
   flex: 2;
   font-weight: 500;
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
 }
 
 .model-limit-list__col--actions {
@@ -1376,15 +1384,106 @@ const menuItems = computed(() => [
   justify-content: flex-end;
 }
 
-/* Make action buttons in model-limit-list smaller */
-.model-limit-list__col--actions :deep(.dq-btn) {
-  height: 26px;
-  font-size: 12px;
-  padding: 0 10px;
-}
-
 /* Provider card border visibility */
 .provider-card {
   border-color: color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
+}
+
+/* Theme grid */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.theme-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1.5px solid var(--teams-glass-border);
+  background: var(--dq-bg-elevated);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+}
+
+.theme-card:hover {
+  border-color: color-mix(in srgb, var(--dq-label-primary) 18%, transparent);
+  background: color-mix(in srgb, var(--dq-label-primary) 4%, var(--dq-bg-elevated));
+}
+
+.theme-card.is-active {
+  border-color: var(--dq-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dq-accent) 15%, transparent);
+}
+
+.theme-card__preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
+}
+
+.theme-card__swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.theme-card__bars {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.theme-card__bar {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  width: 100%;
+}
+
+.theme-card__bar--short {
+  width: 60%;
+}
+
+.theme-card__info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.theme-card__name {
+  font-size: var(--dq-font-size-body);
+  font-weight: 600;
+  color: var(--dq-label-primary);
+}
+
+.theme-card__desc {
+  font-size: var(--dq-font-size-caption);
+  color: var(--dq-label-tertiary);
+  line-height: 1.35;
+}
+
+.theme-card__check {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--dq-accent);
+  color: var(--dq-color-white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 </style>

@@ -313,6 +313,36 @@ function childTurnIdFromDelegate(ev: StreamEvent): string | null {
   return id || null
 }
 
+const delegateLinkMap = computed(() => {
+  const m = new Map<number, string>()
+  let lastDelegateSeq = -1
+  for (const turn of Object.values(turnMap.value)) {
+    for (const ev of turn.events) {
+      if (ev.type === '__tool_card__') {
+        const p = ev.payload as ToolCard
+        if (p.name === 'delegate_agent') lastDelegateSeq = ev.seq
+      } else if (ev.type === 'delegate.started' && lastDelegateSeq >= 0) {
+        const payload = asRecord(ev.payload)
+        const childTurnId = String(payload?.childTurnId ?? '')
+        if (childTurnId) m.set(lastDelegateSeq, childTurnId)
+        lastDelegateSeq = -1
+      }
+    }
+  }
+  return m
+})
+
+function delegateChildTurnId(seq: number): string | null {
+  return delegateLinkMap.value.get(seq) ?? null
+}
+
+function drillIntoChildTurnBySeq(seq: number) {
+  const childId = delegateChildTurnId(seq)
+  if (childId) {
+    currentTurnId.value = childId
+  }
+}
+
 function drillIntoChildTurn(ev: StreamEvent) {
   const childId = childTurnIdFromDelegate(ev)
   if (childId) {
@@ -933,11 +963,17 @@ function onTitleKeydown(e: KeyboardEvent) {
                       <div class="turn__tool-header" @click="toggleToolCard(ev.seq)">
                         <div class="turn__tool-meta">
                           <span class="turn__tool-step">{{ (ev.payload as ToolCard).stepNum }}</span>
-                          <span class="turn__tool-icon">⚙️</span>
                           <span class="turn__tool-name">{{ (ev.payload as ToolCard).name }}</span>
                           <span v-if="(ev.payload as ToolCard).description" class="turn__tool-desc">{{ (ev.payload as ToolCard).description }}</span>
                         </div>
-                        <DqTag :type="toolCardStatusType((ev.payload as ToolCard).status)" size="small">{{ toolCardStatusLabel((ev.payload as ToolCard).status) }}</DqTag>
+                        <div class="turn__tool-actions">
+                          <DqTag v-if="(ev.payload as ToolCard).status !== 'completed'" :type="toolCardStatusType((ev.payload as ToolCard).status)" size="small">{{ toolCardStatusLabel((ev.payload as ToolCard).status) }}</DqTag>
+                          <span
+                            v-if="(ev.payload as ToolCard).name === 'delegate_agent' && delegateChildTurnId(ev.seq)"
+                            class="turn__tool-link"
+                            @click.stop="drillIntoChildTurnBySeq(ev.seq)"
+                          >查看 →</span>
+                        </div>
                       </div>
                       <div v-show="isToolCardExpanded(ev.seq)" class="turn__tool-body">
                         <div v-if="(ev.payload as ToolCard).inputStr && (ev.payload as ToolCard).name !== 'ask_user'" class="turn__tool-section">
@@ -1093,22 +1129,7 @@ function onTitleKeydown(e: KeyboardEvent) {
                       </template>
                     </div>
 
-                    <div
-                      v-else-if="ev.type === 'delegate.started'"
-                      class="turn__delegate"
-                    >
-                      <span class="turn__delegate-avatar">{{ delegateAgent(ev).charAt(0).toUpperCase() }}</span>
-                      <div class="turn__delegate-body">
-                        <span class="turn__delegate-agent">{{ delegateAgent(ev) }}</span>
-                        <p class="turn__delegate-goal" :title="delegateGoal(ev)">{{ truncateText(delegateGoal(ev), 120) }}</p>
-                      </div>
-                      <span
-                        v-if="ev.type === 'delegate.started' && childTurnIdFromDelegate(ev)"
-                        class="turn__delegate-hint"
-                        @click="drillIntoChildTurn(ev)"
-                        >查看 →</span
-                      >
-                    </div>
+
 
                     <div v-else-if="ev.type === 'llm.usage'" class="turn__usage">
                       <span>tokens: {{ usageText(ev) }}</span>
@@ -1222,7 +1243,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   gap: 12px;
   padding: 12px 20px;
   border-bottom: 1px solid var(--teams-glass-border);
-  background: var(--teams-glass-bg, transparent);
+  background: var(--teams-glass-bg);
   backdrop-filter: blur(8px);
 }
 
@@ -1238,7 +1259,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   flex: 1;
   min-width: 0;
   margin: 0;
-  font-size: 15px;
+  font-size: var(--dq-font-size-title);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -1254,7 +1275,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 .session-workspace__title-input :deep(.dq-input) {
   height: 28px;
   padding: 0 8px;
-  font-size: 14px;
+  font-size: var(--dq-font-size-secondary);
 }
 
 .session-workspace__actions {
@@ -1272,7 +1293,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   height: 28px;
   padding: 0;
   border: none;
-  border-radius: var(--dq-radius-md, 6px);
+  border-radius: var(--dq-radius-button);
   background: transparent;
   color: var(--dq-label-secondary);
   cursor: pointer;
@@ -1280,7 +1301,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 }
 
 .session-workspace__copy-btn:hover {
-  background: var(--dq-fill-2);
+  background: var(--dq-fill-on-glass);
   color: var(--dq-accent);
 }
 
@@ -1310,7 +1331,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 
 .session-workspace__hint {
   margin: 8px 0 0;
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   color: var(--dq-label-tertiary);
 }
 
@@ -1344,7 +1365,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 }
 
 .turn-breadcrumbs__link {
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   color: var(--dq-label-secondary);
   background: none;
   border: none;
@@ -1373,7 +1394,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 
 .turn-breadcrumbs__sep {
   color: var(--dq-label-tertiary);
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
 }
 
 .turn {
@@ -1402,7 +1423,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 }
 
 .turn__number {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   color: var(--dq-label-tertiary);
   letter-spacing: 0.02em;
@@ -1417,16 +1438,16 @@ function onTitleKeydown(e: KeyboardEvent) {
   max-width: min(80%, 640px);
   padding: 12px 16px;
   border-radius: 12px;
-  font-size: 14px;
+  font-size: var(--dq-font-size-secondary);
   line-height: 1.55;
   color: var(--dq-label-primary);
-  background: var(--dq-bg-secondary);
+  background: var(--dq-bg-base);
   word-break: break-word;
 }
 
 .turn__bubble--user {
   background: var(--dq-accent);
-  color: var(--dq-bg-page, #fff);
+  color: var(--dq-color-white);
 }
 
 .turn__bubble p {
@@ -1442,11 +1463,11 @@ function onTitleKeydown(e: KeyboardEvent) {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
 }
 
 .turn__event {
-  font-size: 14px;
+  font-size: var(--dq-font-size-secondary);
   line-height: 1.6;
   color: var(--dq-label-primary);
 }
@@ -1463,20 +1484,20 @@ function onTitleKeydown(e: KeyboardEvent) {
   margin: 8px 0;
   padding: 12px;
   border-radius: 8px;
-  background: var(--dq-bg-secondary);
+  background: var(--dq-bg-base);
   overflow: auto;
 }
 
 .turn__report :deep(code) {
   font-family: var(--dq-font-mono);
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
 }
 
 .turn__report :deep(table) {
   width: 100%;
   border-collapse: collapse;
   margin: 10px 0;
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
 }
 
 .turn__report :deep(th),
@@ -1497,8 +1518,8 @@ function onTitleKeydown(e: KeyboardEvent) {
   gap: 8px;
   padding: 6px 10px;
   border-radius: 8px;
-  background: var(--dq-bg-secondary);
-  font-size: 12px;
+  background: var(--dq-bg-base);
+  font-size: var(--dq-font-size-footnote);
   color: var(--dq-label-secondary);
 }
 
@@ -1511,7 +1532,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 }
 
 .turn__skill {
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   color: var(--dq-label-tertiary);
 }
 
@@ -1525,7 +1546,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   border: 1px solid var(--dq-warning);
   background: color-mix(in srgb, var(--dq-warning) 8%, transparent);
   color: var(--dq-label-primary);
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
 }
 
 .turn__permission-actions {
@@ -1536,7 +1557,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 
 .turn__permission-resolved {
   margin-left: auto;
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   font-weight: 500;
   color: var(--dq-label-secondary);
   opacity: 0.7;
@@ -1547,23 +1568,20 @@ function onTitleKeydown(e: KeyboardEvent) {
 .turn__event-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0;
 }
 
 .turn__answer {
-  border-radius: 12px;
-  border: 1px solid var(--teams-glass-border);
-  background: var(--dq-bg-secondary);
-  padding: 14px 16px;
+  padding: 12px 4px;
 }
 
 .turn__answer-label {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   color: var(--dq-label-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .turn__report-meta {
@@ -1572,7 +1590,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   align-items: center;
   gap: 8px 12px;
   padding: 8px 0;
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   color: var(--dq-label-tertiary);
 }
 
@@ -1585,7 +1603,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 .turn__report-meta-summary {
   flex-basis: 100%;
   margin-top: 8px;
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   line-height: 1.5;
   color: var(--dq-label-secondary);
 }
@@ -1595,7 +1613,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   align-items: center;
   gap: 10px;
   padding: 6px 0;
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
 }
 
 .turn__step-badge {
@@ -1605,7 +1623,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   flex-shrink: 0;
   border: 1.5px solid var(--dq-accent);
@@ -1622,7 +1640,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 }
 
 .turn__step-status-text {
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   color: var(--dq-label-secondary);
   white-space: nowrap;
 }
@@ -1637,7 +1655,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 
 .turn__step[data-step-phase='end'] .turn__step-badge {
   background: var(--dq-accent);
-  color: var(--dq-bg-page, #fff);
+  color: var(--dq-color-white);
   border-color: var(--dq-accent);
 }
 
@@ -1646,13 +1664,13 @@ function onTitleKeydown(e: KeyboardEvent) {
 }
 
 .turn__step[data-step-phase='failed'] .turn__step-badge {
-  background: color-mix(in srgb, var(--dq-danger, #ff453a) 12%, transparent);
-  border-color: var(--dq-danger, #ff453a);
-  color: var(--dq-danger, #ff453a);
+  background: color-mix(in srgb, var(--dq-danger) 12%, transparent);
+  border-color: var(--dq-danger);
+  color: var(--dq-danger);
 }
 
 .turn__step[data-step-phase='failed'] .turn__step-status-text {
-  color: var(--dq-danger, #ff453a);
+  color: var(--dq-danger);
   font-weight: 500;
 }
 
@@ -1662,9 +1680,8 @@ function onTitleKeydown(e: KeyboardEvent) {
 }
 
 .turn__tool-card {
-  border-radius: 10px;
-  border: 1px solid var(--teams-glass-border, rgba(0, 0, 0, 0.06));
-  background: var(--dq-bg-secondary);
+  border: none;
+  background: transparent;
   overflow: hidden;
 }
 
@@ -1673,15 +1690,17 @@ function onTitleKeydown(e: KeyboardEvent) {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--teams-glass-border);
-  background: color-mix(in srgb, var(--dq-label-primary) 3%, transparent);
+  padding: 7px 4px;
+  border-bottom: none;
+  background: transparent;
   cursor: pointer;
   user-select: none;
+  border-radius: 6px;
+  transition: background 0.12s ease;
 }
 
 .turn__tool-header:hover {
-  background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
+  background: color-mix(in srgb, var(--dq-label-primary) 5%, transparent);
 }
 
 .turn__tool-meta {
@@ -1693,30 +1712,61 @@ function onTitleKeydown(e: KeyboardEvent) {
 
 .turn__tool-step {
   flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--dq-bg-page);
-  background: var(--dq-accent);
+  font-size: var(--dq-font-size-footnote);
+  font-weight: 500;
+  color: var(--dq-label-tertiary);
+  min-width: 20px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .turn__tool-icon {
-  font-size: 14px;
-  flex-shrink: 0;
+  display: none;
 }
 
 .turn__tool-name {
-  font-weight: 600;
-  font-size: 13px;
+  font-weight: 500;
+  font-size: var(--dq-font-size-secondary);
   color: var(--dq-label-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.turn__tool-desc {
+  font-size: var(--dq-font-size-caption);
+  color: var(--dq-label-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40ch;
+}
+
+.turn__tool-card :deep(.dq-tag) {
+  font-size: 10px;
+  padding: 1px 6px;
+  opacity: 0.7;
+}
+
+.turn__tool-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.turn__tool-link {
+  font-size: var(--dq-font-size-caption);
+  color: var(--dq-accent);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: opacity 0.12s ease;
+}
+
+.turn__tool-link:hover {
+  opacity: 0.8;
 }
 
 .turn__tool-body {
@@ -1736,7 +1786,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 }
 
 .turn__tool-section-label {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 500;
   color: var(--dq-label-tertiary);
   flex-shrink: 0;
@@ -1744,7 +1794,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 }
 
 .turn__tool-section--error .turn__tool-section-label {
-  color: var(--dq-danger, #ff453a);
+  color: var(--dq-danger);
 }
 
 .turn__tool-fields {
@@ -1764,14 +1814,14 @@ function onTitleKeydown(e: KeyboardEvent) {
 
 .turn__tool-field-key {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   color: var(--dq-label-secondary);
   font-family: var(--dq-font-mono);
 }
 
 .turn__tool-field-val {
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   color: var(--dq-label-primary);
   white-space: pre-wrap;
   word-break: break-word;
@@ -1788,7 +1838,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   border-radius: 6px;
   background: color-mix(in srgb, var(--dq-label-primary) 5%, transparent);
   font-family: var(--dq-font-mono);
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   line-height: 1.5;
   color: var(--dq-label-secondary);
   white-space: pre-wrap;
@@ -1805,25 +1855,30 @@ function onTitleKeydown(e: KeyboardEvent) {
   border-radius: 16px;
   background: color-mix(in srgb, var(--dq-accent) 10%, transparent);
   color: var(--dq-accent);
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   font-weight: 500;
   width: fit-content;
 }
 
 .turn__skill-icon {
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
 }
 
 .turn__delegate {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 14px;
-  border-radius: 10px;
-  border: 1px solid var(--teams-glass-border);
-  background: var(--dq-bg-secondary);
+  padding: 7px 4px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
   color: var(--dq-label-secondary);
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
+  transition: background 0.12s ease;
+}
+
+.turn__delegate:hover {
+  background: color-mix(in srgb, var(--dq-label-primary) 5%, transparent);
 }
 
 .turn__delegate-avatar {
@@ -1834,10 +1889,10 @@ function onTitleKeydown(e: KeyboardEvent) {
   width: 28px;
   height: 28px;
   border-radius: 7px;
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   font-weight: 700;
-  color: #fff;
-  background: var(--dq-accent, #4f80ff);
+  color: var(--dq-color-white);
+  background: var(--dq-accent);
 }
 
 .turn__delegate-body {
@@ -1849,14 +1904,14 @@ function onTitleKeydown(e: KeyboardEvent) {
 }
 
 .turn__delegate-agent {
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   font-weight: 600;
-  color: var(--dq-accent, #4f80ff);
+  color: var(--dq-accent);
 }
 
 .turn__delegate-goal {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   line-height: 1.5;
   color: var(--dq-label-primary);
   overflow: hidden;
@@ -1866,7 +1921,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 
 .turn__delegate-hint {
   margin-left: auto;
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   color: var(--dq-accent);
   font-weight: 600;
   cursor: pointer;
@@ -1882,7 +1937,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 }
 
 .turn__usage {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-tertiary);
   padding: 4px 0;
   text-align: right;
@@ -1896,12 +1951,12 @@ function onTitleKeydown(e: KeyboardEvent) {
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--dq-accent) 30%, transparent);
   background: color-mix(in srgb, var(--dq-accent) 6%, transparent);
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   line-height: 1.5;
 }
 
 .turn__compaction-icon {
-  font-size: 16px;
+  font-size: var(--dq-font-size-title);
   flex-shrink: 0;
   margin-top: 1px;
 }
@@ -1927,13 +1982,13 @@ function onTitleKeydown(e: KeyboardEvent) {
   align-items: flex-start;
   gap: 8px;
   padding: 6px 0;
-  color: var(--dq-text-danger, #c0392b);
-  font-size: 13px;
+  color: var(--dq-danger);
+  font-size: var(--dq-font-size-body);
   line-height: 1.5;
 }
 
 .turn__error-icon {
-  font-size: 14px;
+  font-size: var(--dq-font-size-secondary);
   flex-shrink: 0;
   margin-top: 1px;
 }
@@ -1949,9 +2004,9 @@ function onTitleKeydown(e: KeyboardEvent) {
   padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid var(--teams-glass-border);
-  background: var(--dq-bg-secondary);
+  background: var(--dq-bg-base);
   color: var(--dq-label-primary);
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
 }
 
 .turn__ask-user-header {
@@ -1961,7 +2016,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 }
 
 .turn__ask-user-icon {
-  font-size: 14px;
+  font-size: var(--dq-font-size-secondary);
   flex-shrink: 0;
 }
 
@@ -1973,7 +2028,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-tertiary);
 }
 
@@ -1986,7 +2041,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 
 .turn__ask-user-callid-value {
   font-family: var(--dq-font-mono);
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
   padding: 1px 6px;
   border-radius: 4px;
@@ -2003,7 +2058,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 }
 
 .turn__ask-user-answer-label {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 500;
   color: var(--dq-label-tertiary);
   text-transform: uppercase;
@@ -2012,7 +2067,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 
 .turn__ask-user-answer-text {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   color: var(--dq-label-primary);
   line-height: 1.5;
   white-space: pre-wrap;
@@ -2037,9 +2092,9 @@ function onTitleKeydown(e: KeyboardEvent) {
   padding: 0 10px;
   border-radius: 8px;
   border: 1px solid var(--teams-glass-border);
-  background: var(--dq-bg-secondary);
+  background: var(--dq-bg-base);
   color: var(--dq-label-primary);
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   outline: none;
 }
 
@@ -2064,13 +2119,13 @@ function onTitleKeydown(e: KeyboardEvent) {
 }
 
 .turn__ask-user-form-label {
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   font-weight: 500;
   color: var(--dq-label-secondary);
 }
 
 .turn__ask-user-form-required {
-  color: var(--dq-danger, #ff453a);
+  color: var(--dq-danger);
   margin-left: 2px;
 }
 
@@ -2079,9 +2134,9 @@ function onTitleKeydown(e: KeyboardEvent) {
   padding: 0 10px;
   border-radius: 6px;
   border: 1px solid var(--teams-glass-border);
-  background: var(--dq-bg-primary);
+  background: var(--dq-bg-elevated);
   color: var(--dq-label-primary);
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   outline: none;
 }
 
@@ -2149,7 +2204,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 .session-workspace__right-tab {
   flex: 1;
   padding: 8px 0;
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   font-weight: 500;
   color: var(--dq-label-secondary);
   background: none;
@@ -2169,7 +2224,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 }
 
 .session-workspace__right-tab-refresh {
-  font-size: 14px;
+  font-size: var(--dq-font-size-secondary);
   margin-left: 4px;
   opacity: 0.5;
 }
@@ -2191,7 +2246,8 @@ function onTitleKeydown(e: KeyboardEvent) {
   min-height: 0;
 }
 
-.session-workspace__right > :deep(.file-tree) {
+.session-workspace__right > :deep(.experts-panel),
+.session-workspace__right > :deep(.changes-panel) {
   flex: 1;
   min-height: 0;
 }
@@ -2217,7 +2273,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   justify-content: space-between;
   padding: 6px 8px 6px 14px;
   border-bottom: 1px solid var(--dq-separator-light);
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   font-weight: 500;
   color: var(--dq-label-secondary);
 }
@@ -2233,7 +2289,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   background: none;
   border: none;
   color: var(--dq-label-tertiary);
-  font-size: 14px;
+  font-size: var(--dq-font-size-secondary);
   width: 24px;
   height: 24px;
   border-radius: 4px;
@@ -2256,7 +2312,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 .session-workspace__right-empty {
   padding: 24px 16px;
   text-align: center;
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   color: var(--dq-label-tertiary);
 }
 
@@ -2265,7 +2321,6 @@ function onTitleKeydown(e: KeyboardEvent) {
   bottom: 0;
   z-index: 10;
   padding: 24px 0 18px;
-  background: linear-gradient(to top, var(--dq-bg-page) 0%, var(--dq-bg-page) 55%, transparent 100%);
   pointer-events: none;
 }
 
@@ -2291,6 +2346,6 @@ function onTitleKeydown(e: KeyboardEvent) {
 
 .turn__download-btn:hover {
   background: var(--dq-border);
-  color: var(--dq-label);
+  color: var(--dq-label-primary);
 }
 </style>

@@ -112,7 +112,7 @@ const reports = computed(() =>
 .agent-inspector__title {
   flex: 1;
   margin: 0;
-  font-size: 14px;
+  font-size: var(--dq-font-size-title);
   font-weight: 650;
   color: var(--dq-label-primary);
 }
@@ -127,7 +127,7 @@ const reports = computed(() =>
 
 .agent-inspector__tabs button {
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   border: none;
   border-bottom: 2px solid transparent;
   background: transparent;
@@ -166,7 +166,7 @@ const reports = computed(() =>
 .agent-inspector__content li {
   padding: 8px 0;
   border-bottom: 1px solid color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -174,11 +174,11 @@ const reports = computed(() =>
 
 .muted {
   color: var(--dq-label-tertiary);
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
 }
 
 pre {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   overflow: auto;
   margin: 0 0 8px;
 }

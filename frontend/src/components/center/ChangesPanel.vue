@@ -132,8 +132,8 @@ function changeLabel(c: GitFileChange): string {
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: var(--teams-glass-bg, rgba(255, 255, 255, 0.04));
-  font-size: 13px;
+  background: var(--teams-glass-bg);
+  font-size: var(--dq-font-size-body);
 }
 
 .changes-panel__empty {
@@ -144,7 +144,7 @@ function changeLabel(c: GitFileChange): string {
 
 .changes-panel__hint {
   margin-top: 8px;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-quaternary);
   line-height: 1.5;
 }
@@ -160,14 +160,14 @@ function changeLabel(c: GitFileChange): string {
   align-items: center;
   gap: 6px;
   padding: 8px 14px 12px;
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   font-weight: 600;
   color: var(--dq-label-primary);
-  border-bottom: 1px solid var(--dq-separator-light, rgba(0, 0, 0, 0.06));
+  border-bottom: 1px solid var(--dq-separator-light);
 }
 
 .changes-panel__branch-icon {
-  font-size: 14px;
+  font-size: var(--dq-font-size-secondary);
   color: var(--dq-accent);
 }
 
@@ -177,7 +177,7 @@ function changeLabel(c: GitFileChange): string {
 
 .changes-panel__group-label {
   padding: 8px 14px 4px;
-  font-size: 10px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -205,28 +205,28 @@ function changeLabel(c: GitFileChange): string {
   align-items: center;
   justify-content: center;
   border-radius: 4px;
-  font-size: 10px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 700;
   font-family: var(--dq-font-mono);
-  color: #fff;
+  color: var(--dq-color-white);
   background: color-mix(in srgb, var(--dq-label-secondary) 60%, transparent);
 }
 
 .changes-panel__item.is-modified .changes-panel__item-status {
-  background: #d4a017;
+  background: var(--dq-system-orange);
 }
 
 .changes-panel__item.is-added .changes-panel__item-status {
-  background: var(--dq-success, #2d8a56);
+  background: var(--dq-success);
 }
 
 .changes-panel__item.is-deleted .changes-panel__item-status {
-  background: var(--dq-danger, #e03e2d);
+  background: var(--dq-danger);
 }
 
 .changes-panel__item.is-renamed .changes-panel__item-status,
 .changes-panel__item.is-copied .changes-panel__item-status {
-  background: var(--dq-accent, #4f80ff);
+  background: var(--dq-accent);
 }
 
 .changes-panel__item.is-untracked .changes-panel__item-status {
@@ -235,7 +235,7 @@ function changeLabel(c: GitFileChange): string {
 
 .changes-panel__item-file {
   word-break: break-word;
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   font-family: var(--dq-font-mono);
 }
 </style>

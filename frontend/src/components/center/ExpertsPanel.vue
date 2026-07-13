@@ -148,8 +148,8 @@ function statusClass(status: Expert['status']): string {
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: var(--teams-glass-bg, rgba(255, 255, 255, 0.04));
-  font-size: 13px;
+  background: var(--teams-glass-bg);
+  font-size: var(--dq-font-size-body);
 }
 
 .experts-panel__empty {
@@ -160,7 +160,7 @@ function statusClass(status: Expert['status']): string {
 
 .experts-panel__hint {
   margin-top: 8px;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-quaternary);
   line-height: 1.5;
 }
@@ -209,9 +209,9 @@ function statusClass(status: Expert['status']): string {
   width: 24px;
   height: 24px;
   border-radius: 6px;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 700;
-  color: var(--dq-bg-page);
+  color: var(--dq-color-white);
   background: var(--dq-accent);
   text-transform: uppercase;
 }
@@ -221,7 +221,7 @@ function statusClass(status: Expert['status']): string {
 }
 
 .expert--failed .expert__avatar {
-  background: var(--dq-danger, #ff453a);
+  background: var(--dq-danger);
 }
 
 .expert--cancelled .expert__avatar {
@@ -230,7 +230,7 @@ function statusClass(status: Expert['status']): string {
 
 .expert__name {
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   color: var(--dq-label-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -239,7 +239,7 @@ function statusClass(status: Expert['status']): string {
 
 .expert__status-badge {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 10px;
@@ -259,8 +259,8 @@ function statusClass(status: Expert['status']): string {
 }
 
 .expert--failed .expert__status-badge {
-  background: color-mix(in srgb, var(--dq-danger, #ff453a) 15%, transparent);
-  color: var(--dq-danger, #ff453a);
+  background: color-mix(in srgb, var(--dq-danger) 15%, transparent);
+  color: var(--dq-danger);
 }
 
 .expert--cancelled .expert__status-badge {
@@ -270,7 +270,7 @@ function statusClass(status: Expert['status']): string {
 
 .expert__goal {
   margin-top: 8px;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-secondary);
   line-height: 1.5;
   word-break: break-word;
@@ -288,7 +288,7 @@ function statusClass(status: Expert['status']): string {
 }
 
 .expert__steps {
-  font-size: 10px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-tertiary);
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
   background: color-mix(in srgb, var(--dq-label-primary) 5%, transparent);
@@ -299,11 +299,11 @@ function statusClass(status: Expert['status']): string {
 .experts-panel__footer {
   flex-shrink: 0;
   padding: 10px 12px;
-  border-top: 1px solid var(--dq-separator-light, rgba(0, 0, 0, 0.06));
+  border-top: 1px solid var(--dq-separator-light);
 }
 
 .experts-panel__stats {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   color: var(--dq-label-secondary);
 }

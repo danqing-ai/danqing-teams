@@ -471,7 +471,7 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
 }
 
 .resource-rail__section-title {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -491,7 +491,7 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
 
 .resource-rail__group-title {
   padding: 8px 12px 4px;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -519,7 +519,7 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
   background: color-mix(in srgb, var(--dq-bg-elevated) 65%, transparent);
   color: var(--dq-label-primary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
 }
 
 .resource-list-card__actions .resource-list-card__risk {
@@ -541,7 +541,7 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
   flex-shrink: 0;
   min-width: 36px;
   text-align: right;
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   font-weight: 500;
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
   color: var(--dq-label-secondary);

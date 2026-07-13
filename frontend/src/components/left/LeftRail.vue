@@ -402,7 +402,7 @@ watch(() => projects.projects.length, (len) => {
                         <DqDropdownMenu>
                           <DqDropdownItem @select="archiveSession(t_.id)">归档</DqDropdownItem>
                           <DqDropdownItem @select="deleteSession(t_.id)">
-                            <span style="color:var(--dq-color-danger)">删除</span>
+                            <span style="color:var(--dq-danger)">删除</span>
                           </DqDropdownItem>
                         </DqDropdownMenu>
                       </template>
@@ -512,7 +512,7 @@ watch(() => projects.projects.length, (len) => {
 }
 
 .module-sidebar__brand-title {
-  font-size: 14px;
+  font-size: var(--dq-font-size-secondary);
   font-weight: 650;
   letter-spacing: -0.02em;
   color: var(--dq-label-primary);
@@ -550,7 +550,7 @@ watch(() => projects.projects.length, (len) => {
 }
 
 .module-sidebar__section-title {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -592,7 +592,7 @@ watch(() => projects.projects.length, (len) => {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   font-weight: 500;
   color: var(--dq-label-secondary);
 }
@@ -605,11 +605,11 @@ watch(() => projects.projects.length, (len) => {
 .new-project-field__input {
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid var(--dq-border, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--dq-border);
   border-radius: 8px;
-  background: var(--dq-bg-container, rgba(255, 255, 255, 0.04));
+  background: var(--dq-fill-on-glass-subtle);
   color: var(--dq-label-primary);
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   font-family: inherit;
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -630,18 +630,18 @@ watch(() => projects.projects.length, (len) => {
 .new-project-field__browse {
   flex-shrink: 0;
   padding: 7px 12px;
-  border: 1px solid var(--dq-border, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--dq-border);
   border-radius: 8px;
-  background: var(--dq-bg-container, rgba(255, 255, 255, 0.06));
+  background: var(--dq-fill-on-glass-subtle);
   color: var(--dq-label-secondary);
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   cursor: pointer;
   transition: background 0.12s ease, color 0.12s ease;
   white-space: nowrap;
 }
 
 .new-project-field__browse:hover {
-  background: var(--dq-bg-container-hover, rgba(255, 255, 255, 0.1));
+  background: var(--dq-fill-on-glass-hover);
   color: var(--dq-label-primary);
 }
 
@@ -655,7 +655,7 @@ watch(() => projects.projects.length, (len) => {
 }
 
 .new-project-field__hint {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-tertiary);
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
   padding-left: 2px;
@@ -669,7 +669,7 @@ watch(() => projects.projects.length, (len) => {
 
 .module-sidebar__empty {
   padding: 8px 6px;
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   color: var(--dq-label-tertiary);
 }
 
@@ -740,7 +740,7 @@ watch(() => projects.projects.length, (len) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   font-weight: 500;
 }
 
@@ -791,7 +791,7 @@ watch(() => projects.projects.length, (len) => {
   border-radius: 6px;
   background: transparent;
   color: var(--dq-label-secondary);
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   cursor: pointer;
   text-align: left;
   flex: 1;
@@ -871,7 +871,7 @@ watch(() => projects.projects.length, (len) => {
 
 .project-tree__session-time {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-tertiary);
   padding-left: 8px;
 }
@@ -911,7 +911,7 @@ watch(() => projects.projects.length, (len) => {
   border-radius: 8px;
   background: transparent;
   color: var(--dq-label-primary);
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   font-weight: 500;
   cursor: pointer;
   text-align: left;
@@ -954,7 +954,7 @@ watch(() => projects.projects.length, (len) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: var(--dq-font-size-footnote);
   font-weight: 600;
   background: color-mix(in srgb, var(--dq-accent) 20%, transparent);
   color: var(--dq-accent);
@@ -963,7 +963,7 @@ watch(() => projects.projects.length, (len) => {
 
 .module-sidebar__version {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-tertiary);
   white-space: nowrap;
   padding: 0 4px;
@@ -977,7 +977,7 @@ watch(() => projects.projects.length, (len) => {
 }
 
 .module-sidebar__name {
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   font-weight: 600;
   color: var(--dq-label-primary);
   white-space: nowrap;
@@ -986,7 +986,7 @@ watch(() => projects.projects.length, (len) => {
 }
 
 .module-sidebar__plan {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-tertiary);
 }
 
