@@ -298,7 +298,7 @@ function openEditModelLimit(idx: number) {
   showModelLimitForm.value = true
 }
 
-function saveModelLimitForm() {
+async function saveModelLimitForm() {
   if (!modelLimitForm.value.model.trim()) return
   const entry: ModelLimit = {
     model: modelLimitForm.value.model.trim(),
@@ -308,7 +308,6 @@ function saveModelLimitForm() {
   if (editingModelLimitIdx.value !== null) {
     modelLimitsForm.value[editingModelLimitIdx.value] = entry
   } else {
-    // Check for duplicate model name
     const existing = modelLimitsForm.value.findIndex((l) => l.model === entry.model)
     if (existing >= 0) {
       modelLimitsForm.value[existing] = entry
@@ -317,19 +316,22 @@ function saveModelLimitForm() {
     }
   }
   showModelLimitForm.value = false
-}
-
-function removeModelLimit(idx: number) {
-  modelLimitsForm.value.splice(idx, 1)
-}
-
-async function handleSaveModelLimits() {
   try {
     await modelLimits.save(modelLimitsForm.value)
   } catch {
     /* toast already shown in store */
   }
 }
+
+async function removeModelLimit(idx: number) {
+  modelLimitsForm.value.splice(idx, 1)
+  try {
+    await modelLimits.save(modelLimitsForm.value)
+  } catch {
+    /* toast already shown in store */
+  }
+}
+
 
 const menuItems = computed(() => [
   { id: 'runtime' as SettingsTab, label: t('settings.runtime'), icon: Setting },
@@ -643,12 +645,6 @@ const menuItems = computed(() => [
           </div>
 
           <div v-else class="settings-empty">{{ $t('settings.noModelLimits') }}</div>
-
-          <div class="settings-actions" style="margin-top: 16px">
-            <DqButton type="primary" :disabled="modelLimits.saving" @click="handleSaveModelLimits">
-              {{ modelLimits.saving ? $t('common.saving') : $t('common.save_') }}
-            </DqButton>
-          </div>
         </div>
       </div>
 

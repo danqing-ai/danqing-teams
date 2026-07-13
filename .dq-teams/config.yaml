@@ -55,7 +55,6 @@ llm:
           icon: "\U0001F999"
           description: 本地模型，通过 Ollama 运行
     model_limits:
-        # OpenAI
         - model: gpt-5.5
           context_window: 272000
           max_output: 128000
@@ -104,7 +103,6 @@ llm:
         - model: o1-pro
           context_window: 200000
           max_output: 100000
-        # Anthropic
         - model: claude-sonnet-5
           context_window: 1000000
           max_output: 128000
@@ -135,7 +133,6 @@ llm:
         - model: claude-haiku-4-5
           context_window: 200000
           max_output: 64000
-        # DeepSeek
         - model: deepseek-v4-pro
           context_window: 1000000
           max_output: 384000
@@ -151,7 +148,6 @@ llm:
         - model: deepseek-chat
           context_window: 64000
           max_output: 8192
-        # Google
         - model: gemini-3.5-flash
           context_window: 1048576
           max_output: 65536
@@ -170,7 +166,6 @@ llm:
         - model: gemini-2.0-flash
           context_window: 1048576
           max_output: 8192
-        # GLM (Zhipu)
         - model: glm-5.2
           context_window: 1000000
           max_output: 131072
@@ -186,7 +181,6 @@ llm:
         - model: glm-4
           context_window: 128000
           max_output: 4096
-        # Qwen
         - model: qwen3.6-plus
           context_window: 262144
           max_output: 65536
@@ -208,7 +202,6 @@ llm:
         - model: qwen-max
           context_window: 32000
           max_output: 8192
-        # Kimi / Moonshot
         - model: kimi-k2.7-code
           context_window: 262144
           max_output: 262144
@@ -233,7 +226,7 @@ llm:
 runtime:
     autoapprove: false
     turn:
-        doomloopthreshold: 3
+        doomloopthreshold: 5
         maxstepsdefault: 20
     team:
         maxdelegationdepth: 3

@@ -300,8 +300,12 @@ function onKeydown(e: KeyboardEvent) {
         </div>
         <div v-if="!isCreating" class="resource-form-grid resource-form-grid--2">
           <label class="resource-field resource-field--toggle">
-            <input type="checkbox" v-model="form.enabled" />
             <span class="resource-field__label">{{ $t('mcpServers.enabled') }}</span>
+            <DqSwitch
+              :model-value="form.enabled"
+              size="small"
+              @update:model-value="(v: boolean) => form.enabled = v"
+            />
           </label>
         </div>
       </section>

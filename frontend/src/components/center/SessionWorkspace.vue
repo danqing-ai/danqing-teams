@@ -1047,14 +1047,12 @@ function onTitleKeydown(e: KeyboardEvent) {
                                 <option value="" disabled>请选择...</option>
                                 <option v-for="opt in field.options ?? []" :key="opt" :value="opt">{{ opt }}</option>
                               </select>
-                              <label v-else-if="field.type === 'boolean'" class="turn__ask-user-form-toggle">
-                                <input
-                                  type="checkbox"
-                                  :checked="Boolean((initFormValues(askUserId(ev.payload), askUserFormFields(ev.payload)), askUserFormValues[askUserId(ev.payload)]?.[field.name]))"
-                                  @change="askUserFormValues[askUserId(ev.payload)][field.name] = ($event.target as HTMLInputElement).checked"
-                                />
-                                <span class="turn__ask-user-form-toggle-slider"></span>
-                              </label>
+                              <DqSwitch
+                                v-else-if="field.type === 'boolean'"
+                                :model-value="Boolean((initFormValues(askUserId(ev.payload), askUserFormFields(ev.payload)), askUserFormValues[askUserId(ev.payload)]?.[field.name]))"
+                                size="small"
+                                @update:model-value="(v: boolean) => askUserFormValues[askUserId(ev.payload)][field.name] = v"
+                              />
                             </label>
                           </template>
                           <DqButton type="primary" size="small" @click="answerAskWithForm(ev)">提交</DqButton>
@@ -2091,48 +2089,6 @@ function onTitleKeydown(e: KeyboardEvent) {
   border-color: var(--dq-accent);
 }
 
-.turn__ask-user-form-toggle {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  width: 36px;
-  height: 20px;
-  cursor: pointer;
-}
-
-.turn__ask-user-form-toggle input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.turn__ask-user-form-toggle-slider {
-  position: absolute;
-  inset: 0;
-  border-radius: 10px;
-  background: var(--dq-fill-secondary);
-  transition: background 0.15s;
-}
-
-.turn__ask-user-form-toggle-slider::before {
-  content: '';
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  left: 2px;
-  top: 2px;
-  border-radius: 50%;
-  background: var(--dq-bg-page, #fff);
-  transition: transform 0.15s;
-}
-
-.turn__ask-user-form-toggle input:checked + .turn__ask-user-form-toggle-slider {
-  background: var(--dq-accent);
-}
-
-.turn__ask-user-form-toggle input:checked + .turn__ask-user-form-toggle-slider::before {
-  transform: translateX(16px);
-}
 
 
 .session-workspace__body :deep(.plan-panel) {
