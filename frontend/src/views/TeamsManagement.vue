@@ -348,10 +348,9 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
               <DqInput v-model="agentForm.description" type="textarea" :rows="4" :placeholder="$t('teams.descriptionPlaceholder')" />
             </label>
             <div class="resource-field resource-field--block resource-field--inline" @click="agentForm.canDelegate = !agentForm.canDelegate">
-              <DqCheckbox :model-value="agentForm.canDelegate" />
+              <DqSwitch :model-value="agentForm.canDelegate" size="small" />
               <div class="resource-field__inline-meta">
                 <span class="resource-field__label">{{ $t('teams.canDelegate') }}</span>
-                <span class="resource-field__hint">{{ $t('teams.canDelegateHint') }}</span>
               </div>
             </div>
           </section>

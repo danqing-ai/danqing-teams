@@ -26,7 +26,7 @@ export default {
   navigation: {
     workers: '专家团',
     knowledge: '知识库',
-    skills: '技能',
+    skills: '技能库',
     mcpServer: 'MCP 工具',
     automations: '自动化',
     settings: '设置',
@@ -152,7 +152,6 @@ export default {
     subagent: '专家',
     maxSteps: '最大步数',
     canDelegate: '启用委派子 Agent',
-    canDelegateHint: '允许该 Agent 将任务委派给子 Agent，可委派的 Agent 列表会注入其提示词。',
     persona: '人设',
     personaPlaceholder: '用一句话描述该 Agent 的角色与职责',
     descriptionPlaceholder: 'Agent 的详细职责、行为风格与上下文',

@@ -74,8 +74,8 @@ html.dark,
   --teams-glass-inset: color-mix(in srgb, var(--dq-label-quaternary) 20%, transparent);
   --teams-glass-shadow: var(--dq-shadow-lg);
   --teams-glass-shadow-md: var(--dq-shadow-md);
-  --teams-surface-muted: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
-  --teams-surface-head: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
+  --teams-surface-muted: color-mix(in srgb, var(--dq-bg-elevated) 55%, transparent);
+  --teams-surface-head: color-mix(in srgb, var(--dq-bg-elevated) 70%, transparent);
   --teams-dock-bg: color-mix(in srgb, var(--dq-bg-base) 85%, transparent);
   --teams-page-glow-accent: color-mix(in srgb, var(--dq-accent) 22%, transparent);
   --teams-page-glow-info: color-mix(in srgb, var(--dq-info) 14%, transparent);

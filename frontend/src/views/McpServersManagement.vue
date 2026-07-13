@@ -292,7 +292,7 @@ function onKeydown(e: KeyboardEvent) {
           </div>
           <div v-else class="resource-section__tools-list">
             <label v-for="tool in discoveredTools" :key="tool.name" class="resource-tool-row">
-              <input type="checkbox" :checked="tool.enabled" @change="handleToggleTool(tool.name, ($event.target as HTMLInputElement).checked)" />
+              <DqSwitch :model-value="tool.enabled" size="small" @update:model-value="(v: boolean) => handleToggleTool(tool.name, v)" />
               <span class="resource-tool-row__name">{{ tool.name }}</span>
               <span v-if="tool.description" class="resource-tool-row__desc">{{ tool.description }}</span>
             </label>
