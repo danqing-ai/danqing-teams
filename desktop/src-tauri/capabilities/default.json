@@ -3,6 +3,7 @@
   "description": "Default capabilities for DanQing Teams desktop",
   "windows": ["main"],
   "permissions": [
-    "core:default"
+    "core:default",
+    "dialog:default"
   ]
 }

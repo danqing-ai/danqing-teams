@@ -62,8 +62,8 @@ if [[ -n "$APP_BUNDLE" ]]; then
     echo "==> Injected sidecar: $(basename "$SIDECAR_BIN") -> $APP_BUNDLE/Contents/MacOS/"
     # Re-sign the .app after injecting sidecar (injection breaks code signature)
     codesign --force --deep --sign - "$APP_BUNDLE" 2>/dev/null && echo "==> Re-signed .app bundle" || echo "WARNING: codesign failed"
-    # Remove quarantine attribute so macOS doesn't show "damaged" dialog
-    xattr -cr "$APP_BUNDLE" 2>/dev/null && echo "==> Removed quarantine attribute" || true
+    # Remove all quarantine-related extended attributes so macOS doesn't block the app
+    xattr -cr "$APP_BUNDLE" 2>/dev/null && echo "==> Removed quarantine attributes" || true
   else
     echo "WARNING: sidecar binary not found at $SIDECAR_BIN"
   fi
@@ -83,67 +83,29 @@ fi
 cat > "$DMG_STAGING/阅读说明.txt" << 'README_EOF'
 📦 DanQing Teams 安装说明 (macOS)
 
-由于本应用未使用 Apple 开发者签名，macOS 可能会阻止打开。
-请按以下步骤操作：
+由于本应用未使用 Apple 开发者签名，首次打开需要特殊操作。
 
-方法一（推荐）：
+安装步骤：
   1. 将 DanQing Teams.app 拖入「应用程序」文件夹
-  2. 在 Finder 中右键点击 app → 选择「打开」
+  2. 在 Finder 中 右键（Control+点击）app → 选择「打开」
   3. 弹窗中点击「打开」确认
 
-方法二（一键修复）：
-  1. 在 Finder 中右键点击「修复并打开.command」→ 选择「打开」
-  2. 如果系统提示无法验证，前往「系统设置 → 隐私与安全性」
-  3. 点击「仍要打开」按钮（见截图 gatekeeper-privacy-security.png）
-  4. 脚本会自动移除隔离属性并启动应用
+注意：必须使用右键 → 打开，直接双击会被 macOS 拦截。
+      右键打开一次后，后续即可正常双击启动。
 
-  ┌─────────────────────────────────────────────┐
-  │  隐私与安全                                  │
-  │                                             │
-  │  已阻止"DanQing Teams"以保护 Mac。  [仍要打开] │
-  │                                             │
-  │  Apple无法验证"DanQing Teams"是否包含可能危  │
-  │  害Mac安全或泄漏隐私的恶意软件。              │
-  └─────────────────────────────────────────────┘
+如果右键打开仍然被拦截：
+  前往「系统设置 → 隐私与安全性」
+  点击「仍要打开」按钮
 
-方法三（终端命令）：
-  打开终端，执行：
+终端修复（备选）：
   xattr -cr /Applications/DanQing\ Teams.app
 README_EOF
 
-# Add one-click fix script
-cat > "$DMG_STAGING/修复并打开.command" << 'FIX_EOF'
-#!/bin/bash
-# 一键移除 macOS 隔离属性并打开 DanQing Teams
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-APP_PATH="$SCRIPT_DIR/DanQing Teams.app"
-
-if [ ! -d "$APP_PATH" ]; then
-  APP_PATH="/Applications/DanQing Teams.app"
-fi
-
-if [ ! -d "$APP_PATH" ]; then
-  echo "❌ 未找到 DanQing Teams.app"
-  echo "请先将 app 拖入应用程序文件夹"
-  echo ""
-  echo "提示：如果本脚本也被系统阻止，请前往："
-  echo "  系统设置 → 隐私与安全性 → 点击「仍要打开」"
-  read -p "按回车退出..."
-  exit 1
-fi
-
-echo "==> 正在移除隔离属性..."
-xattr -cr "$APP_PATH" 2>/dev/null
-echo "==> 正在打开 DanQing Teams..."
-open "$APP_PATH"
-FIX_EOF
-chmod +x "$DMG_STAGING/修复并打开.command"
-
-# Copy screenshot into staging for README reference
+# Copy screenshot into DMG for reference
 SCREENSHOT_SRC="$SCRIPT_DIR/../docs/gatekeeper-privacy-security.png"
 if [[ -f "$SCREENSHOT_SRC" ]]; then
   cp "$SCREENSHOT_SRC" "$DMG_STAGING/"
-  echo "==> Copied screenshot to DMG staging"
+  echo "==> Copied screenshot to DMG"
 fi
 
 # Add Applications symlink

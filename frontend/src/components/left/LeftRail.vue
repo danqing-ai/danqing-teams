@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, nextTick } from 'vue'
+import { computed, ref, watch, nextTick, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   Plus,
@@ -14,6 +14,8 @@ import { useSessionsStore } from '@/stores/sessions'
 import { useProjectsStore } from '@/stores/projects'
 import { confirm, toast } from '@/utils/feedback'
 import { formatRelativeTime } from '@/utils/time'
+import { fetchJSON } from '@/api/client'
+import { isTauriRuntime } from '@/utils/desktop'
 import type { AppModule } from '@/types/app-module'
 import type { Project } from '@/types'
 import type { Session } from '@/types/mission'
@@ -133,6 +135,19 @@ function cancelNewProject() {
   showNewProjectForm.value = false
 }
 
+async function pickDirectory() {
+  if (!isTauriRuntime()) return
+  try {
+    const { open } = await import('@tauri-apps/plugin-dialog')
+    const selected = await open({ directory: true, multiple: false })
+    if (selected) {
+      newProjectDirectory.value = selected
+    }
+  } catch (e) {
+    console.error('Failed to open directory picker:', e)
+  }
+}
+
 async function createProject() {
   const name = newProjectName.value.trim()
   if (!name) {
@@ -191,6 +206,17 @@ function sessionTitle(t_: Session): string {
 const userLabel = computed(() => 'nil luo')
 const userInitial = computed(() => userLabel.value.slice(0, 1).toUpperCase())
 const userPlan = computed(() => 'DanQing')
+
+const appVersion = ref('dev')
+
+onMounted(async () => {
+  try {
+    const data = await fetchJSON<{ version: string }>('/version')
+    appVersion.value = data.version
+  } catch {
+    // keep default 'dev'
+  }
+})
 
 const defaultDirectoryHint = computed(() => {
   const name = newProjectName.value.trim()
@@ -290,14 +316,20 @@ watch(() => projects.projects.length, (len) => {
                     </svg>
                     {{ $t('navigation.projectPath') }}
                   </span>
-                  <input
-                    v-model="newProjectDirectory"
-                    class="new-project-field__input"
-                    type="text"
-                    :placeholder="$t('navigation.projectPathPlaceholder')"
-                    spellcheck="false"
-                    @keydown.enter="createProject"
-                  />
+                  <div class="new-project-field__row">
+                    <input
+                      v-model="newProjectDirectory"
+                      class="new-project-field__input new-project-field__input--path"
+                      type="text"
+                      :placeholder="$t('navigation.projectPathPlaceholder')"
+                      spellcheck="false"
+                      readonly
+                      @keydown.enter="createProject"
+                    />
+                    <button type="button" class="new-project-field__browse" @click="pickDirectory">
+                      {{ $t('navigation.browse') }}
+                    </button>
+                  </div>
                   <span v-if="!newProjectDirectory.trim()" class="new-project-field__hint">{{ defaultDirectoryHint }}</span>
                 </label>
               </div>
@@ -402,13 +434,14 @@ watch(() => projects.projects.length, (len) => {
         </div>
 
         <footer class="module-sidebar__footer">
-          <button type="button" class="module-sidebar__user" @click="navigate('knowledge')">
+          <div class="module-sidebar__user">
             <span class="module-sidebar__avatar" aria-hidden="true">{{ userInitial }}</span>
             <span class="module-sidebar__info">
               <span class="module-sidebar__name">{{ userLabel }}</span>
               <span class="module-sidebar__plan">{{ userPlan }}</span>
             </span>
-          </button>
+          </div>
+          <span class="module-sidebar__version">v{{ appVersion }}</span>
           <DqIconButton class="module-sidebar__settings" :aria-label="$t('navigation.settings')" @click="navigate('settings')">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="3" />
@@ -580,6 +613,36 @@ watch(() => projects.projects.length, (len) => {
   font-family: inherit;
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.new-project-field__input--path {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.new-project-field__row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.new-project-field__browse {
+  flex-shrink: 0;
+  padding: 7px 12px;
+  border: 1px solid var(--dq-border, rgba(255, 255, 255, 0.08));
+  border-radius: 8px;
+  background: var(--dq-bg-container, rgba(255, 255, 255, 0.06));
+  color: var(--dq-label-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+  white-space: nowrap;
+}
+
+.new-project-field__browse:hover {
+  background: var(--dq-bg-container-hover, rgba(255, 255, 255, 0.1));
+  color: var(--dq-label-primary);
 }
 
 .new-project-field__input:focus {
@@ -881,16 +944,7 @@ watch(() => projects.projects.length, (len) => {
   align-items: center;
   gap: 10px;
   padding: 6px 8px;
-  border: none;
   border-radius: 8px;
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
-  color: inherit;
-}
-
-.module-sidebar__user:hover {
-  background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
 }
 
 .module-sidebar__avatar {
@@ -905,6 +959,14 @@ watch(() => projects.projects.length, (len) => {
   background: color-mix(in srgb, var(--dq-accent) 20%, transparent);
   color: var(--dq-accent);
   flex-shrink: 0;
+}
+
+.module-sidebar__version {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--dq-label-tertiary);
+  white-space: nowrap;
+  padding: 0 4px;
 }
 
 .module-sidebar__info {

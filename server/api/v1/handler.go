@@ -14,6 +14,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Version is set at build time via -ldflags.
+var Version = "dev"
+
 type Handler struct {
 	Sessions     *service.SessionManager
 	Projects     *service.ProjectManager
@@ -116,6 +119,8 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.GET("/skills/:id/export", exportSkillMD(h.SkillHandler))
 	api.GET("/skills/:id/files", listSkillFiles(h.SkillHandler))
 	api.GET("/skills/:id/files/*path", getSkillFile(h.SkillHandler))
+
+	api.GET("/version", getVersion())
 
 	if cfg.FrontendDir != "" {
 		r.Static("/app", cfg.FrontendDir)
@@ -843,5 +848,13 @@ func updateModelLimits(h *Handler) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, limits)
+	}
+}
+
+// ---- Version ----
+
+func getVersion() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"version": Version})
 	}
 }

@@ -6,6 +6,7 @@ FRONTEND_DIR := $(CURDIR)/frontend
 OUT_DIR := $(CURDIR)/out
 FRONTEND_DIST := $(OUT_DIR)/frontend/dist
 RELEASE_VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS := -X 'danqing-teams/server/api/v1.Version=$(RELEASE_VERSION)'
 
 export DQ_APP_NAME := $(APP_NAME)
 
@@ -83,7 +84,7 @@ build-go: build-server build-cli build-tui
 
 build-server:
 	@mkdir -p $(OUT_DIR)/server
-	go build -o $(SERVER_BIN) ./server
+	go build -ldflags "$(LDFLAGS)" -o $(SERVER_BIN) ./server
 
 build-cli:
 	@mkdir -p $(OUT_DIR)/server

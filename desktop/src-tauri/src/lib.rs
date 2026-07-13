@@ -82,6 +82,7 @@ fn handle_first_launch(app: &AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             handle_first_launch(&app.handle());
             if let Err(e) = spawn_backend(&app.handle()) {

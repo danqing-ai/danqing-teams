@@ -18,8 +18,9 @@ echo "==> Starting $APP_NAME (backend only) [${DQ_PROJECT}]"
 echo "    Backend : http://127.0.0.1:${BACKEND_PORT}"
 
 DEV_BACKEND_BIN="$DQ_RUN_DIR/backend-bin"
-echo "==> Building dev backend -> $DEV_BACKEND_BIN"
-(cd "$DQ_ROOT" && go build -o "$DEV_BACKEND_BIN" ./server)
+DEV_VERSION=$(git -C "$DQ_ROOT" describe --tags --always --dirty 2>/dev/null || echo dev)
+echo "==> Building dev backend ($DEV_VERSION) -> $DEV_BACKEND_BIN"
+(cd "$DQ_ROOT" && go build -ldflags "-X 'danqing-teams/server/api/v1.Version=$DEV_VERSION'" -o "$DEV_BACKEND_BIN" ./server)
 
 export DQ_DEV_ENV=$'TEAMS_AUTO_APPROVE='"${TEAMS_AUTO_APPROVE:-false}"$'\nTEAMS_ADDR=0.0.0.0:'"${BACKEND_PORT}"
 dq_dev_start backend "$DQ_ROOT" "$DEV_BACKEND_BIN"
