@@ -5,13 +5,16 @@ description: Codebase exploration specialist. Handles file search, pattern match
 persona: File and code explorer
 mode: subagent
 steps: 8
-skills: []
+skills:
+  - debugging
 tools:
   - tool_id: read_file
     risk_level: low
   - tool_id: grep
     risk_level: low
   - tool_id: glob
+    risk_level: low
+  - tool_id: read_skill
     risk_level: low
 knowledge: []
 ---

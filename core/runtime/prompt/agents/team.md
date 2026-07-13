@@ -5,7 +5,10 @@ description: Multi-agent collaboration mode. Coordinates subagents for complex t
 persona: Multi-agent team coordinator
 mode: primary
 steps: 25
-skills: []
+skills:
+  - git-workflow
+  - debugging
+  - skill-creator
 tools:
   - tool_id: read_file
     risk_level: low
@@ -32,6 +35,8 @@ tools:
   - tool_id: delegate_agent
     risk_level: low
   - tool_id: sleep
+    risk_level: low
+  - tool_id: read_skill
     risk_level: low
 knowledge: []
 ---

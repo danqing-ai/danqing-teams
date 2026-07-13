@@ -372,7 +372,7 @@ func (e *Engine) ListTurns(sessionID string) []domain.TurnLog {
 }
 
 func (e *Engine) setupRegistry(s domain.Session, agent domain.Agent) *tool.Registry {
-	skills, _ := e.skills.List(context.Background())
+	skills := e.resolveAgentSkills(agent)
 	e.turnRunner.SkillList = skills
 	e.turnRunner.ToolBindings = agent.Tools
 
@@ -392,6 +392,26 @@ func agentHasDelegation(agent domain.Agent) bool {
 		}
 	}
 	return false
+}
+
+// resolveAgentSkills returns only the skills bound to the given agent.
+// If the agent has no SkillIDs configured, all skills are returned for backward compatibility.
+func (e *Engine) resolveAgentSkills(agent domain.Agent) []domain.Skill {
+	all, _ := e.skills.List(context.Background())
+	if len(agent.SkillIDs) == 0 {
+		return nil
+	}
+	wanted := make(map[string]struct{}, len(agent.SkillIDs))
+	for _, id := range agent.SkillIDs {
+		wanted[id] = struct{}{}
+	}
+	var result []domain.Skill
+	for _, sk := range all {
+		if _, ok := wanted[sk.ID]; ok {
+			result = append(result, sk)
+		}
+	}
+	return result
 }
 
 func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, projectID string, agent domain.Agent, reg *tool.Registry) (domain.Report, error) {
@@ -577,8 +597,8 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 			oldBindings := e.turnRunner.ToolBindings
 			oldLog := e.turnRunner.Log
 			e.turnRunner.Registry = e.buildWorkerRegistry(workerAgent)
-			skills, _ := e.skills.List(ctx)
-			e.turnRunner.SkillList = skills
+			workerSkills := e.resolveAgentSkills(workerAgent)
+			e.turnRunner.SkillList = workerSkills
 			e.turnRunner.ToolBindings = workerAgent.Tools
 			defer func() {
 				e.turnRunner.Registry = oldReg
@@ -587,7 +607,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 				e.turnRunner.Log = oldLog
 			}()
 
-			sys := buildSystemPrompt(workerAgent.SystemPrompt, skills, "")
+			sys := buildSystemPrompt(workerAgent.SystemPrompt, workerSkills, "")
 			messages := []Message{
 				{Role: RoleSystem, Content: sys},
 			}

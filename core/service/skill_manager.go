@@ -10,13 +10,14 @@ import (
 )
 
 type SkillManager struct {
-	store         port.SkillRepo
-	filesRepo     port.SkillFileRepo
-	mu            sync.RWMutex
-	cache         map[string]*domain.Skill
-	cachedList    bool
-	listCache     []domain.Skill
-	templateLoader func(id string) (*domain.Skill, error)
+	store             port.SkillRepo
+	filesRepo         port.SkillFileRepo
+	mu                sync.RWMutex
+	cache             map[string]*domain.Skill
+	cachedList        bool
+	listCache         []domain.Skill
+	templateLoader    func(id string) (*domain.Skill, error)
+	fileTemplateLoader func(id string) ([]domain.SkillFile, error)
 }
 
 func NewSkillManager(store port.SkillRepo, filesRepo port.SkillFileRepo) *SkillManager {
@@ -105,6 +106,10 @@ func (m *SkillManager) SetTemplateLoader(fn func(id string) (*domain.Skill, erro
 	m.templateLoader = fn
 }
 
+func (m *SkillManager) SetFileTemplateLoader(fn func(id string) ([]domain.SkillFile, error)) {
+	m.fileTemplateLoader = fn
+}
+
 func (m *SkillManager) ResetFromTemplate(ctx context.Context, id string) (*domain.Skill, error) {
 	if m.templateLoader == nil {
 		return nil, fmt.Errorf("template loader not configured")
@@ -120,6 +125,16 @@ func (m *SkillManager) ResetFromTemplate(ctx context.Context, id string) (*domai
 	tmpl.Builtin = true
 	if err := m.store.Upsert(ctx, *tmpl); err != nil {
 		return nil, err
+	}
+	// Reset resource files from template if available
+	if m.fileTemplateLoader != nil {
+		files, err := m.fileTemplateLoader(id)
+		if err == nil && len(files) > 0 {
+			_ = m.filesRepo.DeleteBySkill(ctx, id)
+			for _, f := range files {
+				_ = m.filesRepo.Upsert(ctx, f)
+			}
+		}
 	}
 	m.mu.Lock()
 	m.cache[id] = tmpl

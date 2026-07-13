@@ -285,9 +285,9 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 				continue
 			}
 
-			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolPending, domain.ToolPart{
-				CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolPending,
-			})
+		p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolPending, domain.ToolPart{
+			CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolPending, Input: call.Arguments,
+		})
 
 			decision := p.Perm.Check(call.Name, handler.RiskLevel())
 			if decision == permission.DecisionDeny {

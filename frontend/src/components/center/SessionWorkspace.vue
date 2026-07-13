@@ -92,20 +92,23 @@ function mergeToolCard(toolCards: Record<string, ToolCard>, ev: StreamEvent) {
   if (existing) {
     if (inputStr) existing.inputStr = inputStr
     if (p?.description) existing.description = String(p.description)
-    if (ev.type === 'tool.completed') {
+    if (ev.type === 'tool.pending') {
+      existing.status = 'pending'
+    } else if (ev.type === 'tool.running') {
+      existing.status = 'running'
+    } else if (ev.type === 'tool.completed') {
       existing.status = 'completed'
       existing.output = String(p?.output ?? '')
     } else if (ev.type === 'tool.error') {
       existing.status = 'error'
       existing.error = String(p?.error ?? '')
-    } else if (ev.type === 'tool.running') {
-      existing.status = 'running'
     }
     return
   }
 
-  let status = 'running'
-  if (ev.type === 'tool.completed') status = 'completed'
+  let status = 'pending'
+  if (ev.type === 'tool.running') status = 'running'
+  else if (ev.type === 'tool.completed') status = 'completed'
   else if (ev.type === 'tool.error') status = 'error'
 
   toolCards[callId] = {
@@ -187,8 +190,6 @@ const turnMap = computed(() => {
 
     const turnId = ev.turnId || activeTurnId
     if (!turnId || !map[turnId]) continue
-
-    if (ev.type === 'tool.pending') continue
 
     if (ev.type.startsWith('tool.')) {
       if (!turnToolCards[turnId]) turnToolCards[turnId] = {}

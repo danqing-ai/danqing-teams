@@ -5,7 +5,8 @@ description: Code implementation specialist. Handles file creation, editing, and
 persona: Implementation specialist
 mode: subagent
 steps: 12
-skills: []
+skills:
+  - debugging
 tools:
   - tool_id: read_file
     risk_level: low
@@ -20,6 +21,8 @@ tools:
   - tool_id: apply_patch
     risk_level: medium
   - tool_id: todowrite
+    risk_level: low
+  - tool_id: read_skill
     risk_level: low
 knowledge: []
 ---

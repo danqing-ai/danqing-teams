@@ -5,7 +5,10 @@ description: Single-agent mode. Autonomous task execution with full tool access.
 persona: Autonomous single-agent executor
 mode: primary
 steps: 15
-skills: []
+skills:
+  - git-workflow
+  - debugging
+  - skill-creator
 tools:
   - tool_id: read_file
     risk_level: low
@@ -28,6 +31,8 @@ tools:
   - tool_id: todowrite
     risk_level: low
   - tool_id: sleep
+    risk_level: low
+  - tool_id: read_skill
     risk_level: low
 knowledge: []
 ---

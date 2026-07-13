@@ -5,7 +5,8 @@ description: Read-only planning mode. Analyzes requirements, explores context, a
 persona: Planning specialist
 mode: primary
 steps: 18
-skills: []
+skills:
+  - debugging
 tools:
   - tool_id: read_file
     risk_level: low
@@ -20,6 +21,8 @@ tools:
   - tool_id: list_agents
     risk_level: low
   - tool_id: delegate_agent
+    risk_level: low
+  - tool_id: read_skill
     risk_level: low
 knowledge: []
 ---

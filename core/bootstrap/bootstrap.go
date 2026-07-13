@@ -107,6 +107,7 @@ func New(cfg Config) *Core {
 	agents.SetTemplateLoader(prompt.LoadTemplateByID)
 	skills := service.NewSkillManager(st.Skills(), st.SkillFiles())
 	skills.SetTemplateLoader(prompt.LoadSkillTemplateByID)
+	skills.SetFileTemplateLoader(prompt.LoadBuiltinSkillFiles)
 	knowledge := buildKnowledge(st)
 	turnManager := service.NewTurnManager(st.Turns())
 	turnLogManager := service.NewTurnLogManager(turnLog)
@@ -154,6 +155,7 @@ func New(cfg Config) *Core {
 	}})
 	eng.RegisterTool(&builtin.AskUser{})
 	eng.RegisterTool(&builtin.Sleep{})
+	eng.RegisterTool(&builtin.ReadSkill{Skills: skills})
 	eng.RecoverRunning(context.Background())
 
 	return &Core{
@@ -210,9 +212,14 @@ func ensureBuiltinSkills(skills *service.SkillManager) {
 			if !existing.Builtin {
 				skills.Upsert(ctx, skill)
 			}
-			continue
+		} else {
+			skills.Upsert(ctx, skill)
 		}
-		skills.Upsert(ctx, skill)
+		// Import resource files (scripts, references, assets) into DB
+		files, _ := prompt.LoadBuiltinSkillFiles(skill.ID)
+		for _, f := range files {
+			_ = skills.UpsertFile(ctx, f)
+		}
 	}
 }
 func buildKnowledge(st *sqlitestore.Store) *builtin.Knowledge {

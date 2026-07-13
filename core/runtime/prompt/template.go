@@ -176,6 +176,43 @@ func LoadSkillTemplateByID(id string) (*domain.Skill, error) {
 	return nil, fmt.Errorf("skill template %q not found", id)
 }
 
+// LoadBuiltinSkillFiles reads all resource files (scripts/, references/, assets/)
+// from the embedded FS for a given skill directory name.
+func LoadBuiltinSkillFiles(skillID string) ([]domain.SkillFile, error) {
+	skillDir := "skills/" + skillID
+	var files []domain.SkillFile
+	for _, sub := range []string{"scripts", "references", "assets"} {
+		subDir := skillDir + "/" + sub
+		entries, err := fs.ReadDir(SkillTemplates, subDir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			relPath := sub + "/" + entry.Name()
+			data, err := fs.ReadFile(SkillTemplates, subDir+"/"+entry.Name())
+			if err != nil {
+				continue
+			}
+			info, _ := entry.Info()
+			var size int64
+			if info != nil {
+				size = info.Size()
+			}
+			files = append(files, domain.SkillFile{
+				ID:      skillID + ":" + relPath,
+				SkillID: skillID,
+				Path:    relPath,
+				Content: data,
+				Size:    size,
+			})
+		}
+	}
+	return files, nil
+}
+
 func parseSkill(content, dirName string) (*domain.Skill, error) {
 	var fm skillFrontmatter
 	parts := strings.SplitN(content, "---", 3)

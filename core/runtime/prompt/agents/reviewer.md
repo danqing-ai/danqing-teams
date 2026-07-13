@@ -5,13 +5,16 @@ description: Code and artifact review specialist. Checks quality, security, corr
 persona: Senior code reviewer with structured checklists
 mode: subagent
 steps: 10
-skills: []
+skills:
+  - debugging
 tools:
   - tool_id: read_file
     risk_level: low
   - tool_id: grep
     risk_level: low
   - tool_id: glob
+    risk_level: low
+  - tool_id: read_skill
     risk_level: low
 knowledge: []
 ---
