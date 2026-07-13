@@ -239,7 +239,7 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) {
 			e.turnLog.Append(turnID, typ, data)
 		}
 
-		sys := buildSystemPrompt(agentPtr.SystemPrompt, e.turnRunner.SkillList, "")
+		sys := buildSystemPrompt(agentPtr.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agentPtr), "")
 		messages := []Message{{Role: RoleSystem, Content: sys}}
 		if hits := e.knowledge.Search(agentPtr.KnowledgeIDs, goal, cfg.knowledgeSearchTopK); len(hits) > 0 {
 			content := ""
@@ -386,12 +386,24 @@ func (e *Engine) setupRegistry(s domain.Session, agent domain.Agent) *tool.Regis
 }
 
 func agentHasDelegation(agent domain.Agent) bool {
-	for _, b := range agent.Tools {
-		if b.ToolID == "delegate_agent" || b.ToolID == "list_agents" {
-			return true
-		}
+	return agent.CanDelegate
+}
+
+// delegatableAgents returns the agent list to inject into the system prompt.
+// Only agents with delegation enabled receive it; the coordinator itself is excluded.
+func (e *Engine) delegatableAgents(agent domain.Agent) []domain.Agent {
+	if !agent.CanDelegate {
+		return nil
 	}
-	return false
+	all, _ := e.agents.List(context.Background())
+	var result []domain.Agent
+	for _, a := range all {
+		if a.ID == agent.ID {
+			continue
+		}
+		result = append(result, a)
+	}
+	return result
 }
 
 // resolveAgentSkills returns only the skills bound to the given agent.
@@ -435,7 +447,7 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 		checkpointText = checkpoint.Summary
 	}
 
-	sys := buildSystemPrompt(agent.SystemPrompt, e.turnRunner.SkillList, checkpointText)
+	sys := buildSystemPrompt(agent.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agent), checkpointText)
 	messages := []Message{
 		{Role: RoleSystem, Content: sys},
 	}
@@ -547,7 +559,6 @@ func (e *Engine) mountBuiltinTools(reg *tool.Registry, bindings []domain.ToolBin
 
 func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 	cfg := e.loadRunCfg(context.Background())
-	list := &builtin.ListAgents{Agents: e.agents}
 	delegator := &builtin.DelegateAgent{
 		Stream: e.stream, Agents: e.agents,
 		KnowledgeSearch: e.knowledge.Search,
@@ -607,7 +618,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 				e.turnRunner.Log = oldLog
 			}()
 
-			sys := buildSystemPrompt(workerAgent.SystemPrompt, workerSkills, "")
+			sys := buildSystemPrompt(workerAgent.SystemPrompt, workerSkills, nil, "")
 			messages := []Message{
 				{Role: RoleSystem, Content: sys},
 			}
@@ -666,7 +677,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 				}
 			},
 		},
-		list, delegator,
+		delegator,
 	)
 	reg.CopyMCPServersFrom(e.toolCatalog)
 	e.mountBuiltinTools(reg, agent.Tools)
@@ -768,7 +779,7 @@ func (e *Engine) ResolveAskUser(askID, answer string) {
 
 func (e *Engine) buildTurnMessages(sessionID string, agent domain.Agent, goal string, checkpointText string) []Message {
 	cfg := e.loadRunCfg(context.Background())
-	sys := buildSystemPrompt(agent.SystemPrompt, e.turnRunner.SkillList, checkpointText)
+	sys := buildSystemPrompt(agent.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agent), checkpointText)
 	messages := []Message{
 		{Role: RoleSystem, Content: sys},
 	}

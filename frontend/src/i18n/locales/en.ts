@@ -53,6 +53,7 @@ export default {
     projectCreated: 'Project created',
     projectCreateFailed: 'Failed to create project',
     projectNameRequired: 'Please enter a project name',
+    browse: 'Browse…',
   },
   skills: {
     title: 'Skills',
@@ -150,6 +151,8 @@ export default {
     primary: 'Lead Expert',
     subagent: 'Expert',
     maxSteps: 'Max Steps',
+    canDelegate: 'Enable Delegation',
+    canDelegateHint: 'Allow this Agent to delegate work to subagents. The available agents are injected into its prompt.',
     persona: 'Persona',
     personaPlaceholder: 'Describe the role and responsibilities of this Agent in one sentence',
     descriptionPlaceholder: 'Detailed responsibilities, behavioral style, and context of this Agent',

@@ -9,6 +9,7 @@ export interface Agent {
   skillIds?: string[]
   tools?: ToolBinding[]
   knowledgeIds?: string[]
+  canDelegate?: boolean
 }
 
 export interface CreateAgentPayload {
@@ -22,6 +23,7 @@ export interface CreateAgentPayload {
   skillIds?: string[]
   tools?: ToolBinding[]
   knowledgeIds?: string[]
+  canDelegate?: boolean
 }
 
 export interface UpdateAgentPayload {
@@ -34,6 +36,7 @@ export interface UpdateAgentPayload {
   skillIds?: string[]
   tools?: ToolBinding[]
   knowledgeIds?: string[]
+  canDelegate?: boolean
 }
 
 export type RiskLevel = 'low' | 'medium' | 'high'

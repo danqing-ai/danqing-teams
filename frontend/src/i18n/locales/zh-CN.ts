@@ -53,6 +53,7 @@ export default {
     projectCreated: '项目已创建',
     projectCreateFailed: '创建项目失败',
     projectNameRequired: '请输入项目名称',
+    browse: '浏览…',
   },
   skills: {
     title: '技能',
@@ -150,6 +151,8 @@ export default {
     primary: '主专家',
     subagent: '专家',
     maxSteps: '最大步数',
+    canDelegate: '启用委派子 Agent',
+    canDelegateHint: '允许该 Agent 将任务委派给子 Agent，可委派的 Agent 列表会注入其提示词。',
     persona: '人设',
     personaPlaceholder: '用一句话描述该 Agent 的角色与职责',
     descriptionPlaceholder: 'Agent 的详细职责、行为风格与上下文',

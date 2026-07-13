@@ -26,6 +26,7 @@ type Agent struct {
 	SkillIDs     []string     `json:"skillIds"`
 	Tools        []ToolBinding `json:"tools"`
 	KnowledgeIDs []string     `json:"knowledgeIds"`
+	CanDelegate  bool         `json:"canDelegate"`
 }
 
 type ToolBinding struct {

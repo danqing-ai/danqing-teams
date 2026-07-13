@@ -22,6 +22,7 @@ type agentModel struct {
 	SkillIDsJSON  string `gorm:"column:skill_ids"`
 	ToolsJSON     string `gorm:"column:tools"`
 	KnowledgeJSON string `gorm:"column:knowledge_ids"`
+	CanDelegate   bool   `gorm:"column:can_delegate"`
 }
 
 func (agentModel) TableName() string { return "agents" }
@@ -52,6 +53,7 @@ func agentToDomain(m agentModel) domain.Agent {
 		ID: m.ID, Name: m.Name, Description: m.Description, Persona: m.Persona,
 		Mode: domain.AgentMode(m.Mode), SystemPrompt: m.SystemPrompt, Steps: m.Steps,
 		SkillIDs: m.skillIDs(), Tools: m.tools(), KnowledgeIDs: m.knowledgeIDs(),
+		CanDelegate: m.CanDelegate,
 	}
 }
 
@@ -60,6 +62,7 @@ func agentFromDomain(a domain.Agent) agentModel {
 		ID: a.ID, Name: a.Name, Description: a.Description, Persona: a.Persona,
 		Mode: string(a.Mode), SystemPrompt: a.SystemPrompt, Steps: a.Steps,
 		SkillIDsJSON: marshalJSON(a.SkillIDs), ToolsJSON: marshalJSON(a.Tools), KnowledgeJSON: marshalJSON(a.KnowledgeIDs),
+		CanDelegate: a.CanDelegate,
 	}
 }
 

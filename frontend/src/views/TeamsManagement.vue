@@ -35,6 +35,7 @@ function emptyAgentForm(): AgentForm {
     tools: [],
     knowledgeIds: [],
     steps: 10,
+    canDelegate: false,
   }
 }
 
@@ -125,6 +126,7 @@ async function save() {
         skillIds: agentForm.value.skillIds,
         tools: agentForm.value.tools,
         knowledgeIds: agentForm.value.knowledgeIds,
+        canDelegate: agentForm.value.canDelegate ?? false,
       })
       toast.success(t('teams.created'))
       isCreating.value = false
@@ -140,6 +142,7 @@ async function save() {
         skillIds: agentForm.value.skillIds,
         tools: agentForm.value.tools,
         knowledgeIds: agentForm.value.knowledgeIds,
+        canDelegate: agentForm.value.canDelegate ?? false,
       })
 
       toast.success(t('teams.saved'))
@@ -344,6 +347,13 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
               <span class="resource-field__label">{{ $t('common.description') }}</span>
               <DqInput v-model="agentForm.description" type="textarea" :rows="4" :placeholder="$t('teams.descriptionPlaceholder')" />
             </label>
+            <div class="resource-field resource-field--block resource-field--inline" @click="agentForm.canDelegate = !agentForm.canDelegate">
+              <DqCheckbox :model-value="agentForm.canDelegate" />
+              <div class="resource-field__inline-meta">
+                <span class="resource-field__label">{{ $t('teams.canDelegate') }}</span>
+                <span class="resource-field__hint">{{ $t('teams.canDelegateHint') }}</span>
+              </div>
+            </div>
           </section>
 
           <section v-show="activeTab === 'prompt'" class="resource-section resource-section--prompt">

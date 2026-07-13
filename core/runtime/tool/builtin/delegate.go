@@ -10,37 +10,6 @@ import (
 	"danqing-teams/core/service"
 )
 
-type ListAgents struct {
-	Agents *service.AgentManager
-}
-
-func (h *ListAgents) Name() string                { return "list_agents" }
-func (h *ListAgents) RiskLevel() domain.RiskLevel { return domain.RiskLow }
-func (h *ListAgents) Describe(args map[string]any) string {
-	return "list_agents"
-}
-func (h *ListAgents) Schema() domain.ToolSchema {
-	return domain.ToolSchema{
-		Name: "list_agents",
-		Description: "List all available agents for delegation.\n\n" +
-			"- Use before delegating to discover available agents, their IDs, and descriptions.\n" +
-			"- Returns a JSON array of agents with id, name, and description fields.",
-		Parameters: map[string]any{"type": "object"},
-	}
-}
-func (h *ListAgents) Execute(ctx context.Context, _ map[string]any) (domain.ToolResult, error) {
-	agents, err := h.Agents.List(ctx)
-	if err != nil {
-		return domain.ToolResult{}, err
-	}
-	var result []map[string]string
-	for _, a := range agents {
-		result = append(result, map[string]string{"id": a.ID, "name": a.Name, "description": a.Description})
-	}
-	raw, _ := json.Marshal(result)
-	return domain.ToolResult{Content: string(raw)}, nil
-}
-
 type DelegateAgent struct {
 	Stream          port.EventStream
 	Agents          *service.AgentManager
@@ -62,7 +31,7 @@ func (h *DelegateAgent) Schema() domain.ToolSchema {
 	return domain.ToolSchema{
 		Name: "delegate_agent",
 		Description: "Delegate a task to a subagent and get back a structured report.\n\n" +
-			"- agent_id: the ID of the agent to delegate to (use list_agents first).\n" +
+			"- agent_id: the ID of the agent to delegate to (see <available_agents> in your system prompt).\n" +
 			"- goal: a clear, specific description of what the subagent should accomplish.\n" +
 			"- context: optional additional background information.\n" +
 			"- Assign complete subtasks, not single actions — let subagents decide how to use their tools.\n" +

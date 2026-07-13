@@ -9,7 +9,7 @@ import (
 	"danqing-teams/core/domain"
 )
 
-func buildSystemPrompt(agentPersona string, skillList []domain.Skill, checkpoint string) string {
+func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList []domain.Agent, checkpoint string) string {
 	var b strings.Builder
 	b.WriteString(agentPersona)
 
@@ -17,6 +17,11 @@ func buildSystemPrompt(agentPersona string, skillList []domain.Skill, checkpoint
 	if meta != "" {
 		b.WriteString("\n\n")
 		b.WriteString(meta)
+	}
+	agentMeta := buildAgentMetadata(agentList)
+	if agentMeta != "" {
+		b.WriteString("\n\n")
+		b.WriteString(agentMeta)
 	}
 	if checkpoint != "" {
 		b.WriteString("\n\n")
@@ -73,6 +78,24 @@ func buildSkillMetadata(skills []domain.Skill) string {
 		fmt.Fprintf(&b, "  </skill>\n")
 	}
 	b.WriteString("</available_skills>")
+	return b.String()
+}
+
+func buildAgentMetadata(agents []domain.Agent) string {
+	if len(agents) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("<available_agents>\n")
+	b.WriteString("  <!-- Delegate work to these agents with delegate_agent(agent_id=..., goal=...) -->\n")
+	for _, a := range agents {
+		fmt.Fprintf(&b, "  <agent>\n")
+		fmt.Fprintf(&b, "    <id>%s</id>\n", escapeXML(a.ID))
+		fmt.Fprintf(&b, "    <name>%s</name>\n", escapeXML(a.Name))
+		fmt.Fprintf(&b, "    <description>%s</description>\n", escapeXML(a.Description))
+		fmt.Fprintf(&b, "  </agent>\n")
+	}
+	b.WriteString("</available_agents>")
 	return b.String()
 }
 

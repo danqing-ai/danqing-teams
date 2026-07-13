@@ -20,6 +20,7 @@ type agentFrontmatter struct {
 	Skills      []string              `yaml:"skills"`
 	Tools       []toolFrontmatter     `yaml:"tools"`
 	Knowledge   []string              `yaml:"knowledge"`
+	CanDelegate bool                  `yaml:"can_delegate"`
 }
 
 type toolFrontmatter struct {
@@ -105,6 +106,7 @@ func LoadTemplates() ([]AgentTemplate, error) {
 			SkillIDs:     fm.Skills,
 			Tools:        tools,
 			KnowledgeIDs: fm.Knowledge,
+			CanDelegate:  fm.CanDelegate,
 		}
 		result = append(result, AgentTemplate{Agent: agent, Source: entry.Name()})
 	}
