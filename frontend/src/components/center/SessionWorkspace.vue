@@ -2278,7 +2278,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   min-height: 0;
   overflow: hidden;
   border-left: 1px solid var(--teams-glass-border);
-  background: var(--dq-bg-page);
+  background: var(--teams-glass-bg);
   box-shadow: -2px 0 12px var(--teams-glass-shadow);
 }
 

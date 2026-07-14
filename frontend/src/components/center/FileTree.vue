@@ -172,8 +172,8 @@ defineExpose({ refresh: loadRoot })
 }
 
 .file-tree__item.is-selected > .file-tree__row {
-  background: var(--dq-accent);
-  color: var(--dq-color-white)
+  background: color-mix(in srgb, var(--dq-accent) 15%, transparent);
+  color: var(--dq-label-primary);
 }
 
 .file-tree__row {
