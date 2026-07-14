@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, createWebHashHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import type { AppModule } from '@/types/app-module'
 
@@ -23,9 +23,7 @@ const routes: RouteRecordRaw[] = [
   })),
 ]
 
-declare const __ROUTER_BASE__: string
-
 export const router = createRouter({
-  history: createWebHistory(__ROUTER_BASE__),
+  history: __TAURI_BUILD__ ? createWebHashHistory(__ROUTER_BASE__) : createWebHistory(__ROUTER_BASE__),
   routes,
 })

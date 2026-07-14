@@ -17,6 +17,7 @@ export default defineConfig({
   base: isTauriBuild ? './' : '/app/',
   define: {
     __ROUTER_BASE__: JSON.stringify(isTauriBuild ? '/' : '/app/'),
+    __TAURI_BUILD__: JSON.stringify(isTauriBuild),
   },
   resolve: {
     alias: {
