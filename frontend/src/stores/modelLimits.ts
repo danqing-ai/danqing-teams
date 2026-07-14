@@ -2,33 +2,33 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { fetchJSON, asArray } from '@/api/client'
 import { toast } from '@/utils/feedback'
-import type { ModelLimit } from '@/types/mission'
+import type { ModelConfig } from '@/types/mission'
 
-export const useModelLimitsStore = defineStore('modelLimits', () => {
-  const limits = ref<ModelLimit[]>([])
+export const useModelConfigStore = defineStore('modelConfig', () => {
+  const models = ref<ModelConfig[]>([])
   const loading = ref(false)
   const saving = ref(false)
 
   async function load() {
     loading.value = true
     try {
-      const data = await fetchJSON<ModelLimit[]>('/model-limits')
-      limits.value = asArray(data)
+      const data = await fetchJSON<ModelConfig[]>('/model-configs')
+      models.value = asArray(data)
     } catch {
-      limits.value = []
+      models.value = []
     } finally {
       loading.value = false
     }
   }
 
-  async function save(all: ModelLimit[]) {
+  async function save(all: ModelConfig[]) {
     saving.value = true
     try {
-      const data = await fetchJSON<ModelLimit[]>('/model-limits', {
+      const data = await fetchJSON<ModelConfig[]>('/model-configs', {
         method: 'PUT',
         body: JSON.stringify(all),
       })
-      limits.value = asArray(data)
+      models.value = asArray(data)
       toast.success('模型参数已保存')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '保存失败')
@@ -38,5 +38,5 @@ export const useModelLimitsStore = defineStore('modelLimits', () => {
     }
   }
 
-  return { limits, loading, saving, load, save }
+  return { models, loading, saving, load, save }
 })

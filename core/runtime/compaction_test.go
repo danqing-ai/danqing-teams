@@ -66,9 +66,27 @@ func TestCompactionShouldCompactWithActualUsage(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	cpStore := turnlog.NewCheckpointStore(func(pid string) string { return filepath.Join(tmpDir, pid) })
-	// maxTokens=0 means no config override; model context window drives the limit.
-	store := testCompactionConfig(true, 100, 100, 0, 16000)
-	mgr := NewCompactionManager(mock, stream, store, cpStore, nil)
+	// Config with model entry for deepseek-v4-flash: context=1M, maxOutput=384K
+	store := &testConfigStore{
+		cfg: &domain.ConfigFile{
+			Runtime: domain.ConfigRuntimeSection{
+				Compaction: domain.ConfigCompactionSection{
+					Enabled:      true,
+					TurnInterval: 100,
+					SubInterval:  100,
+					TriggerRatio: 0.85,
+					ToolTruncate: 16000,
+				},
+			},
+			LLM: domain.ConfigLLMSection{
+				Models: []domain.ModelConfig{
+					{Model: "deepseek-v4-flash", ContextWindow: 1_000_000, MaxOutput: 384_000},
+				},
+			},
+		},
+	}
+	modelCfg := NewModelConfigRegistry()
+	mgr := NewCompactionManager(mock, stream, store, cpStore, modelCfg)
 
 	// deepseek/deepseek-v4-flash: context=1M, maxOutput=384K, usable=616K, trigger@0.85=523K
 	model := "deepseek/deepseek-v4-flash"
@@ -89,8 +107,18 @@ func TestCompactionShouldCompactWithActualUsage(t *testing.T) {
 	}
 }
 
-func TestModelLimitsRegistryContextWindow(t *testing.T) {
-	reg := NewModelLimitsRegistry()
+func TestModelConfigRegistryContextWindow(t *testing.T) {
+	reg := NewModelConfigRegistry()
+	reg.SetModels([]domain.ModelConfig{
+		{Model: "gpt-4o", ContextWindow: 128_000},
+		{Model: "gpt-4.1", ContextWindow: 1_047_576},
+		{Model: "o3-mini", ContextWindow: 200_000},
+		{Model: "deepseek-v4-flash", ContextWindow: 1_000_000},
+		{Model: "deepseek-chat", ContextWindow: 64_000},
+		{Model: "claude-sonnet-4-20250514", ContextWindow: 200_000},
+		{Model: "gemini-2.5-pro", ContextWindow: 1_048_576},
+		{Model: "qwen-long", ContextWindow: 10_000_000},
+	})
 
 	tests := []struct {
 		modelID  string
@@ -104,7 +132,7 @@ func TestModelLimitsRegistryContextWindow(t *testing.T) {
 		{"anthropic/claude-sonnet-4-20250514", 200_000},
 		{"google/gemini-2.5-pro", 1_048_576},
 		{"qwen/qwen-long", 10_000_000},
-		{"unknown/some-model", 128_000}, // fallback
+		{"unknown/some-model", 128_000}, // fallback to default
 	}
 	for _, tt := range tests {
 		got := reg.ContextWindow(tt.modelID)
@@ -114,40 +142,53 @@ func TestModelLimitsRegistryContextWindow(t *testing.T) {
 	}
 }
 
-func TestModelLimitsRegistryConfigOverride(t *testing.T) {
-	reg := NewModelLimitsRegistry()
-	reg.SetLimits([]domain.ModelLimit{
-		{Model: "gpt-4o", ContextWindow: 256_000, MaxOutput: 32_000},
-		{Model: "custom-model", ContextWindow: 500_000, MaxOutput: 50_000},
+func TestModelConfigRegistryConfigOverride(t *testing.T) {
+	reg := NewModelConfigRegistry()
+	reg.SetModels([]domain.ModelConfig{
+		{Model: "gpt-4o", ContextWindow: 128_000, MaxOutput: 16_384, Temperature: 0.5},
+		{Model: "custom-model", Temperature: 0.8, TopP: 0.95},
+		{Model: "deepseek-v4-flash", ContextWindow: 1_000_000, MaxOutput: 384_000},
 	})
 
-	// Config override takes priority over hardcoded pattern
-	if got := reg.ContextWindow("openai/gpt-4o"); got != 256_000 {
-		t.Errorf("config override: got %d, want 256000", got)
-	}
-	if got := reg.MaxOutputTokens("openai/gpt-4o"); got != 32_000 {
-		t.Errorf("config override maxOutput: got %d, want 32000", got)
+	// Config exact match returns gen params
+	gp := reg.GenParams("openai/gpt-4o")
+	if gp == nil || gp.Temperature != 0.5 {
+		t.Errorf("config override gen params: got %v, want temperature=0.5", gp)
 	}
 
-	// New model from config
-	if got := reg.ContextWindow("provider/custom-model"); got != 500_000 {
-		t.Errorf("custom model: got %d, want 500000", got)
+	// Custom model from config
+	gp2 := reg.GenParams("provider/custom-model")
+	if gp2 == nil || gp2.Temperature != 0.8 || gp2.TopP != 0.95 {
+		t.Errorf("custom model gen params: got %v, want temperature=0.8 top_p=0.95", gp2)
 	}
 
-	// Non-overridden model still uses hardcoded fallback
+	// Non-configured model returns nil
+	gp3 := reg.GenParams("unknown/some-model")
+	if gp3 != nil {
+		t.Errorf("non-configured gen params: got %v, want nil", gp3)
+	}
+
+	// Context window from config
+	if got := reg.ContextWindow("openai/gpt-4o"); got != 128_000 {
+		t.Errorf("context window: got %d, want 128000", got)
+	}
 	if got := reg.ContextWindow("deepseek/deepseek-v4-flash"); got != 1_000_000 {
-		t.Errorf("non-overridden: got %d, want 1000000", got)
+		t.Errorf("context window: got %d, want 1000000", got)
+	}
+	// Non-configured model falls back to default
+	if got := reg.ContextWindow("unknown/some-model"); got != 128_000 {
+		t.Errorf("non-configured context window: got %d, want 128000", got)
 	}
 }
 
-func TestCompactionWithConfigModelLimits(t *testing.T) {
+func TestCompactionWithConfigModels(t *testing.T) {
 	mock := llm.NewMock().Finish("done")
 	stream := NewStreamEventManager(nil)
 
 	tmpDir := t.TempDir()
 	cpStore := turnlog.NewCheckpointStore(func(pid string) string { return filepath.Join(tmpDir, pid) })
 
-	// Config with model limit override
+	// Config with model generation param override
 	store := &testConfigStore{
 		cfg: &domain.ConfigFile{
 			Runtime: domain.ConfigRuntimeSection{
@@ -160,25 +201,26 @@ func TestCompactionWithConfigModelLimits(t *testing.T) {
 				},
 			},
 			LLM: domain.ConfigLLMSection{
-				ModelLimits: []domain.ModelLimit{
-					{Model: "test-model", ContextWindow: 32_000, MaxOutput: 4_000},
+				Models: []domain.ModelConfig{
+					{Model: "test-model", Temperature: 0.7},
 				},
 			},
 		},
 	}
 	mgr := NewCompactionManager(mock, stream, store, cpStore, nil)
 
-	// test-model: context=32K, maxOutput=4K, usable=28K, trigger@0.85=23.8K
+	// test-model has no context window pattern rule, so falls back to default 128K
+	// default 128K - 8192 maxOutput = 119808 usable, trigger@0.85 = ~101837
 	model := "provider/test-model"
 
 	// Below threshold
-	if mgr.ShouldCompact("s1", 1, 0, 20_000, model) {
-		t.Error("should NOT compact when tokens (20K) < threshold (~23.8K)")
+	if mgr.ShouldCompact("s1", 1, 0, 80_000, model) {
+		t.Error("should NOT compact when tokens (80K) < threshold (~101K)")
 	}
 
 	// Above threshold
-	if !mgr.ShouldCompact("s1", 1, 0, 25_000, model) {
-		t.Error("should compact when tokens (25K) > threshold (~23.8K)")
+	if !mgr.ShouldCompact("s1", 1, 0, 110_000, model) {
+		t.Error("should compact when tokens (110K) > threshold (~101K)")
 	}
 }
 

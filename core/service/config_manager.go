@@ -59,8 +59,8 @@ func (m *ConfigManager) Update(ctx context.Context, req domain.UpdateConfigFileR
 		if req.LLM.Providers != nil {
 			cfg.LLM.Providers = req.LLM.Providers
 		}
-		if req.LLM.ModelLimits != nil {
-			cfg.LLM.ModelLimits = req.LLM.ModelLimits
+		if req.LLM.Models != nil {
+			cfg.LLM.Models = req.LLM.Models
 		}
 	}
 

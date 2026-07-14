@@ -11,11 +11,12 @@ import (
 )
 
 type DefaultLLMProviderClient struct {
-	mgr *service.LLMConfigManager
+	mgr     *service.LLMConfigManager
+	modelCfg *service.ModelConfigRegistry
 }
 
-func NewDefaultLLMProvider(mgr *service.LLMConfigManager) port.LLMProvider {
-	return &DefaultLLMProviderClient{mgr: mgr}
+func NewDefaultLLMProvider(mgr *service.LLMConfigManager, modelCfg *service.ModelConfigRegistry) port.LLMProvider {
+	return &DefaultLLMProviderClient{mgr: mgr, modelCfg: modelCfg}
 }
 
 func (c *DefaultLLMProviderClient) Chat(ctx context.Context, req port.LLMChatRequest) (port.LLMChatResponse, error) {
@@ -32,6 +33,11 @@ func (c *DefaultLLMProviderClient) Chat(ctx context.Context, req port.LLMChatReq
 		mn = modelName
 	}
 	req.Model = mn
+
+	// Auto-fill GenParams from registry if not already set by caller.
+	if req.GenParams == nil && c.modelCfg != nil {
+		req.GenParams = c.modelCfg.GenParams(providerName + "/" + modelName)
+	}
 
 	switch cfg.Provider {
 	case domain.LLMProviderAnthropic:

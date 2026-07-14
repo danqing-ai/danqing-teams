@@ -121,10 +121,15 @@ export interface LLMModel {
   enabled: boolean
 }
 
-export interface ModelLimit {
+export interface ModelConfig {
   model: string
-  contextWindow: number
-  maxOutput: number
+  context_window?: number
+  max_output?: number
+  temperature?: number
+  top_p?: number
+  frequency_penalty?: number
+  presence_penalty?: number
+  stop?: string[]
 }
 
 export type SearchProvider =
@@ -195,7 +200,7 @@ export interface ConfigFile {
   search: SearchConfig
   llm: {
     providers: LLMProviderPreset[]
-    modelLimits?: ModelLimit[]
+    models?: ModelConfig[]
   }
 }
 

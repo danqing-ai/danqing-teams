@@ -64,6 +64,11 @@ body {
   background: var(--dq-label-secondary);
 }
 
+/* 修复 Tauri 桌面端 select 组件字体偏小问题 */
+.dq-select__trigger {
+  font-size: var(--dq-font-size-body);
+}
+
 /* Teams 语义层：仅引用 --dq-* token，便于浮岛与画布复用 */
 html.dark,
 .teams-app {

@@ -41,13 +41,18 @@ type LLMModel struct {
 	Enabled    bool   `json:"enabled"`
 }
 
-// ModelLimit defines the context window and max output tokens for a specific
-// model. Entries are stored in the config file so users can add / edit them
-// from the settings page without touching Go code.
-type ModelLimit struct {
-	Model         string `json:"model" mapstructure:"model" yaml:"model"`
-	ContextWindow int    `json:"contextWindow" mapstructure:"context_window" yaml:"context_window"`
-	MaxOutput     int    `json:"maxOutput" mapstructure:"max_output" yaml:"max_output"`
+// ModelConfig defines per-model configuration including context window, max
+// output tokens, and generation parameter overrides. All fields are optional;
+// unset values fall back to built-in pattern rules.
+type ModelConfig struct {
+	Model            string   `json:"model" mapstructure:"model" yaml:"model"`
+	ContextWindow    int      `json:"context_window,omitempty" mapstructure:"context_window" yaml:"context_window,omitempty"`
+	MaxOutput        int      `json:"max_output,omitempty" mapstructure:"max_output" yaml:"max_output,omitempty"`
+	Temperature      float64  `json:"temperature,omitempty" mapstructure:"temperature" yaml:"temperature,omitempty"`
+	TopP             float64  `json:"top_p,omitempty" mapstructure:"top_p" yaml:"top_p,omitempty"`
+	FrequencyPenalty float64  `json:"frequency_penalty,omitempty" mapstructure:"frequency_penalty" yaml:"frequency_penalty,omitempty"`
+	PresencePenalty  float64  `json:"presence_penalty,omitempty" mapstructure:"presence_penalty" yaml:"presence_penalty,omitempty"`
+	Stop             []string `json:"stop,omitempty" mapstructure:"stop" yaml:"stop,omitempty"`
 }
 
 // LLMProviderPreset is a template for quickly creating a provider config.

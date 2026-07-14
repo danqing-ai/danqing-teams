@@ -39,7 +39,7 @@ type Engine struct {
 	turnRunner    *TurnRunner
 	toolCatalog   *tool.Registry
 	compactionMgr *CompactionManager
-	modelLimits   *ModelLimitsRegistry
+	modelLimits   *ModelConfigRegistry
 	configStore   port.ConfigStore
 	dataDir       string
 	turnMessages  map[string][]Message
@@ -80,7 +80,7 @@ func NewEngine(sessions *service.SessionManager, turns *service.TurnManager, pro
 	gate := permission.NewGate(nil)
 	turnRunner := NewTurnRunner(llm, stream, gate, tool.NewRegistry(), configStore)
 
-	modelLimits := NewModelLimitsRegistry()
+	modelLimits := NewModelConfigRegistry()
 	modelLimits.LoadFromConfig(context.Background(), configStore)
 
 	e := &Engine{

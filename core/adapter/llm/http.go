@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"danqing-teams/core/port"
@@ -69,10 +70,37 @@ func (p *HTTPProvider) Chat(ctx context.Context, req port.LLMChatRequest) (port.
 	}
 
 	body := map[string]any{
-		"model":        model,
-		"messages":     messages,
-		"temperature":  0.2,
-		"max_tokens":   16384,
+		"model":      model,
+		"messages":   messages,
+	}
+	// Apply generation parameters from GenParams, falling back to defaults.
+	if req.GenParams != nil {
+		gp := req.GenParams
+		if gp.Temperature != 0 {
+			body["temperature"] = gp.Temperature
+		}
+		if gp.TopP != 0 {
+			body["top_p"] = gp.TopP
+		}
+		if gp.FrequencyPenalty != 0 {
+			body["frequency_penalty"] = gp.FrequencyPenalty
+		}
+		if gp.PresencePenalty != 0 {
+			body["presence_penalty"] = gp.PresencePenalty
+		}
+		if len(gp.Stop) > 0 {
+			body["stop"] = gp.Stop
+		}
+		if gp.MaxTokens > 0 {
+			body["max_tokens"] = gp.MaxTokens
+		}
+	}
+	// Apply defaults for parameters not set by GenParams.
+	if _, ok := body["temperature"]; !ok {
+		body["temperature"] = 0.2
+	}
+	if _, ok := body["max_tokens"]; !ok {
+		body["max_tokens"] = 16384
 	}
 	if len(req.Tools) > 0 {
 		var tools []map[string]any
@@ -119,13 +147,14 @@ func (p *HTTPProvider) Chat(ctx context.Context, req port.LLMChatRequest) (port.
 		return port.LLMChatResponse{}, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return port.LLMChatResponse{}, fmt.Errorf("llm http %d: %s", resp.StatusCode, string(respBody))
+		return port.LLMChatResponse{}, classifyHTTPError(resp.StatusCode, respBody)
 	}
 
 	var result struct {
 		Choices []struct {
 			Message struct {
-				Content   string `json:"content"`
+				Content          string `json:"content"`
+				ReasoningContent string `json:"reasoning_content"`
 				ToolCalls []struct {
 					ID       string `json:"id"`
 					Function struct {
@@ -174,7 +203,12 @@ func (p *HTTPProvider) Chat(ctx context.Context, req port.LLMChatRequest) (port.
 		return port.LLMChatResponse{ToolCalls: tcs, Usage: usage}, nil
 	}
 
-	return port.LLMChatResponse{Content: choice.Content, Usage: usage, Done: true}, nil
+	return port.LLMChatResponse{
+		Content:          choice.Content,
+		ReasoningContent: choice.ReasoningContent,
+		Usage:            usage,
+		Done:             true,
+	}, nil
 
 }
 
@@ -202,4 +236,38 @@ func parseArgs(raw json.RawMessage) (map[string]any, error) {
 		return nil, fmt.Errorf("arguments parsed to nil")
 	}
 	return args, nil
+}
+
+// classifyHTTPError returns a user-friendly error message for common HTTP
+// error codes from LLM APIs.
+func classifyHTTPError(statusCode int, body []byte) error {
+	switch statusCode {
+	case http.StatusUnauthorized:
+		return fmt.Errorf("authentication failed (401): check your API key")
+	case http.StatusForbidden:
+		return fmt.Errorf("access forbidden (403): %s", truncate(body, 200))
+	case http.StatusTooManyRequests:
+		return fmt.Errorf("rate limit exceeded (429): please retry after a short wait")
+	case http.StatusRequestEntityTooLarge:
+		return fmt.Errorf("request too large (413): context length exceeded")
+	case http.StatusBadRequest:
+		// Detect context-length errors from OpenAI-style APIs.
+		bodyStr := string(body)
+		if strings.Contains(bodyStr, "context_length") || strings.Contains(bodyStr, "maximum context") {
+			return fmt.Errorf("context length exceeded: reduce input or use a model with larger context")
+		}
+		return fmt.Errorf("bad request (400): %s", truncate(body, 200))
+	case http.StatusInternalServerError:
+		return fmt.Errorf("provider internal error (500): %s", truncate(body, 200))
+	default:
+		return fmt.Errorf("llm http %d: %s", statusCode, truncate(body, 200))
+	}
+}
+
+func truncate(b []byte, maxLen int) string {
+	s := string(b)
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }

@@ -71,8 +71,25 @@ func (p *AnthropicProvider) Chat(ctx context.Context, req port.LLMChatRequest) (
 	body := map[string]any{
 		"model":      model,
 		"messages":   messages,
-		"max_tokens": 4096,
 	}
+	// Apply generation parameters from GenParams, falling back to defaults.
+	maxTokens := 4096
+	if req.GenParams != nil {
+		gp := req.GenParams
+		if gp.MaxTokens > 0 {
+			maxTokens = gp.MaxTokens
+		}
+		if gp.TopP != 0 {
+			body["top_p"] = gp.TopP
+		}
+		if len(gp.Stop) > 0 {
+			body["stop_sequences"] = gp.Stop
+		}
+		if gp.Temperature != 0 {
+			body["temperature"] = gp.Temperature
+		}
+	}
+	body["max_tokens"] = maxTokens
 	if system != "" {
 		body["system"] = system
 	}
@@ -112,7 +129,7 @@ func (p *AnthropicProvider) Chat(ctx context.Context, req port.LLMChatRequest) (
 		return port.LLMChatResponse{}, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return port.LLMChatResponse{}, fmt.Errorf("anthropic http %d: %s", resp.StatusCode, string(respBody))
+		return port.LLMChatResponse{}, classifyHTTPError(resp.StatusCode, respBody)
 	}
 
 	var result struct {

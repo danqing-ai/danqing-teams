@@ -91,8 +91,8 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.POST("/asks/:id/resolve", resolveAskUser(h))
 	api.GET("/config", getConfig(h))
 	api.PUT("/config", updateConfig(h))
-	api.GET("/model-limits", getModelLimits(h))
-	api.PUT("/model-limits", updateModelLimits(h))
+	api.GET("/model-configs", getModelConfigs(h))
+	api.PUT("/model-configs", updateModelConfigs(h))
 	api.GET("/search/config", getSearchConfig(h))
 	api.PUT("/search/config", updateSearchConfig(h))
 	api.GET("/agents", listAgents(h))
@@ -802,38 +802,34 @@ func toggleMCPTool(h *Handler) gin.HandlerFunc {
 	}
 }
 
-// ---- Model Limits ----
+// ---- Model Configs ----
 
-func getModelLimits(h *Handler) gin.HandlerFunc {
+func getModelConfigs(h *Handler) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cfg, err := h.Config.Get(c)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		limits := cfg.LLM.ModelLimits
-		if limits == nil {
-			limits = []domain.ModelLimit{}
+		models := cfg.LLM.Models
+		if models == nil {
+			models = []domain.ModelConfig{}
 		}
-		c.JSON(http.StatusOK, limits)
+		c.JSON(http.StatusOK, models)
 	}
 }
 
-func updateModelLimits(h *Handler) gin.HandlerFunc {
+func updateModelConfigs(h *Handler) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var limits []domain.ModelLimit
-		if err := c.ShouldBindJSON(&limits); err != nil {
+		var models []domain.ModelConfig
+		if err := c.ShouldBindJSON(&models); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		// Validate entries
-		for i, l := range limits {
-			if l.Model == "" {
+		for i, m := range models {
+			if m.Model == "" {
 				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("model name required at index %d", i)})
-				return
-			}
-			if l.ContextWindow <= 0 {
-				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("contextWindow must be > 0 for model %q", l.Model)})
 				return
 			}
 		}
@@ -842,12 +838,12 @@ func updateModelLimits(h *Handler) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		cfg.LLM.ModelLimits = limits
+		cfg.LLM.Models = models
 		if _, err := h.Config.Update(c, domain.UpdateConfigFileRequest{LLM: &cfg.LLM}); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, limits)
+		c.JSON(http.StatusOK, models)
 	}
 }
 

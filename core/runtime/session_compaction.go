@@ -29,7 +29,7 @@ type CompactionManager struct {
 	configStore port.ConfigStore
 	stream      port.EventStream
 	store       CompactionCheckpointStore
-	modelLimits *ModelLimitsRegistry
+	modelLimits *ModelConfigRegistry
 }
 
 type CompactionCheckpointStore interface {
@@ -47,9 +47,9 @@ type compactionCfg struct {
 	toolTruncate  int
 }
 
-func NewCompactionManager(llm port.LLMProvider, stream port.EventStream, configStore port.ConfigStore, store CompactionCheckpointStore, modelLimits *ModelLimitsRegistry) *CompactionManager {
+func NewCompactionManager(llm port.LLMProvider, stream port.EventStream, configStore port.ConfigStore, store CompactionCheckpointStore, modelLimits *ModelConfigRegistry) *CompactionManager {
 	if modelLimits == nil {
-		modelLimits = NewModelLimitsRegistry()
+		modelLimits = NewModelConfigRegistry()
 	}
 	return &CompactionManager{
 		checkpoints: make(map[string]*domain.CompactionCheckpoint),
@@ -93,7 +93,7 @@ func (m *CompactionManager) loadCfg(ctx context.Context) compactionCfg {
 				cfg.toolTruncate = rt.ToolTruncate
 			}
 			// Reload model limits from config into the registry.
-			m.modelLimits.SetLimits(c.LLM.ModelLimits)
+			m.modelLimits.SetModels(c.LLM.Models)
 		}
 	}
 	return cfg

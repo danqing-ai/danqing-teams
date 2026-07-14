@@ -1,24 +1,24 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Setting, Cpu, Search, Brush } from '@danqing/dq-shell'
 import { useLLMStore } from '@/stores/llm'
 import { useSearchConfigStore } from '@/stores/searchConfig'
 import { useRuntimeConfigStore } from '@/stores/runtimeConfig'
-import { useModelLimitsStore } from '@/stores/modelLimits'
+import { useModelConfigStore } from '@/stores/modelLimits'
 import { useThemeStore, THEME_OPTIONS } from '@/stores/theme'
 import type { ThemeId } from '@/stores/theme'
 import { toast } from '@/utils/feedback'
-import type { LLMProviderType, LLMProviderConfig, LLMModelRef, LLMProviderPreset, SearchProvider, ModelLimit } from '@/types/mission'
+import type { LLMProviderType, LLMProviderConfig, LLMModelRef, LLMProviderPreset, SearchProvider, ModelConfig } from '@/types/mission'
 
-type SettingsTab = 'runtime' | 'models' | 'modelLimits' | 'search' | 'appearance'
+type SettingsTab = 'runtime' | 'models' | 'modelConfig' | 'search' | 'appearance'
 
 const { t } = useI18n()
 const activeTab = ref<SettingsTab>('models')
 const llm = useLLMStore()
 const searchConfig = useSearchConfigStore()
 const runtimeConfig = useRuntimeConfigStore()
-const modelLimits = useModelLimitsStore()
+const modelConfig = useModelConfigStore()
 const themeStore = useThemeStore()
 
 const providerOptions = computed<{ value: LLMProviderType; label: string }[]>(() => [
@@ -65,10 +65,15 @@ const runtimeForm = ref({
   compactionToolTruncate: 2000,
 })
 
-const modelLimitsForm = ref<ModelLimit[]>([])
-const showModelLimitForm = ref(false)
-const editingModelLimitIdx = ref<number | null>(null)
-const modelLimitForm = ref({ model: '', contextWindow: 128000, maxOutput: 8192 })
+const modelConfigForm = ref<ModelConfig[]>([])
+const selectedModel = ref<string>('__default__')
+const editingModelIdx = ref<number | null>(null)
+const defaultForm = reactive({ context_window: 128000, max_output: 8192, temperature: 0.7 })
+const showAddModelDialog = ref(false)
+const newModelName = ref('')
+const newContextWindow = ref(0)
+const newMaxOutput = ref(0)
+const newTemperature = ref(0)
 
 onMounted(async () => {
   await Promise.all([
@@ -77,7 +82,7 @@ onMounted(async () => {
     llm.loadPresets(),
     searchConfig.loadConfig(),
     runtimeConfig.loadConfig(),
-    modelLimits.load(),
+    modelConfig.load(),
   ])
   if (searchConfig.config) {
     searchForm.value = {
@@ -91,7 +96,7 @@ onMounted(async () => {
   if (runtimeConfig.config) {
     runtimeForm.value = { ...runtimeConfig.config }
   }
-  modelLimitsForm.value = [...modelLimits.limits]
+  modelConfigForm.value = [...modelConfig.models]
 })
 
 const displayedModels = computed<LLMModelRef[]>(() => {
@@ -288,48 +293,45 @@ async function handleSaveRuntime() {
   }
 }
 
-function openAddModelLimit() {
-  editingModelLimitIdx.value = null
-  modelLimitForm.value = { model: '', contextWindow: 128000, maxOutput: 8192 }
-  showModelLimitForm.value = true
+function onSelectModel(model: string) {
+  const idx = modelConfigForm.value.findIndex(m => m.model === model)
+  editingModelIdx.value = idx >= 0 ? idx : null
 }
 
-function openEditModelLimit(idx: number) {
-  editingModelLimitIdx.value = idx
-  const item = modelLimitsForm.value[idx]
-  modelLimitForm.value = { model: item.model, contextWindow: item.contextWindow, maxOutput: item.maxOutput }
-  showModelLimitForm.value = true
+function addModelEntry() {
+  newModelName.value = ''
+  newContextWindow.value = 0
+  newMaxOutput.value = 0
+  newTemperature.value = 0
+  showAddModelDialog.value = true
 }
 
-async function saveModelLimitForm() {
-  if (!modelLimitForm.value.model.trim()) return
-  const entry: ModelLimit = {
-    model: modelLimitForm.value.model.trim(),
-    contextWindow: Number(modelLimitForm.value.contextWindow) || 128000,
-    maxOutput: Number(modelLimitForm.value.maxOutput) || 8192,
-  }
-  if (editingModelLimitIdx.value !== null) {
-    modelLimitsForm.value[editingModelLimitIdx.value] = entry
-  } else {
-    const existing = modelLimitsForm.value.findIndex((l) => l.model === entry.model)
-    if (existing >= 0) {
-      modelLimitsForm.value[existing] = entry
-    } else {
-      modelLimitsForm.value.push(entry)
-    }
-  }
-  showModelLimitForm.value = false
+function confirmAddModel() {
+  const name = newModelName.value.trim()
+  if (!name) return
+  if (modelConfigForm.value.find(m => m.model === name)) return
+  showAddModelDialog.value = false
+  modelConfigForm.value.push({
+    model: name,
+    context_window: newContextWindow.value || undefined,
+    max_output: newMaxOutput.value || undefined,
+    temperature: newTemperature.value || undefined,
+  })
+  editingModelIdx.value = modelConfigForm.value.length - 1
+  selectedModel.value = name
+}
+
+function removeSelectedModel() {
+  if (editingModelIdx.value === null) return
+  modelConfigForm.value.splice(editingModelIdx.value, 1)
+  editingModelIdx.value = null
+  selectedModel.value = '__default__'
+}
+
+async function handleSaveModelConfig() {
+  modelConfigForm.value = modelConfigForm.value.filter(m => m.model.trim() !== '')
   try {
-    await modelLimits.save(modelLimitsForm.value)
-  } catch {
-    /* toast already shown in store */
-  }
-}
-
-async function removeModelLimit(idx: number) {
-  modelLimitsForm.value.splice(idx, 1)
-  try {
-    await modelLimits.save(modelLimitsForm.value)
+    await modelConfig.save(modelConfigForm.value)
   } catch {
     /* toast already shown in store */
   }
@@ -340,7 +342,7 @@ const menuItems = computed(() => [
   { id: 'appearance' as SettingsTab, label: t('settings.appearance'), icon: Brush },
   { id: 'runtime' as SettingsTab, label: t('settings.runtime'), icon: Setting },
   { id: 'models' as SettingsTab, label: t('settings.models'), icon: Cpu },
-  { id: 'modelLimits' as SettingsTab, label: t('settings.modelLimits'), icon: Setting },
+  { id: 'modelConfig' as SettingsTab, label: t('settings.modelConfig'), icon: Setting },
   { id: 'search' as SettingsTab, label: t('settings.search'), icon: Search },
 ])
 
@@ -349,13 +351,13 @@ const footerHint = computed(() => {
     case 'runtime': return t('common.saveShortcut')
     case 'search': return t('common.saveShortcut')
     case 'models': return t('settings.modelsHint')
-    case 'modelLimits': return t('settings.modelLimitsHint')
+    case 'modelConfig': return t('settings.modelConfigHint')
     default: return ''
   }
 })
 
 const hasFooterActions = computed(() => {
-  return ['runtime', 'search', 'models', 'modelLimits'].includes(activeTab.value)
+  return ['runtime', 'search', 'models', 'modelConfig'].includes(activeTab.value)
 })
 </script>
 
@@ -656,35 +658,59 @@ const hasFooterActions = computed(() => {
         </div>
       </div>
 
-      <div v-else-if="activeTab === 'modelLimits'" class="settings-section settings-section--wide">
+      <div v-else-if="activeTab === 'modelConfig'" class="settings-section settings-section--wide">
         <header class="settings-section__head">
-          <h2>{{ $t('settings.modelLimits') }}</h2>
-          <p>{{ $t('settings.modelLimitsDesc') }}</p>
+          <h2>{{ $t('settings.modelConfig') }}</h2>
+          <p>{{ $t('settings.modelConfigDesc') }}</p>
         </header>
 
-        <div v-if="modelLimits.loading" class="settings-empty">{{ $t('common.loading') }}</div>
+        <div v-if="modelConfig.loading" class="settings-empty">{{ $t('common.loading') }}</div>
 
-        <div v-else>
-          <div v-if="modelLimitsForm.length" class="model-limit-list">
-            <div class="model-limit-list__head">
-              <span class="model-limit-list__col">{{ $t('settings.modelName') }}</span>
-              <span class="model-limit-list__col">{{ $t('settings.contextWindow') }}</span>
-              <span class="model-limit-list__col">{{ $t('settings.maxOutput') }}</span>
-              <span class="model-limit-list__col model-limit-list__col--actions"></span>
-            </div>
-            <div v-for="(item, idx) in modelLimitsForm" :key="item.model" class="model-limit-list__row">
-              <span class="model-limit-list__col model-limit-list__col--name">{{ item.model }}</span>
-              <span class="model-limit-list__col">{{ item.contextWindow.toLocaleString() }}</span>
-              <span class="model-limit-list__col">{{ item.maxOutput.toLocaleString() }}</span>
-              <span class="model-limit-list__col model-limit-list__col--actions">
-                <DqButton size="small" @click="openEditModelLimit(idx)">{{ $t('settings.edit') }}</DqButton>
-                <DqButton size="small" type="text" @click="removeModelLimit(idx)">{{ $t('common.delete') }}</DqButton>
-              </span>
-            </div>
-          </div>
+        <div v-else class="settings-form">
+          <label class="settings-field">
+            <span class="settings-field__label">{{ $t('settings.modelName') }}</span>
+            <DqSelect v-model="selectedModel" @update:model-value="onSelectModel">
+              <DqOption value="__default__" :label="$t('settings.defaultModelTitle') + ' (128K / 8K / 0.7)'" />
+              <DqOption
+                v-for="item in modelConfigForm"
+                :key="item.model"
+                :value="item.model"
+                :label="item.model"
+              />
+            </DqSelect>
+          </label>
 
-          <div v-else class="settings-empty">{{ $t('settings.noModelLimits') }}</div>
+          <template v-if="selectedModel === '__default__'">
+            <label class="settings-field">
+              <span class="settings-field__label">Context Window</span>
+              <DqInput v-model.number="defaultForm.context_window" type="number" placeholder="0" />
+            </label>
+            <label class="settings-field">
+              <span class="settings-field__label">Max Output</span>
+              <DqInput v-model.number="defaultForm.max_output" type="number" placeholder="0" />
+            </label>
+            <label class="settings-field">
+              <span class="settings-field__label">Temperature</span>
+              <DqInput v-model.number="defaultForm.temperature" type="number" placeholder="0" step="0.1" />
+            </label>
+          </template>
+
+          <template v-else-if="editingModelIdx !== null">
+            <label class="settings-field">
+              <span class="settings-field__label">Context Window</span>
+              <DqInput v-model.number="modelConfigForm[editingModelIdx].context_window" type="number" placeholder="0" />
+            </label>
+            <label class="settings-field">
+              <span class="settings-field__label">Max Output</span>
+              <DqInput v-model.number="modelConfigForm[editingModelIdx].max_output" type="number" placeholder="0" />
+            </label>
+            <label class="settings-field">
+              <span class="settings-field__label">Temperature</span>
+              <DqInput v-model.number="modelConfigForm[editingModelIdx].temperature" type="number" placeholder="0" step="0.1" />
+            </label>
+          </template>
         </div>
+
       </div>
 
       </div>
@@ -692,6 +718,7 @@ const hasFooterActions = computed(() => {
       <footer v-if="hasFooterActions" class="settings-panel__footer">
         <span class="settings-panel__footer-hint">{{ footerHint }}</span>
         <div class="settings-panel__footer-actions">
+          <DqButton v-if="activeTab === 'modelConfig' && editingModelIdx !== null" type="danger" size="small" @click="removeSelectedModel">{{ $t('common.delete') }}</DqButton>
           <DqButton v-if="activeTab === 'runtime'" type="primary" :disabled="runtimeConfig.saving" @click="handleSaveRuntime">
             {{ runtimeConfig.saving ? $t('common.saving') : $t('common.save_') }}
           </DqButton>
@@ -699,32 +726,39 @@ const hasFooterActions = computed(() => {
             {{ searchConfig.saving ? $t('common.saving') : $t('common.save_') }}
           </DqButton>
           <DqButton v-else-if="activeTab === 'models'" type="primary" @click="openNewForm">{{ $t('settings.addProvider') }}</DqButton>
-          <DqButton v-else-if="activeTab === 'modelLimits'" type="primary" @click="openAddModelLimit">{{ $t('settings.addModelLimit') }}</DqButton>
+          <DqButton v-else-if="activeTab === 'modelConfig'" @click="addModelEntry">{{ $t('settings.addModelConfig') }}</DqButton>
+          <DqButton v-if="activeTab === 'modelConfig'" type="primary" :disabled="modelConfig.saving" @click="handleSaveModelConfig">
+            {{ modelConfig.saving ? $t('common.saving') : $t('common.save_') }}
+          </DqButton>
         </div>
       </footer>
 
       <DqDialog
-        v-model:open="showModelLimitForm"
-        :title="editingModelLimitIdx !== null ? $t('settings.editModelLimit') : $t('settings.addModelLimit')"
+        v-model:open="showAddModelDialog"
+        :title="$t('settings.addModelConfig')"
         variant="glass"
-        width="480px"
+        width="400px"
         :closable="true"
       >
         <div class="settings-form">
           <label class="settings-field">
             <span class="settings-field__label">{{ $t('settings.modelName') }}</span>
-            <DqInput v-model="modelLimitForm.model" :placeholder="$t('settings.modelNamePlaceholder')" :disabled="editingModelLimitIdx !== null" />
+            <DqInput v-model="newModelName" :placeholder="$t('settings.modelNamePlaceholder')" />
           </label>
           <label class="settings-field">
-            <span class="settings-field__label">{{ $t('settings.contextWindow') }}</span>
-            <DqInput v-model.number="modelLimitForm.contextWindow" type="number" placeholder="128000" />
+            <span class="settings-field__label">Context Window</span>
+            <DqInput v-model.number="newContextWindow" type="number" placeholder="0" />
           </label>
           <label class="settings-field">
-            <span class="settings-field__label">{{ $t('settings.maxOutput') }}</span>
-            <DqInput v-model.number="modelLimitForm.maxOutput" type="number" placeholder="8192" />
+            <span class="settings-field__label">Max Output</span>
+            <DqInput v-model.number="newMaxOutput" type="number" placeholder="0" />
+          </label>
+          <label class="settings-field">
+            <span class="settings-field__label">Temperature</span>
+            <DqInput v-model.number="newTemperature" type="number" placeholder="0" step="0.1" />
           </label>
           <div class="settings-actions">
-            <DqButton type="primary" @click="saveModelLimitForm">{{ $t('common.save_') }}</DqButton>
+            <DqButton type="primary" @click="confirmAddModel">{{ $t('common.save_') }}</DqButton>
           </div>
         </div>
       </DqDialog>
@@ -1387,6 +1421,25 @@ const hasFooterActions = computed(() => {
   font-size: var(--dq-font-size-footnote);
   font-weight: 500;
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  color: var(--dq-label-secondary);
+}
+
+/* Subsection divider within settings panel */
+.settings-subsection {
+  border-top: 1px solid var(--teams-glass-border);
+  padding-top: 16px;
+}
+
+.settings-subsection__title {
+  margin: 0 0 4px;
+  font-size: var(--dq-font-size-title);
+  font-weight: 600;
+  color: var(--dq-label-primary);
+}
+
+.settings-subsection__desc {
+  margin: 0;
+  font-size: var(--dq-font-size-body);
   color: var(--dq-label-secondary);
 }
 

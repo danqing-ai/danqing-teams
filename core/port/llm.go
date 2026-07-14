@@ -20,17 +20,30 @@ type ChatToolCall struct {
 }
 
 type LLMChatRequest struct {
-	Model    string
-	Messages []ChatMessage
-	Tools    []domain.ToolSchema
+	Model      string
+	Messages   []ChatMessage
+	Tools      []domain.ToolSchema
 	ToolChoice string
+	GenParams  *ModelGenParams // optional; nil = provider defaults
+}
+
+// ModelGenParams carries per-model generation parameters.
+// Zero values mean "use provider default" (do not send to API).
+type ModelGenParams struct {
+	MaxTokens        int
+	Temperature      float64
+	TopP             float64
+	FrequencyPenalty float64
+	PresencePenalty  float64
+	Stop             []string
 }
 
 type LLMChatResponse struct {
-	Content   string
-	ToolCalls []ChatToolCall
-	Usage     *LLMUsage
-	Done      bool
+	Content          string
+	ReasoningContent string // thinking/reasoning trace from reasoning models
+	ToolCalls        []ChatToolCall
+	Usage            *LLMUsage
+	Done             bool
 }
 
 type LLMUsage struct {

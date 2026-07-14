@@ -141,6 +141,13 @@ func defaultLLMPresets() []domain.LLMProviderPreset {
 		{ID: "qwen", Name: "通义千问 (Qwen)", Provider: "openai", BaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", Icon: "🟡", Description: "Qwen Max、Plus、Turbo"},
 		{ID: "moonshot", Name: "Moonshot (Kimi)", Provider: "openai", BaseURL: "https://api.kimi.com/coding/v1", Icon: "🌙", Description: "Kimi 系列"},
 		{ID: "ollama", Name: "Ollama (Local)", Provider: "openai", BaseURL: "http://localhost:11434/v1", Icon: "🦙", Description: "本地模型，通过 Ollama 运行"},
+		{ID: "siliconflow", Name: "SiliconFlow", Provider: "openai", BaseURL: "https://api.siliconflow.cn/v1", Icon: "🌊", Description: "SiliconFlow 云模型平台"},
+		{ID: "openrouter", Name: "OpenRouter", Provider: "openai", BaseURL: "https://openrouter.ai/api/v1", Icon: "🔀", Description: "多模型路由，统一接口"},
+		{ID: "together", Name: "Together AI", Provider: "openai", BaseURL: "https://api.together.xyz/v1", Icon: "🤝", Description: "开源模型推理平台"},
+		{ID: "fireworks", Name: "Fireworks AI", Provider: "openai", BaseURL: "https://api.fireworks.ai/inference/v1", Icon: "🎆", Description: "高性能推理服务"},
+		{ID: "groq", Name: "Groq", Provider: "openai", BaseURL: "https://api.groq.com/openai/v1", Icon: "⚡", Description: "超快推理速度"},
+		{ID: "deepinfra", Name: "DeepInfra", Provider: "openai", BaseURL: "https://api.deepinfra.com/v1/openai", Icon: "🏗️", Description: "开源模型部署平台"},
+		{ID: "xai", Name: "xAI", Provider: "openai", BaseURL: "https://api.x.ai/v1", Icon: "✖", Description: "Grok 系列模型"},
 	}
 }
 

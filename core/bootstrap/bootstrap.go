@@ -118,7 +118,12 @@ func New(cfg Config) *Core {
 	llmConfig := service.NewLLMConfigManager(llmConfigRepo)
 	searchConfig := service.NewSearchConfigManager(loader)
 	configManager := service.NewConfigManager(loader)
-	client := llm.NewDefaultLLMProvider(llmConfig)
+
+	// Create model config registry for generation params and context window lookups.
+	modelCfg := service.NewModelConfigRegistry()
+	modelCfg.LoadFromConfig(context.Background(), loader)
+
+	client := llm.NewDefaultLLMProvider(llmConfig, modelCfg)
 
 	provider := cfg.LLM
 	if provider == nil {
