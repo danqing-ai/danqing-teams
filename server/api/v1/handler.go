@@ -1,17 +1,22 @@
 package v1
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"danqing-teams/core/service"
 	"danqing-teams/core/domain"
 	"danqing-teams/core/port"
 
 	"github.com/gin-gonic/gin"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/extension"
+	goldmarkHtml "github.com/yuin/goldmark/renderer/html"
 )
 
 // Version is set at build time via -ldflags.
@@ -77,6 +82,8 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.GET("/projects/:id/sessions", listProjectSessions(h))
 	api.GET("/projects/:id/files", listProjectFiles(h))
 	api.GET("/projects/:id/files/content", readProjectFile(h))
+	api.GET("/projects/:id/raw/*filepath", serveProjectFile(h))
+	api.GET("/proxy/*target", proxyDevServer(h))
 	api.GET("/projects/:id/git-changes", getProjectGitChanges(h))
 	api.GET("/llm/configs", getLLMConfigs(h))
 	api.POST("/llm/configs", createLLMConfig(h))
@@ -687,12 +694,122 @@ func readProjectFile(h *Handler) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "path is required"})
 			return
 		}
+
+		// Raw mode: serve file directly with Content-Type header
+		if c.Query("raw") == "true" {
+			data, ct, err := h.Projects.ReadFileRaw(c, c.Param("id"), path)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			// Strip charset param to avoid mime type parsing issues
+			if i := strings.Index(ct, ";"); i != -1 {
+				ct = ct[:i]
+			}
+			c.Header("Content-Type", ct)
+			c.Data(http.StatusOK, ct, data)
+			return
+		}
+
 		fc, err := h.Projects.ReadFileContent(c, c.Param("id"), path)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusOK, fc)
+	}
+}
+
+// dqInspectScript is injected into HTML responses so the browser tab can select elements.
+const dqInspectScript = `<script>(function(){var o=document.createElement('div');o.id='__dq_inspect_overlay';o.style.cssText='position:fixed;pointer-events:none;z-index:99999;border:2px solid #3b82f6;background:rgba(59,130,246,0.1);transition:all 0.08s ease;display:none';document.body.appendChild(o);function u(e){var el=e.target;if(!el||el===document.body||el===document.documentElement||el.id==='__dq_inspect_overlay')return;var r=el.getBoundingClientRect();o.style.display='block';o.style.top=r.top+'px';o.style.left=r.left+'px';o.style.width=r.width+'px';o.style.height=r.height+'px'}function s(e){e.preventDefault();e.stopPropagation();var el=e.target;if(!el||el===document.body||el===document.documentElement)return;var h=el.outerHTML.length>2000?el.outerHTML.slice(0,2000)+'...':el.outerHTML;var t=(el.textContent||'').trim().slice(0,2000);window.parent.postMessage({type:'dq-inspect-selected',html:h,text:t,tag:el.tagName.toLowerCase()},'*');c()}function c(){document.removeEventListener('mouseover',u,true);document.removeEventListener('click',s,true);document.body.style.cursor='';o.remove()}window.addEventListener('message',function(e){if(e.data&&e.data.type==='dq-inspect-start'){document.body.style.cursor='crosshair';document.addEventListener('mouseover',u,true);document.addEventListener('click',s,true)}})})()</script>`
+
+// serveProjectFile serves a project file directly at /projects/:id/files/:filepath
+func serveProjectFile(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		filepath := strings.TrimPrefix(c.Param("filepath"), "/")
+		if filepath == "" || filepath == "content" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file path"})
+			return
+		}
+		data, ct, err := h.Projects.ReadFileRaw(c, c.Param("id"), filepath)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if i := strings.Index(ct, ";"); i != -1 {
+			ct = ct[:i]
+		}
+		// Render .md to HTML
+		ext := strings.ToLower(filepath[strings.LastIndex(filepath, "."):])
+		if ext == ".md" || ext == ".markdown" {
+			var buf bytes.Buffer
+			goldmark.New(goldmark.WithExtensions(extension.Table), goldmark.WithRendererOptions(goldmarkHtml.WithUnsafe())).Convert(data, &buf)
+			html := fmt.Sprintf(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{background:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#24292f;max-width:900px;margin:0 auto;padding:32px}h1,h2{padding-bottom:.3em;border-bottom:1px solid #d0d7de}h1{font-size:2em}h2{font-size:1.5em}pre{background:#f6f8fa;padding:16px;border-radius:6px;overflow:auto;font-size:85%%}code{font-family:"SF Mono",Monaco,monospace;font-size:85%%;background:#f6f8fa;padding:.2em .4em;border-radius:3px}pre code{background:none;padding:0}table{border-collapse:collapse;width:100%%}td,th{border:1px solid #d0d7de;padding:6px 13px}th{background:#f6f8fa}tr:nth-child(2n){background:#f6f8fa}blockquote{border-left:4px solid #d0d7de;padding:0 1em;color:#57606a}img{max-width:100%%}a{color:#0969da}ul,ol{padding-left:2em}</style></head><body>%s</body></html>`, buf.String())
+			c.Data(http.StatusOK, "text/html", []byte(html + dqInspectScript))
+			return
+		}
+		// Inject inspect listener into HTML responses
+		if ct == "text/html" {
+			data = append(data, []byte(dqInspectScript)...)
+		}
+		c.Header("Content-Type", ct)
+		c.Data(http.StatusOK, ct, data)
+	}
+}
+
+// proxyDevServer proxies external dev servers (e.g. localhost:3000) and injects the inspect script.
+func proxyDevServer(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		raw := strings.TrimPrefix(c.Param("target"), "/")
+		if raw == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "target is required"})
+			return
+		}
+		// Convert localhost-3000/path to http://localhost:3000/path
+		// Replace first dash after the host portion with colon
+		parts := strings.SplitN(raw, "/", 2)
+		host := strings.Replace(parts[0], "-", ":", 1) // localhost-3000 → localhost:3000
+		path := ""
+		if len(parts) > 1 {
+			path = "/" + parts[1]
+		}
+		targetURL := "http://" + host + path
+		if q := c.Request.URL.RawQuery; q != "" {
+			targetURL += "?" + q
+		}
+
+		resp, err := http.Get(targetURL)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+			return
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+			return
+		}
+
+		ct := resp.Header.Get("Content-Type")
+		if i := strings.Index(ct, ";"); i != -1 {
+			ct = ct[:i]
+		}
+
+		// Inject <base> tag and inspect script into HTML
+		if ct == "text/html" {
+			baseTag := fmt.Sprintf(`<base href="http://%s/">`, host)
+			body = bytes.Replace(body, []byte("<head>"), []byte("<head>"+baseTag), 1)
+			body = append(body, []byte(dqInspectScript)...)
+		}
+
+		for k, vs := range resp.Header {
+			for _, v := range vs {
+				c.Header(k, v)
+			}
+		}
+		c.Header("Content-Type", ct)
+		c.Data(resp.StatusCode, ct, body)
 	}
 }
 

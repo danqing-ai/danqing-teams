@@ -2,11 +2,9 @@
 import { computed, ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSessionsStore } from '@/stores/sessions'
-import { useResizableWidth } from '@/composables/useResizableWidth'
 import FloatingComposer from '@/components/composer/FloatingComposer.vue'
 import PlanPanel from '@/components/center/PlanPanel.vue'
 import FileTree from '@/components/center/FileTree.vue'
-import FileViewer from '@/components/center/FileViewer.vue'
 import ExpertsPanel from '@/components/center/ExpertsPanel.vue'
 import ChangesPanel from '@/components/center/ChangesPanel.vue'
 import { renderMarkdown } from '@/utils/markdown-render'
@@ -17,29 +15,119 @@ import type { StreamEvent, TurnLog } from '@/types/mission'
 
 const router = useRouter()
 const sessions = useSessionsStore()
-const rightTab = ref<'plan' | 'files' | 'experts' | 'changes'>('plan')
-const selectedFilePath = ref<string | null>(null)
+const rightTab = ref<'plan' | 'files' | 'experts' | 'changes' | 'browser'>('plan')
 const fileTreeRef = ref<InstanceType<typeof FileTree> | null>(null)
 const changesPanelRef = ref<InstanceType<typeof ChangesPanel> | null>(null)
 const isEditingTitle = ref(false)
 const editingTitle = ref('')
+const browserUrl = ref('')
+const browserUrlInput = ref('')
+const browserRefresh = ref(0)
+const selectingElement = ref(false)
+const composerRef = ref<InstanceType<typeof FloatingComposer> | null>(null)
 
-function refreshRightPanel() {
-  switch (rightTab.value) {
-    case 'files':
-      fileTreeRef.value?.refresh()
-      break
-    case 'changes':
-      changesPanelRef.value?.refresh()
-      break
-    // plan and experts are computed from streamEvents, no refresh needed
+function refreshBrowser() {
+  browserRefresh.value++
+  browserUrl.value = browserUrlInput.value
+}
+
+// ── Split mode: 60:40 default ──
+const bodyRef = ref<HTMLElement | null>(null)
+const SPLIT_STORAGE_KEY = 'session-split-percent-v1'
+const splitPercent = ref(60)
+
+onMounted(() => {
+  const saved = Number(localStorage.getItem(SPLIT_STORAGE_KEY))
+  if (!Number.isNaN(saved) && saved >= 25 && saved <= 80) {
+    splitPercent.value = saved
+  }
+})
+
+function onSplitResizePointerDown(event: PointerEvent) {
+  event.preventDefault()
+  const bodyEl = bodyRef.value
+  if (!bodyEl) return
+  const startX = event.clientX
+  const totalWidth = bodyEl.getBoundingClientRect().width
+  const startPercent = splitPercent.value
+
+  const onMove = (e: PointerEvent) => {
+    const delta = e.clientX - startX
+    const next = startPercent + (delta / totalWidth) * 100
+    splitPercent.value = Math.min(80, Math.max(25, next))
+  }
+
+  const onUp = () => {
+    localStorage.setItem(SPLIT_STORAGE_KEY, String(Math.round(splitPercent.value)))
+    window.removeEventListener('pointermove', onMove)
+    window.removeEventListener('pointerup', onUp)
+    document.body.classList.remove('app-is-resizing')
+  }
+
+  document.body.classList.add('app-is-resizing')
+  window.addEventListener('pointermove', onMove)
+  window.addEventListener('pointerup', onUp)
+}
+
+function navigateBrowserUrl() {
+  let url = browserUrlInput.value.trim()
+  if (!url) return
+  if (!/^https?:\/\//i.test(url)) {
+    url = 'https://' + url
+  }
+  browserUrl.value = toProxyUrl(url)
+  browserUrlInput.value = url
+}
+
+function toProxyUrl(rawUrl: string): string {
+  // Project files & same-origin: use as-is
+  if (rawUrl.includes('/api/v1/projects/') || rawUrl.startsWith('/')) return rawUrl
+  // External/localhost URLs: route through proxy
+  try {
+    const u = new URL(rawUrl)
+    const host = u.host.replace(/:/g, '-') // localhost:3000 → localhost-3000
+    return `${apiBaseUrl()}/api/v1/proxy/${host}${u.pathname}${u.search}${u.hash}`
+  } catch {
+    return rawUrl
   }
 }
 
-const canRefreshTab = computed(() => ['files', 'changes'].includes(rightTab.value))
-const { width: rightPanelWidth, onResizePointerDown: onRightResizePointerDown } = useResizableWidth(
-  'session-right-panel-width-v2', 420, 280, 720, 'left',
-)
+function openFileInBrowser(filePath: string) {
+  if (!sessions.selectedProjectId) return
+  const base = apiBaseUrl()
+  browserUrl.value = `${base}/api/v1/projects/${sessions.selectedProjectId}/raw/${encodeURIComponent(filePath)}`
+  browserUrlInput.value = browserUrl.value
+  rightTab.value = 'browser'
+}
+
+function startElementSelect() {
+  selectingElement.value = true
+  const iframe = document.querySelector('.session-workspace__browser-frame') as HTMLIFrameElement | null
+  if (!iframe?.contentWindow) return
+  iframe.contentWindow.postMessage({ type: 'dq-inspect-start' }, '*')
+}
+
+function handleInspectMessage(ev: MessageEvent) {
+  if (ev.data?.type !== 'dq-inspect-selected') return
+  selectingElement.value = false
+  const { html, text, tag } = ev.data
+  if (!text && !html) return
+  // Build natural-language injection: "文件 index.html 的 <button> 元素，文字为"提交申请""
+  const userUrl = browserUrlInput.value
+  const isProject = userUrl.includes('/api/v1/projects/')
+  let context = ''
+  if (isProject) {
+    const file = decodeURIComponent((userUrl.split('/').pop() || '').split('?')[0])
+    context = `文件 ${file}`
+  } else if (userUrl && !userUrl.includes('/api/v1/proxy/')) {
+    context = `页面 ${userUrl}`
+  }
+  let tagPart = tag ? ` <${tag}>` : ''
+  let contentPart = text ? `，文字为"${text.slice(0, 300)}"` : (html ? `，HTML 为\`\`\`html\n${html.slice(0, 300)}\n\`\`\`` : '')
+  const snippet = `${context || '页面'}中的${tagPart}元素${contentPart}`
+  composerRef.value?.appendContent(snippet)
+  toast.success('已添加到 Composer')
+}
 
 const expandedToolCards = ref(new Set<number>())
 function toggleToolCard(seq: number) {
@@ -68,9 +156,9 @@ function updateComposerPosition() {
   }
 }
 
-watch(rightPanelWidth, () => { nextTick(updateComposerPosition) })
-onMounted(() => { nextTick(updateComposerPosition); window.addEventListener('resize', updateComposerPosition) })
-onUnmounted(() => { window.removeEventListener('resize', updateComposerPosition) })
+watch(splitPercent, () => { nextTick(updateComposerPosition) })
+onMounted(() => { nextTick(updateComposerPosition); window.addEventListener('resize', updateComposerPosition); window.addEventListener('message', handleInspectMessage) })
+onUnmounted(() => { window.removeEventListener('resize', updateComposerPosition); window.removeEventListener('message', handleInspectMessage) })
 
 interface ToolCard {
   callId: string
@@ -902,7 +990,7 @@ function onTitleKeydown(e: KeyboardEvent) {
       </div>
     </header>
 
-    <div class="session-workspace__body">
+    <div ref="bodyRef" class="session-workspace__body" :style="{ gridTemplateColumns: `${splitPercent}% 8px 1fr` }">
       <div ref="scrollAreaRef" class="session-workspace__scroll">
         <div v-if="sessions.composingNew && !sessions.currentSession" class="session-workspace__empty">
           <DqEmpty description="新建会话">
@@ -1170,49 +1258,70 @@ function onTitleKeydown(e: KeyboardEvent) {
         </div>
       </div>
 
-      <div
-        v-if="rightTab === 'files' && sessions.selectedProjectId && selectedFilePath"
-        class="session-workspace__file-drawer"
-      >
-        <div class="session-workspace__file-drawer-head">
-          <span class="session-workspace__file-drawer-title">{{ selectedFilePath }}</span>
-          <button class="session-workspace__file-drawer-close" @click="selectedFilePath = null" title="关闭">✕</button>
-        </div>
-        <FileViewer
-          :project-id="sessions.selectedProjectId"
-          :file-path="selectedFilePath"
-        />
-      </div>
+      <div class="session-workspace__split" @pointerdown="onSplitResizePointerDown" />
 
-      <div class="session-workspace__right" :style="{ width: rightPanelWidth + 'px' }">
+      <div class="session-workspace__right">
         <div class="session-workspace__right-tabs">
           <button
             class="session-workspace__right-tab"
             :class="{ 'is-active': rightTab === 'plan' }"
             @click="rightTab = 'plan'"
-          >计划</button>
+            title="计划"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <circle cx="12" cy="12" r="6"/>
+              <circle cx="12" cy="12" r="2"/>
+            </svg>
+          </button>
           <button
             class="session-workspace__right-tab"
             :class="{ 'is-active': rightTab === 'files' }"
             @click="rightTab = 'files'"
-          >文件
+            title="文件"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
           </button>
           <button
             class="session-workspace__right-tab"
             :class="{ 'is-active': rightTab === 'experts' }"
             @click="rightTab = 'experts'"
-          >{{ $t('sessions.expertsTab') }}</button>
+            title="专家"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </button>
           <button
             class="session-workspace__right-tab"
             :class="{ 'is-active': rightTab === 'changes' }"
             @click="rightTab = 'changes'"
-          >变更</button>
-          <span
-            v-if="canRefreshTab"
-            class="session-workspace__right-tab-refresh"
-            title="刷新"
-            @click="refreshRightPanel"
-          >↻</span>
+            title="变更"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="6" y1="3" x2="6" y2="15"/>
+              <circle cx="18" cy="6" r="3"/>
+              <circle cx="6" cy="18" r="3"/>
+              <path d="M18 9a9 9 0 0 1-9 9"/>
+            </svg>
+          </button>
+          <button
+            class="session-workspace__right-tab"
+            :class="{ 'is-active': rightTab === 'browser' }"
+            @click="rightTab = 'browser'"
+            title="浏览器"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="2" y1="12" x2="22" y2="12"/>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+          </button>
         </div>
         <PlanPanel v-if="rightTab === 'plan'" :stream-events="sessions.streamEvents" />
         <template v-else-if="rightTab === 'files'">
@@ -1220,7 +1329,7 @@ function onTitleKeydown(e: KeyboardEvent) {
             v-if="sessions.selectedProjectId"
             ref="fileTreeRef"
             :project-id="sessions.selectedProjectId"
-            @select-file="selectedFilePath = $event"
+            @open-in-browser="openFileInBrowser"
           />
           <div v-else class="session-workspace__right-empty">
             未关联项目
@@ -1228,12 +1337,42 @@ function onTitleKeydown(e: KeyboardEvent) {
         </template>
         <ExpertsPanel v-else-if="rightTab === 'experts'" :stream-events="sessions.streamEvents" />
         <ChangesPanel v-else-if="rightTab === 'changes'" ref="changesPanelRef" />
-        <button type="button" class="session-workspace__right-resize" aria-label="调整宽度" @pointerdown="onRightResizePointerDown" />
+        <template v-else-if="rightTab === 'browser'">
+          <div class="session-workspace__browser">
+            <div class="session-workspace__browser-bar">
+              <input
+                v-model="browserUrlInput"
+                class="session-workspace__browser-input"
+                placeholder="输入网址..."
+                @keydown.enter="navigateBrowserUrl"
+              />
+              <button class="session-workspace__browser-btn" @click="refreshBrowser" title="刷新">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              </button>
+              <button class="session-workspace__browser-btn" @click="navigateBrowserUrl" title="前往">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </button>
+              <button class="session-workspace__browser-btn" :class="{ 'is-active': selectingElement }" @click="startElementSelect" title="选择元素">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>
+              </button>
+              <button class="session-workspace__browser-btn" @click="browserUrl = ''; browserUrlInput = ''" title="关闭">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <iframe
+              :key="browserUrl || 'empty' || browserRefresh"
+              class="session-workspace__browser-frame"
+              :src="browserUrl || 'about:blank'"
+            />
+          </div>
+        </template>
       </div>
     </div>
 
     <div class="session-workspace__composer" :style="composerStyle">
-      <FloatingComposer />
+      <FloatingComposer ref="composerRef" />
     </div>
   </div>
 </template>
@@ -1323,12 +1462,11 @@ function onTitleKeydown(e: KeyboardEvent) {
 .session-workspace__body {
   flex: 1;
   min-height: 0;
-  display: flex;
+  display: grid;
   overflow: hidden;
 }
 
 .session-workspace__scroll {
-  flex: 1;
   min-width: 0;
   min-height: 0;
   overflow: auto;
@@ -2161,37 +2299,15 @@ function onTitleKeydown(e: KeyboardEvent) {
 
 
 
-.session-workspace__body :deep(.plan-panel) {
-  flex-shrink: 0;
-  width: 220px;
-  border-left: 1px solid var(--teams-glass-border);
-}
-
-.session-workspace__right {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-  border-left: 1px solid var(--teams-glass-border);
-  background: var(--teams-glass-bg);
-  position: relative;
-}
-
-.session-workspace__right-resize {
-  position: absolute;
-  top: 0;
-  left: -6px;
-  z-index: 5;
-  width: 12px;
-  height: 100%;
-  padding: 0;
-  border: none;
-  background: transparent;
+.session-workspace__split {
   cursor: col-resize;
+  position: relative;
+  z-index: 5;
+  background: transparent;
+  transition: background 0.15s ease;
 }
 
-.session-workspace__right-resize::after {
+.session-workspace__split::after {
   content: '';
   position: absolute;
   top: 12%;
@@ -2204,29 +2320,56 @@ function onTitleKeydown(e: KeyboardEvent) {
   transition: background 0.15s ease;
 }
 
-.session-workspace__right-resize:hover::after,
-.app-is-resizing .session-workspace__right-resize::after {
+.session-workspace__split:hover::after,
+.app-is-resizing .session-workspace__split::after {
   background: color-mix(in srgb, var(--dq-accent) 45%, transparent);
+}
+
+.session-workspace__right {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--teams-glass-border);
+  background: var(--teams-glass-bg);
 }
 
 .session-workspace__right-tabs {
   display: flex;
   flex-shrink: 0;
   border-bottom: 1px solid var(--dq-separator-light);
-  padding: 0 8px;
+  padding: 0 4px;
 }
 
 .session-workspace__right-tab {
-  flex: 1;
-  padding: 8px 0;
-  font-size: var(--dq-font-size-footnote);
-  font-weight: 500;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 12px;
   color: var(--dq-label-secondary);
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
   cursor: pointer;
   transition: all 0.15s;
+}
+
+.session-workspace__right-tab:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: -22px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--dq-fill-inverse, rgba(0,0,0,0.85));
+  color: var(--dq-color-white, #fff);
+  font-size: var(--dq-font-size-caption);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 100;
 }
 
 .session-workspace__right-tab.is-active {
@@ -2238,15 +2381,8 @@ function onTitleKeydown(e: KeyboardEvent) {
   color: var(--dq-label-primary);
 }
 
-.session-workspace__right-tab-refresh {
-  font-size: var(--dq-font-size-secondary);
-  margin-left: 4px;
-  opacity: 0.5;
-  cursor: pointer;
-}
-
-.session-workspace__right-tab-refresh:hover {
-  opacity: 1;
+.session-workspace__right-tab :deep(svg) {
+  pointer-events: none;
 }
 
 .session-workspace__right > :deep(.plan-panel) {
@@ -2268,61 +2404,81 @@ function onTitleKeydown(e: KeyboardEvent) {
   min-height: 0;
 }
 
-.session-workspace__file-drawer {
-  flex-shrink: 0;
-  width: 50%;
-  min-width: 320px;
-  max-width: 70%;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-  border-left: 1px solid var(--teams-glass-border);
-  background: var(--teams-glass-bg);
-  box-shadow: -2px 0 12px var(--teams-glass-shadow);
-}
-
-.session-workspace__file-drawer-head {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 8px 6px 14px;
-  border-bottom: 1px solid var(--dq-separator-light);
-  font-size: var(--dq-font-size-footnote);
-  font-weight: 500;
-  color: var(--dq-label-secondary);
-}
-
-.session-workspace__file-drawer-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.session-workspace__file-drawer-close {
-  flex-shrink: 0;
-  background: none;
-  border: none;
-  color: var(--dq-label-tertiary);
-  font-size: var(--dq-font-size-secondary);
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
-  cursor: pointer;
+.session-workspace__right-empty {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: var(--dq-font-size-footnote);
+  color: var(--dq-label-tertiary);
 }
 
-.session-workspace__file-drawer-close:hover {
-  background: var(--dq-fill-tertiary);
-  color: var(--dq-label-primary);
-}
-
-.session-workspace__file-drawer > :deep(.file-viewer) {
+/* ── Browser tab ── */
+.session-workspace__browser {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.session-workspace__browser-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--dq-separator-light);
+}
+
+.session-workspace__browser-input {
+  flex: 1;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--teams-glass-border);
+  background: var(--dq-bg-base);
+  color: var(--dq-label-primary);
+  font-size: var(--dq-font-size-footnote);
+  outline: none;
+  font-family: var(--dq-font-mono);
+}
+
+.session-workspace__browser-input:focus {
+  border-color: var(--dq-accent);
+}
+
+.session-workspace__browser-go,
+.session-workspace__browser-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: var(--dq-fill-on-glass);
+  color: var(--dq-label-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.session-workspace__browser-go:hover,
+.session-workspace__browser-btn:hover {
+  background: var(--dq-accent);
+  color: var(--dq-color-white);
+}
+
+.session-workspace__browser-btn.is-active {
+  background: var(--dq-accent);
+  color: var(--dq-color-white);
+}
+
+.session-workspace__browser-frame {
+  flex: 1;
+  min-height: 0;
+  border: none;
 }
 
 .session-workspace__right-empty {

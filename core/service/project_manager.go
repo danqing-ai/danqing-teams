@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -14,6 +15,9 @@ import (
 
 	"danqing-teams/core/domain"
 	"danqing-teams/core/port"
+
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/extension"
 )
 
 type ProjectManager struct {
@@ -192,6 +196,66 @@ type FileContent struct {
 	ContentType string `json:"contentType"`
 	Content     string `json:"content"`
 	Binary      bool   `json:"binary"`
+}
+
+// ReadFileRaw reads a project file and returns raw bytes + content type.
+func (m *ProjectManager) ReadFileRaw(ctx context.Context, projectID, subPath string) ([]byte, string, error) {
+	root, err := m.resolveFilesRoot(ctx, projectID)
+	if err != nil {
+		return nil, "", err
+	}
+
+	target := filepath.Join(root, subPath)
+	target, err = filepath.Abs(target)
+	if err != nil {
+		return nil, "", fmt.Errorf("invalid path")
+	}
+	if !strings.HasPrefix(target, root) {
+		return nil, "", fmt.Errorf("path escapes project directory")
+	}
+
+	info, err := os.Stat(target)
+	if err != nil {
+		return nil, "", err
+	}
+	if info.IsDir() {
+		return nil, "", fmt.Errorf("cannot read directory as file")
+	}
+
+	ext := filepath.Ext(target)
+	contentType := mime.TypeByExtension(ext)
+	if contentType == "" {
+		// Fallback for extensions not covered by Go's mime package
+		switch ext {
+		case ".md", ".markdown":
+			contentType = "text/markdown"
+		case ".txt", ".log", ".csv", ".tsv":
+			contentType = "text/plain"
+		case ".xml", ".rss", ".atom":
+			contentType = "application/xml"
+		case ".yml", ".yaml":
+			contentType = "text/yaml"
+		default:
+			contentType = "application/octet-stream"
+		}
+	}
+
+	data, err := os.ReadFile(target)
+	if err != nil {
+		return nil, "", err
+	}
+
+	// Render .md to HTML with GitHub-like styling
+	if ext == ".md" || ext == ".markdown" {
+		var buf bytes.Buffer
+		if err := goldmark.New(goldmark.WithExtensions(extension.Table)).Convert(data, &buf); err != nil {
+			return nil, "", err
+		}
+		html := fmt.Sprintf(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#24292f;background:#fff;max-width:900px;margin:0 auto;padding:32px}h1,h2,h3,h4,h5,h6{margin-top:24px;margin-bottom:16px;font-weight:600;line-height:1.25}h1{font-size:2em;padding-bottom:.3em;border-bottom:1px solid #d0d7de}h2{font-size:1.5em;padding-bottom:.3em;border-bottom:1px solid #d0d7de}h3{font-size:1.25em}pre{background:#f6f8fa;padding:16px;border-radius:6px;overflow:auto;font-size:85%%;line-height:1.45}code{font-family:"SF Mono",Monaco,Consolas,"Liberation Mono",monospace;font-size:85%%;background:#f6f8fa;padding:.2em .4em;border-radius:3px}pre code{background:none;padding:0;font-size:100%%}table{border-collapse:collapse;width:100%%;margin:16px 0}td,th{border:1px solid #d0d7de;padding:6px 13px}th{background:#f6f8fa;font-weight:600}tr:nth-child(2n){background:#f6f8fa}blockquote{border-left:4px solid #d0d7de;padding:0 1em;color:#57606a;margin:16px 0}p{margin:0 0 16px}img{max-width:100%%}a{color:#0969da;text-decoration:none}a:hover{text-decoration:underline}ul,ol{padding-left:2em}li+li{margin-top:.25em}hr{border:0;height:1px;background:#d0d7de;margin:24px 0}</style></head><body>%s</body></html>`, buf.String())
+		return []byte(html), "text/html", nil
+	}
+
+	return data, contentType, nil
 }
 
 func (m *ProjectManager) ReadFileContent(ctx context.Context, projectID, subPath string) (*FileContent, error) {

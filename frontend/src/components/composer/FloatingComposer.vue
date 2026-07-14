@@ -58,6 +58,12 @@ function focusInput() {
   })
 }
 
+function appendContent(text: string) {
+  if (!text) return
+  content.value = (content.value ? content.value + '\n' : '') + text
+  focusInput()
+}
+
 watch(
   () => sessions.composingNew,
   (v) => {
@@ -132,7 +138,7 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
-defineExpose({ focusInput })
+defineExpose({ focusInput, appendContent })
 </script>
 
 <template>
