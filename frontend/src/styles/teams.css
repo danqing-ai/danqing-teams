@@ -2725,6 +2725,13 @@ body.teams-is-resizing {
   margin-bottom: 14px;
 }
 
+.resource-field--inline {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .resource-field__label {
   font-size: var(--dq-font-size-footnote);
   font-weight: 500;

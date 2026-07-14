@@ -343,6 +343,20 @@ const menuItems = computed(() => [
   { id: 'modelLimits' as SettingsTab, label: t('settings.modelLimits'), icon: Setting },
   { id: 'search' as SettingsTab, label: t('settings.search'), icon: Search },
 ])
+
+const footerHint = computed(() => {
+  switch (activeTab.value) {
+    case 'runtime': return t('common.saveShortcut')
+    case 'search': return t('common.saveShortcut')
+    case 'models': return t('settings.modelsHint')
+    case 'modelLimits': return t('settings.modelLimitsHint')
+    default: return ''
+  }
+})
+
+const hasFooterActions = computed(() => {
+  return ['runtime', 'search', 'models', 'modelLimits'].includes(activeTab.value)
+})
 </script>
 
 <template>
@@ -369,6 +383,7 @@ const menuItems = computed(() => [
     </aside>
 
     <main class="settings-panel">
+      <div class="settings-panel__content">
       <div v-if="activeTab === 'appearance'" class="settings-section">
         <header class="settings-section__head">
           <h2>{{ $t('settings.appearance') }}</h2>
@@ -543,11 +558,6 @@ const menuItems = computed(() => [
             </template>
           </div>
 
-          <div class="settings-actions">
-            <DqButton type="primary" :disabled="runtimeConfig.saving" @click="handleSaveRuntime">
-              {{ runtimeConfig.saving ? $t('common.saving') : $t('common.save_') }}
-            </DqButton>
-          </div>
         </div>
       </div>
 
@@ -560,10 +570,6 @@ const menuItems = computed(() => [
         <div v-if="llm.loading" class="settings-empty">{{ $t('common.loading') }}</div>
 
         <div v-else>
-          <div class="provider-list-actions">
-            <DqButton type="primary" @click="openNewForm">{{ $t('settings.addProvider') }}</DqButton>
-          </div>
-
           <div v-if="llm.configs.length" class="provider-list">
             <div v-for="cfg in llm.configs" :key="cfg.id" class="provider-card">
               <div class="provider-card__head">
@@ -647,11 +653,6 @@ const menuItems = computed(() => [
             </div>
           </div>
 
-          <div class="settings-actions">
-            <DqButton type="primary" :disabled="searchConfig.saving" @click="handleSaveSearch">
-              {{ searchConfig.saving ? $t('common.saving') : $t('common.save_') }}
-            </DqButton>
-          </div>
         </div>
       </div>
 
@@ -664,10 +665,6 @@ const menuItems = computed(() => [
         <div v-if="modelLimits.loading" class="settings-empty">{{ $t('common.loading') }}</div>
 
         <div v-else>
-          <div class="provider-list-actions">
-            <DqButton type="primary" @click="openAddModelLimit">{{ $t('settings.addModelLimit') }}</DqButton>
-          </div>
-
           <div v-if="modelLimitsForm.length" class="model-limit-list">
             <div class="model-limit-list__head">
               <span class="model-limit-list__col">{{ $t('settings.modelName') }}</span>
@@ -689,6 +686,22 @@ const menuItems = computed(() => [
           <div v-else class="settings-empty">{{ $t('settings.noModelLimits') }}</div>
         </div>
       </div>
+
+      </div>
+
+      <footer v-if="hasFooterActions" class="settings-panel__footer">
+        <span class="settings-panel__footer-hint">{{ footerHint }}</span>
+        <div class="settings-panel__footer-actions">
+          <DqButton v-if="activeTab === 'runtime'" type="primary" :disabled="runtimeConfig.saving" @click="handleSaveRuntime">
+            {{ runtimeConfig.saving ? $t('common.saving') : $t('common.save_') }}
+          </DqButton>
+          <DqButton v-else-if="activeTab === 'search'" type="primary" :disabled="searchConfig.saving" @click="handleSaveSearch">
+            {{ searchConfig.saving ? $t('common.saving') : $t('common.save_') }}
+          </DqButton>
+          <DqButton v-else-if="activeTab === 'models'" type="primary" @click="openNewForm">{{ $t('settings.addProvider') }}</DqButton>
+          <DqButton v-else-if="activeTab === 'modelLimits'" type="primary" @click="openAddModelLimit">{{ $t('settings.addModelLimit') }}</DqButton>
+        </div>
+      </footer>
 
       <DqDialog
         v-model:open="showModelLimitForm"
@@ -838,7 +851,7 @@ const menuItems = computed(() => [
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: var(--dq-bg-page);
+  background: var(--teams-glass-bg);
 }
 
 /* ── Form control consistency ── */
@@ -920,8 +933,39 @@ const menuItems = computed(() => [
 .settings-panel {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-panel__content {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
-  padding: 28px 36px 40px;
+  padding: 28px 36px 20px;
+  background: color-mix(in srgb, var(--dq-bg-elevated) 30%, transparent);
+}
+
+.settings-panel__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 24px;
+  border-top: 1px solid var(--dq-separator-light);
+  background: color-mix(in srgb, var(--dq-bg-elevated) 50%, transparent);
+  flex-shrink: 0;
+}
+
+.settings-panel__footer-hint {
+  font-size: var(--dq-font-size-caption);
+  color: var(--dq-label-quaternary);
+}
+
+.settings-panel__footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .settings-section {
@@ -956,14 +1000,14 @@ const menuItems = computed(() => [
 }
 
 .settings-form-group {
-  padding: 20px;
-  border-radius: 12px;
-  border: 1px solid var(--teams-glass-border);
-  background: var(--dq-bg-elevated);
+  padding: 0;
+  border-radius: 0;
+  border: none;
+  background: transparent;
 }
 
 .settings-form-group + .settings-form-group {
-  margin-top: 12px;
+  margin-top: 24px;
 }
 
 .settings-form-group__title {
@@ -1001,7 +1045,7 @@ const menuItems = computed(() => [
 .settings-field {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 5px;
 }
 
 .settings-field--switch {
@@ -1146,18 +1190,24 @@ const menuItems = computed(() => [
 }
 
 .provider-card {
-  border-radius: 12px;
-  border: 1px solid var(--teams-glass-border);
-  background: color-mix(in srgb, var(--dq-label-primary) 3%, transparent);
-  overflow: hidden;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  overflow: visible;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--teams-glass-border);
+}
+
+.provider-card:last-child {
+  border-bottom: none;
 }
 
 .provider-card__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--teams-glass-border);
+  padding: 0;
+  border-bottom: none;
 }
 
 .provider-card__info {
@@ -1186,16 +1236,16 @@ const menuItems = computed(() => [
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 12px 16px;
+  padding: 12px 0 0;
 }
 
 .provider-card__model {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 10px;
-  border-radius: 8px;
-  background: var(--dq-bg-elevated);
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
   border: 1px solid var(--teams-glass-border);
   font-size: var(--dq-font-size-footnote);
 }
@@ -1317,11 +1367,17 @@ const menuItems = computed(() => [
   display: flex;
   align-items: center;
   gap: 10px;
+  height: 36px;
 }
 
 .slider-row :deep(.dq-slider) {
   flex: 1;
   min-width: 0;
+}
+
+.slider-row :deep(.dq-slider__track) {
+  display: flex;
+  align-items: center;
 }
 
 .slider-row__value {

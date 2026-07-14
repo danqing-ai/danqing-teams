@@ -278,6 +278,9 @@ export default {
     themeShadcnDarkDesc: 'shadcn/ui-style zinc grayscale dark theme',
     themeShadcnLight: 'shadcn/ui Light',
     themeShadcnLightDesc: 'shadcn/ui-style warm white light theme',
+    appearanceHint: 'Changes take effect immediately',
+    modelsHint: 'Add a provider to configure models',
+    modelLimitsHint: 'Add a model to configure token limits',
   },
   automations: {
     title: 'Automations',

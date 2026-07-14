@@ -69,6 +69,8 @@ function changeLabel(c: GitFileChange): string {
   if (c.origFile) return `${c.file} ← ${c.origFile}`
   return c.file
 }
+
+defineExpose({ refresh: loadChanges })
 </script>
 
 <template>

@@ -278,6 +278,9 @@ export default {
     themeShadcnDarkDesc: 'shadcn/ui 风格 zinc 灰色系深色主题',
     themeShadcnLight: 'shadcn/ui Light',
     themeShadcnLightDesc: 'shadcn/ui 风格暖白亮色主题',
+    appearanceHint: '修改后立即生效',
+    modelsHint: '添加提供商以配置模型',
+    modelLimitsHint: '添加模型以配置 Token 限制',
   },
   automations: {
     title: '自动化',

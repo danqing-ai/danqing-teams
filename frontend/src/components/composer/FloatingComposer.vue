@@ -71,6 +71,10 @@ watch(
   },
 )
 
+const isTurnRunning = computed(
+  () => !sessions.composingNew && sessions.runningTurnId !== null,
+)
+
 async function send() {
   const text = content.value.trim()
   if (!text || sessions.loading) return
@@ -99,15 +103,32 @@ async function send() {
   }
 }
 
+async function stop() {
+  if (!sessions.runningTurnId) return
+  try {
+    await sessions.cancelTurn(sessions.runningTurnId)
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : '取消失败')
+  }
+}
+
 function onKeydown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
     e.preventDefault()
-    void send()
+    if (isTurnRunning.value) {
+      void stop()
+    } else {
+      void send()
+    }
     return
   }
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
-    void send()
+    if (isTurnRunning.value) {
+      void stop()
+    } else {
+      void send()
+    }
   }
 }
 
@@ -164,6 +185,18 @@ defineExpose({ focusInput })
 
       <div class="composer-float__actions-right">
         <button
+          v-if="isTurnRunning"
+          type="button"
+          class="composer-float__stop"
+          aria-label="停止"
+          @click="stop"
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+            <rect x="4" y="4" width="16" height="16" rx="2" />
+          </svg>
+        </button>
+        <button
+          v-else
           type="button"
           class="composer-float__send"
           :disabled="sessions.loading || !content.trim()"
@@ -338,5 +371,29 @@ defineExpose({ focusInput })
 .composer-float__send:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+.composer-float__stop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--dq-danger, #e53e3e);
+  color: var(--dq-color-white);
+  cursor: pointer;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.composer-float__stop:hover {
+  filter: brightness(1.06);
+}
+
+.composer-float__stop:active {
+  transform: scale(0.96);
 }
 </style>

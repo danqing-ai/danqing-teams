@@ -20,8 +20,23 @@ const sessions = useSessionsStore()
 const rightTab = ref<'plan' | 'files' | 'experts' | 'changes'>('plan')
 const selectedFilePath = ref<string | null>(null)
 const fileTreeRef = ref<InstanceType<typeof FileTree> | null>(null)
+const changesPanelRef = ref<InstanceType<typeof ChangesPanel> | null>(null)
 const isEditingTitle = ref(false)
 const editingTitle = ref('')
+
+function refreshRightPanel() {
+  switch (rightTab.value) {
+    case 'files':
+      fileTreeRef.value?.refresh()
+      break
+    case 'changes':
+      changesPanelRef.value?.refresh()
+      break
+    // plan and experts are computed from streamEvents, no refresh needed
+  }
+}
+
+const canRefreshTab = computed(() => ['files', 'changes'].includes(rightTab.value))
 const { width: rightPanelWidth, onResizePointerDown: onRightResizePointerDown } = useResizableWidth(
   'session-right-panel-width-v2', 420, 280, 720, 'left',
 )
@@ -1181,12 +1196,6 @@ function onTitleKeydown(e: KeyboardEvent) {
             :class="{ 'is-active': rightTab === 'files' }"
             @click="rightTab = 'files'"
           >文件
-            <span
-              v-if="rightTab === 'files' && sessions.selectedProjectId"
-              class="session-workspace__right-tab-refresh"
-              title="刷新"
-              @click.stop="fileTreeRef?.refresh()"
-            >↻</span>
           </button>
           <button
             class="session-workspace__right-tab"
@@ -1198,6 +1207,12 @@ function onTitleKeydown(e: KeyboardEvent) {
             :class="{ 'is-active': rightTab === 'changes' }"
             @click="rightTab = 'changes'"
           >变更</button>
+          <span
+            v-if="canRefreshTab"
+            class="session-workspace__right-tab-refresh"
+            title="刷新"
+            @click="refreshRightPanel"
+          >↻</span>
         </div>
         <PlanPanel v-if="rightTab === 'plan'" :stream-events="sessions.streamEvents" />
         <template v-else-if="rightTab === 'files'">
@@ -1212,7 +1227,7 @@ function onTitleKeydown(e: KeyboardEvent) {
           </div>
         </template>
         <ExpertsPanel v-else-if="rightTab === 'experts'" :stream-events="sessions.streamEvents" />
-        <ChangesPanel v-else-if="rightTab === 'changes'" />
+        <ChangesPanel v-else-if="rightTab === 'changes'" ref="changesPanelRef" />
         <button type="button" class="session-workspace__right-resize" aria-label="调整宽度" @pointerdown="onRightResizePointerDown" />
       </div>
     </div>
@@ -2227,6 +2242,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   font-size: var(--dq-font-size-secondary);
   margin-left: 4px;
   opacity: 0.5;
+  cursor: pointer;
 }
 
 .session-workspace__right-tab-refresh:hover {
