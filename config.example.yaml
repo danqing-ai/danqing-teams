@@ -104,46 +104,161 @@ llm:
       icon: "\U0001F999"
       description: "本地模型，通过 Ollama 运行"
   
-  # Per-model configuration: context window, max output tokens, and generation
-  # parameter overrides. Unset values fall back to built-in pattern rules.
+  # ─── Per-model parameter overrides ──────────────────────────────────
+  # Available parameters per model entry:
+  #   context_window      – context window size in tokens
+  #   max_output          – max output tokens (maps to API max_tokens)
+  #   temperature         – generation temperature
+  #   top_p               – nucleus sampling
+  #   frequency_penalty   – OpenAI-compatible repetition penalty
+  #   presence_penalty    – OpenAI-compatible presence penalty
+  #   stop                – stop sequences
+  #   available_efforts   – reasoning effort levels exposed in Composer
+  #   thinking_mode       – Anthropic only: "adaptive" or "enabled" (budget)
+  #   effort_budget_tokens – Anthropic enabled mode: effort → token budget map
+  #
+  # reasoning_effort levels mapped per provider:
+  #   OpenAI-compat:     off | none | minimal | low | medium | high | xhigh
+  #     → sent as body["reasoning_effort"] transparently
+  #   Anthropic enabled: off | high | max
+  #     → sent as { thinking: { type: "enabled", budget_tokens: N } }
+  #   Anthropic adaptive: off | low | medium | high | xhigh | max
+  #     → sent as { thinking: { type: "adaptive" }, effort, display: "summarized" }
   models:
-    # OpenAI GPT series
-    - model: gpt-4.1
-      context_window: 1047576
+
+    # ── OpenAI ─────────────────────────────────────────────────────────
+    - model: gpt-5.6
+      context_window: 200000
+      max_output: 128000
+      available_efforts: ["off", "none", "low", "medium", "high", "xhigh"]
+
+    - model: gpt-5
+      context_window: 200000
+      max_output: 128000
+      available_efforts: ["off", "none", "minimal", "low", "medium", "high", "xhigh"]
+
+    - model: gpt-5-mini
+      context_window: 200000
+      max_output: 65536
+      available_efforts: ["off", "minimal", "low", "medium", "high"]
+
+    - model: gpt-5-nano
+      context_window: 200000
       max_output: 32768
-    - model: gpt-4o
-      context_window: 128000
-      max_output: 16384
-    # OpenAI reasoning models (temperature must be 1.0)
-    - model: o3
-      context_window: 200000
-      max_output: 100000
-      temperature: 1.0
-    - model: o3-mini
-      context_window: 200000
-      max_output: 100000
-      temperature: 1.0
+      available_efforts: ["off", "minimal", "low", "medium", "high"]
+
     - model: o4-mini
       context_window: 200000
       max_output: 100000
       temperature: 1.0
-    # Anthropic Claude
+      available_efforts: ["off", "none", "minimal", "low", "medium", "high", "xhigh"]
+
+    - model: o3
+      context_window: 200000
+      max_output: 100000
+      temperature: 1.0
+      available_efforts: ["off", "none", "minimal", "low", "medium", "high", "xhigh"]
+
+    - model: gpt-4.1
+      context_window: 1047576
+      max_output: 32768
+
+    - model: gpt-4o
+      context_window: 128000
+      max_output: 16384
+
+    # ── Anthropic Claude ───────────────────────────────────────────────
+    # Claude 5 / Opus 4.7+ — adaptive thinking
     - model: claude-sonnet-5
       context_window: 1000000
       max_output: 128000
+      available_efforts: ["off", "low", "medium", "high", "xhigh", "max"]
+      thinking_mode: "adaptive"
+
+    - model: claude-fable-5
+      context_window: 1000000
+      max_output: 128000
+      available_efforts: ["off", "low", "medium", "high", "xhigh", "max"]
+      thinking_mode: "adaptive"
+
     - model: claude-opus-4-8
       context_window: 1000000
       max_output: 128000
-    # DeepSeek
+      available_efforts: ["off", "low", "medium", "high", "xhigh", "max"]
+      thinking_mode: "adaptive"
+
+    - model: claude-opus-4-7
+      context_window: 1000000
+      max_output: 128000
+      available_efforts: ["off", "low", "medium", "high", "xhigh", "max"]
+      thinking_mode: "adaptive"
+
+    # Claude 4.5 — budget-tokens thinking (only high/max)
+    - model: claude-sonnet-4-5
+      context_window: 200000
+      max_output: 8192
+      available_efforts: ["off", "high", "max"]
+      thinking_mode: "enabled"
+      effort_budget_tokens:
+        high: 16000
+        max: 32000
+
+    - model: claude-haiku-4-5
+      context_window: 200000
+      max_output: 8192
+      available_efforts: ["off", "high", "max"]
+      thinking_mode: "enabled"
+      effort_budget_tokens:
+        high: 16000
+        max: 32000
+
+    # ── DeepSeek ───────────────────────────────────────────────────────
+    # DeepSeek V4 — supports extra "max" reasoning effort
     - model: deepseek-v4-pro
       context_window: 1000000
       max_output: 384000
-    - model: deepseek-r1
+      available_efforts: ["off", "low", "medium", "high", "max"]
+
+    - model: deepseek-v4-flash
+      context_window: 1000000
+      max_output: 131072
+      available_efforts: ["off", "low", "medium", "high", "max"]
+
+    # DeepSeek Chat — non-reasoning, no effort levels
+    - model: deepseek-chat
+      context_window: 128000
+      max_output: 8192
+
+    - model: deepseek-reasoner
       context_window: 64000
       max_output: 8192
-      temperature: 0.6
-    # Google Gemini
+
+    # ── Google Gemini ──────────────────────────────────────────────────
+    # Gemini 2.5 — budget-based thinking
     - model: gemini-2.5-pro
       context_window: 1048576
       max_output: 65536
+      available_efforts: ["off", "high", "max"]
+
+    - model: gemini-2.5-flash
+      context_window: 1048576
+      max_output: 65536
+      available_efforts: ["off", "high", "max"]
+
+    # Gemini 3 — thinkingLevel-based
+    - model: gemini-3-pro
+      context_window: 1048576
+      max_output: 65536
+      available_efforts: ["off", "low", "medium", "high"]
+
+    - model: gemini-3-flash
+      context_window: 1048576
+      max_output: 65536
+      available_efforts: ["off", "low", "medium", "high"]
+
+    # ── xAI Grok ──────────────────────────────────────────────────────
+    - model: grok-3-mini
+      context_window: 131072
+      max_output: 32768
+      available_efforts: ["off", "low", "high"]
 

@@ -132,6 +132,8 @@ export interface ModelConfig {
   presence_penalty?: number
   stop?: string[]
   available_efforts?: string[]
+  thinking_mode?: string
+  effort_budget_tokens?: Record<string, number>
 }
 
 export type SearchProvider =

@@ -42,6 +42,7 @@ func (r *ModelConfigRegistry) ensureIndex() {
 }
 
 // lookup returns the config entry for a model ID, or nil if not found.
+// Tries full modelID first (e.g. "anthropic/claude-sonnet-5"), then model name only.
 func (r *ModelConfigRegistry) lookup(modelID string) *domain.ModelConfig {
 	_, model := splitModelID(modelID)
 	if model == "" {
@@ -49,12 +50,15 @@ func (r *ModelConfigRegistry) lookup(modelID string) *domain.ModelConfig {
 	}
 	r.mu.RLock()
 	r.ensureIndex()
-	c, ok := r.byModel[strings.ToLower(model)]
-	r.mu.RUnlock()
-	if !ok {
-		return nil
+	defer r.mu.RUnlock()
+	key := strings.ToLower(modelID)
+	if c, ok := r.byModel[key]; ok {
+		return &c
 	}
-	return &c
+	if c, ok := r.byModel[strings.ToLower(model)]; ok {
+		return &c
+	}
+	return nil
 }
 
 // AvailableEfforts returns the reasoning effort levels for a model.

@@ -74,6 +74,27 @@ const newModelName = ref('')
 const newContextWindow = ref(0)
 const newMaxOutput = ref(0)
 const newTemperature = ref(0)
+const newAvailableEfforts = ref('')
+const newThinkingMode = ref('')
+const newEffortBudgetTokens = ref('')
+
+function parseEffortBudgetTokens(raw: string): Record<string, number> | undefined {
+  if (!raw.trim()) return undefined
+  const map: Record<string, number> = {}
+  for (const line of raw.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    const [k, v] = trimmed.split(':')
+    const n = Number(v)
+    if (k && !isNaN(n)) map[k.trim()] = n
+  }
+  return Object.keys(map).length > 0 ? map : undefined
+}
+
+function formatEffortBudgetTokens(map: Record<string, number> | undefined): string {
+  if (!map) return ''
+  return Object.entries(map).map(([k, v]) => `${k}:${v}`).join('\n')
+}
 
 onMounted(async () => {
   await Promise.all([
@@ -303,6 +324,9 @@ function addModelEntry() {
   newContextWindow.value = 0
   newMaxOutput.value = 0
   newTemperature.value = 0
+  newAvailableEfforts.value = ''
+  newThinkingMode.value = ''
+  newEffortBudgetTokens.value = ''
   showAddModelDialog.value = true
 }
 
@@ -311,11 +335,15 @@ function confirmAddModel() {
   if (!name) return
   if (modelConfigForm.value.find(m => m.model === name)) return
   showAddModelDialog.value = false
+  const efforts = newAvailableEfforts.value.trim()
   modelConfigForm.value.push({
     model: name,
     context_window: newContextWindow.value || undefined,
     max_output: newMaxOutput.value || undefined,
     temperature: newTemperature.value || undefined,
+    available_efforts: efforts ? efforts.split(',').map(s => s.trim()).filter(Boolean) : undefined,
+    thinking_mode: newThinkingMode.value.trim() || undefined,
+    effort_budget_tokens: parseEffortBudgetTokens(newEffortBudgetTokens.value),
   })
   editingModelIdx.value = modelConfigForm.value.length - 1
   selectedModel.value = name
@@ -706,6 +734,18 @@ const hasFooterActions = computed(() => {
               <span class="settings-field__label">Temperature</span>
               <DqInput v-model.number="modelConfigForm[editingModelIdx].temperature" type="number" placeholder="0" step="0.1" />
             </label>
+            <label class="settings-field">
+              <span class="settings-field__label">Available Efforts</span>
+              <DqInput :model-value="(modelConfigForm[editingModelIdx].available_efforts ?? []).join(', ')" @update:model-value="modelConfigForm[editingModelIdx].available_efforts = ($event as string).split(',').map(s => s.trim()).filter(Boolean)" placeholder="off, low, medium, high, xhigh" />
+            </label>
+            <label class="settings-field">
+              <span class="settings-field__label">Thinking Mode</span>
+              <DqInput v-model="modelConfigForm[editingModelIdx].thinking_mode" placeholder="adaptive / enabled" />
+            </label>
+            <label class="settings-field">
+              <span class="settings-field__label">Effort Budget Tokens</span>
+              <DqInput :model-value="formatEffortBudgetTokens(modelConfigForm[editingModelIdx].effort_budget_tokens)" type="textarea" :rows="3" @update:model-value="modelConfigForm[editingModelIdx].effort_budget_tokens = parseEffortBudgetTokens($event as string)" placeholder="high:16000&#10;max:32000" />
+            </label>
           </template>
         </div>
 
@@ -754,6 +794,18 @@ const hasFooterActions = computed(() => {
           <label class="settings-field">
             <span class="settings-field__label">Temperature</span>
             <DqInput v-model.number="newTemperature" type="number" placeholder="0" step="0.1" />
+          </label>
+          <label class="settings-field">
+            <span class="settings-field__label">Available Efforts</span>
+            <DqInput v-model="newAvailableEfforts" placeholder="off, low, medium, high, xhigh" />
+          </label>
+          <label class="settings-field">
+            <span class="settings-field__label">Thinking Mode</span>
+            <DqInput v-model="newThinkingMode" placeholder="adaptive / enabled" />
+          </label>
+          <label class="settings-field">
+            <span class="settings-field__label">Effort Budget Tokens</span>
+            <DqInput v-model="newEffortBudgetTokens" type="textarea" :rows="3" placeholder="high:16000&#10;max:32000" />
           </label>
           <div class="settings-actions">
             <DqButton type="primary" @click="confirmAddModel">{{ $t('common.save_') }}</DqButton>
