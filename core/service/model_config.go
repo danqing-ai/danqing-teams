@@ -95,17 +95,22 @@ func (r *ModelConfigRegistry) GenParams(modelID string) *port.ModelGenParams {
 }
 
 func modelConfigToGenParams(c domain.ModelConfig) *port.ModelGenParams {
-	// Return nil if all values are zero (no overrides).
-	if c.Temperature == 0 && c.TopP == 0 && c.FrequencyPenalty == 0 && c.PresencePenalty == 0 && len(c.Stop) == 0 {
+	p := &port.ModelGenParams{
+		MaxTokens:          c.MaxOutput,
+		Temperature:        c.Temperature,
+		TopP:               c.TopP,
+		FrequencyPenalty:   c.FrequencyPenalty,
+		PresencePenalty:    c.PresencePenalty,
+		Stop:               c.Stop,
+		ThinkingMode:       c.ThinkingMode,
+		EffortBudgetTokens: c.EffortBudgetTokens,
+	}
+	if p.MaxTokens == 0 && p.Temperature == 0 && p.TopP == 0 &&
+		p.FrequencyPenalty == 0 && p.PresencePenalty == 0 &&
+		len(p.Stop) == 0 && p.ThinkingMode == "" && len(p.EffortBudgetTokens) == 0 {
 		return nil
 	}
-	return &port.ModelGenParams{
-		Temperature:      c.Temperature,
-		TopP:             c.TopP,
-		FrequencyPenalty: c.FrequencyPenalty,
-		PresencePenalty:  c.PresencePenalty,
-		Stop:             c.Stop,
-	}
+	return p
 }
 
 // AllModels returns the current config-based model configs.

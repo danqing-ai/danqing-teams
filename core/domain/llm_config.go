@@ -42,14 +42,6 @@ type LLMModel struct {
 	AvailableEfforts []string `json:"availableEfforts,omitempty"`
 }
 
-// DefaultEffortsOpenAI is the default reasoning effort levels for OpenAI-compatible models.
-var DefaultEffortsOpenAI = []string{"off", "none", "minimal", "low", "medium", "high", "xhigh"}
-
-// DefaultEffortsAnthropic is the default reasoning effort levels for Anthropic models.
-// Old models (Sonnet 4.5, Haiku 4.5): budget_tokens only → off/high/max.
-// New models (Sonnet 5, Opus 4.7/4.8, Fable 5): adaptive thinking → off/low/medium/high/xhigh/max.
-var DefaultEffortsAnthropic = []string{"off", "low", "medium", "high", "xhigh", "max"}
-
 // ModelConfig defines per-model configuration including context window, max
 // output tokens, and generation parameter overrides. All fields are optional;
 // unset values fall back to built-in pattern rules.
@@ -62,7 +54,9 @@ type ModelConfig struct {
 	FrequencyPenalty float64  `json:"frequency_penalty,omitempty" mapstructure:"frequency_penalty" yaml:"frequency_penalty,omitempty"`
 	PresencePenalty  float64  `json:"presence_penalty,omitempty" mapstructure:"presence_penalty" yaml:"presence_penalty,omitempty"`
 	Stop             []string `json:"stop,omitempty" mapstructure:"stop" yaml:"stop,omitempty"`
-	AvailableEfforts []string `json:"available_efforts,omitempty" mapstructure:"available_efforts" yaml:"available_efforts,omitempty"`
+	AvailableEfforts   []string       `json:"available_efforts,omitempty" mapstructure:"available_efforts" yaml:"available_efforts,omitempty"`
+	ThinkingMode       string         `json:"thinking_mode,omitempty" mapstructure:"thinking_mode" yaml:"thinking_mode,omitempty"`
+	EffortBudgetTokens map[string]int `json:"effort_budget_tokens,omitempty" mapstructure:"effort_budget_tokens" yaml:"effort_budget_tokens,omitempty"`
 }
 
 // LLMProviderPreset is a template for quickly creating a provider config.

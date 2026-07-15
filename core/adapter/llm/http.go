@@ -33,7 +33,7 @@ func NewHTTPProvider(baseURL, apiKey string) *HTTPProvider {
 func (p *HTTPProvider) Chat(ctx context.Context, req port.LLMChatRequest, effort string) (port.LLMChatResponse, error) {
 	model := req.Model
 	if model == "" {
-		model = "gpt-4o"
+		return port.LLMChatResponse{}, fmt.Errorf("model not specified")
 	}
 
 	messages := make([]map[string]any, 0, len(req.Messages))
@@ -73,7 +73,6 @@ func (p *HTTPProvider) Chat(ctx context.Context, req port.LLMChatRequest, effort
 		"model":      model,
 		"messages":   messages,
 	}
-	// Apply generation parameters from GenParams, falling back to defaults.
 	if req.GenParams != nil {
 		gp := req.GenParams
 		if gp.Temperature != 0 {
@@ -94,13 +93,6 @@ func (p *HTTPProvider) Chat(ctx context.Context, req port.LLMChatRequest, effort
 		if gp.MaxTokens > 0 {
 			body["max_tokens"] = gp.MaxTokens
 		}
-	}
-	// Apply defaults for parameters not set by GenParams.
-	if _, ok := body["temperature"]; !ok {
-		body["temperature"] = 0.2
-	}
-	if _, ok := body["max_tokens"]; !ok {
-		body["max_tokens"] = 16384
 	}
 	if len(req.Tools) > 0 {
 		var tools []map[string]any

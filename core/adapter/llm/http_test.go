@@ -66,7 +66,7 @@ func TestHTTPProviderOmitsEmptyUsage(t *testing.T) {
 	defer server.Close()
 
 	p := NewHTTPProvider(server.URL, "")
-	resp, err := p.Chat(context.Background(), port.LLMChatRequest{}, "")
+	resp, err := p.Chat(context.Background(), port.LLMChatRequest{Model: "gpt-4o"}, "")
 	if err != nil {
 		t.Fatalf("chat: %v", err)
 	}

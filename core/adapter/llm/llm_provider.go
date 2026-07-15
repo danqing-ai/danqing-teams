@@ -34,14 +34,57 @@ func (c *DefaultLLMProviderClient) Chat(ctx context.Context, req port.LLMChatReq
 	}
 	req.Model = mn
 
-	// Auto-fill GenParams from registry if not already set by caller.
-	if req.GenParams == nil && c.modelCfg != nil {
-		req.GenParams = c.modelCfg.GenParams(providerName + "/" + modelName)
+	modelID := providerName + "/" + modelName
+
+	// Load gen params from registry, merge with caller-provided params.
+	if c.modelCfg != nil {
+		registryParams := c.modelCfg.GenParams(modelID)
+		if registryParams != nil {
+			if req.GenParams == nil {
+				req.GenParams = registryParams
+			} else {
+				// Merge: registry values only fill in missing caller-provided values.
+				gp := req.GenParams
+				rp := registryParams
+				if gp.MaxTokens == 0 {
+					gp.MaxTokens = rp.MaxTokens
+				}
+				if gp.Temperature == 0 {
+					gp.Temperature = rp.Temperature
+				}
+				if gp.TopP == 0 {
+					gp.TopP = rp.TopP
+				}
+				if gp.FrequencyPenalty == 0 {
+					gp.FrequencyPenalty = rp.FrequencyPenalty
+				}
+				if gp.PresencePenalty == 0 {
+					gp.PresencePenalty = rp.PresencePenalty
+				}
+				if len(gp.Stop) == 0 {
+					gp.Stop = rp.Stop
+				}
+				if gp.ThinkingMode == "" {
+					gp.ThinkingMode = rp.ThinkingMode
+				}
+				if len(gp.EffortBudgetTokens) == 0 {
+					gp.EffortBudgetTokens = rp.EffortBudgetTokens
+				}
+			}
+		}
+	}
+
+	var effortCfg *EffortConfig
+	if req.GenParams != nil {
+		effortCfg = &EffortConfig{
+			ThinkingMode:       req.GenParams.ThinkingMode,
+			EffortBudgetTokens: req.GenParams.EffortBudgetTokens,
+		}
 	}
 
 	switch cfg.Provider {
 	case domain.LLMProviderAnthropic:
-		return NewAnthropicProvider(cfg.BaseURL, cfg.APIKey).Chat(ctx, req, effort)
+		return NewAnthropicProvider(cfg.BaseURL, cfg.APIKey).Chat(ctx, req, effort, effortCfg)
 	case domain.LLMProviderMock:
 		return NewMock().Chat(ctx, req)
 	default:

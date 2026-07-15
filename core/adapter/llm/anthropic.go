@@ -30,10 +30,10 @@ func NewAnthropicProvider(baseURL, apiKey string) *AnthropicProvider {
 	}
 }
 
-func (p *AnthropicProvider) Chat(ctx context.Context, req port.LLMChatRequest, effort string) (port.LLMChatResponse, error) {
+func (p *AnthropicProvider) Chat(ctx context.Context, req port.LLMChatRequest, effort string, effortCfg *EffortConfig) (port.LLMChatResponse, error) {
 	model := req.Model
 	if model == "" {
-		model = "claude-sonnet-4-20250514"
+		return port.LLMChatResponse{}, fmt.Errorf("model not specified")
 	}
 
 	system := ""
@@ -73,12 +73,10 @@ func (p *AnthropicProvider) Chat(ctx context.Context, req port.LLMChatRequest, e
 		"model":      model,
 		"messages":   messages,
 	}
-	// Apply generation parameters from GenParams, falling back to defaults.
-	maxTokens := 4096
 	if req.GenParams != nil {
 		gp := req.GenParams
 		if gp.MaxTokens > 0 {
-			maxTokens = gp.MaxTokens
+			body["max_tokens"] = gp.MaxTokens
 		}
 		if gp.TopP != 0 {
 			body["top_p"] = gp.TopP
@@ -90,7 +88,9 @@ func (p *AnthropicProvider) Chat(ctx context.Context, req port.LLMChatRequest, e
 			body["temperature"] = gp.Temperature
 		}
 	}
-	body["max_tokens"] = maxTokens
+	if _, ok := body["max_tokens"]; !ok {
+		body["max_tokens"] = 4096
+	}
 	if system != "" {
 		body["system"] = system
 	}
@@ -106,7 +106,7 @@ func (p *AnthropicProvider) Chat(ctx context.Context, req port.LLMChatRequest, e
 		body["tools"] = tools
 	}
 
-	ApplyReasoningEffort(domain.LLMProviderAnthropic, model, effort, body)
+	ApplyReasoningEffort(domain.LLMProviderAnthropic, effort, effortCfg, body)
 
 	b, err := json.Marshal(body)
 	if err != nil {
