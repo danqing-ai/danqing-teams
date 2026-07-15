@@ -6,7 +6,7 @@ FRONTEND_DIR := $(CURDIR)/frontend
 OUT_DIR := $(CURDIR)/out
 FRONTEND_DIST := $(OUT_DIR)/frontend/dist
 RELEASE_VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-LDFLAGS := -X 'danqing-teams/server/api/v1.Version=$(RELEASE_VERSION)'
+LDFLAGS := -w -X 'danqing-teams/server/api/v1.Version=$(RELEASE_VERSION)'
 
 export DQ_APP_NAME := $(APP_NAME)
 
@@ -22,7 +22,7 @@ help:
 	@echo "Dev:"
 	@echo "  backend       Start backend only (:7801) — for Go debugger"
 	@echo "  dev-web       Backend + Vite (browser :5801)"
-	@echo "  dev-desktop   Backend + Tauri webview"
+	@echo "  dev-desktop   Backend + Tauri webview (set SKIP_BACKEND=1 to use external backend)"
 	@echo "  dev-cli       Run CLI directly (no server needed)"
 	@echo "  dev-tui       Run TUI directly (no server needed)"
 	@echo "  stop          Stop all dev processes"
@@ -88,11 +88,11 @@ build-server:
 
 build-cli:
 	@mkdir -p $(OUT_DIR)/server
-	go build -o $(CLI_BIN) ./cli
+	go build -ldflags "$(LDFLAGS)" -o $(CLI_BIN) ./cli
 
 build-tui:
 	@mkdir -p $(OUT_DIR)/server
-	go build -o $(TUI_BIN) ./tui
+	go build -ldflags "$(LDFLAGS)" -o $(TUI_BIN) ./tui
 
 build-sidecar:
 	@chmod +x scripts/*.sh

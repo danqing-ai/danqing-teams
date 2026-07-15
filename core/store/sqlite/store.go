@@ -8,7 +8,7 @@ import (
 	"danqing-teams/core/domain"
 	"danqing-teams/core/port"
 
-	"gorm.io/driver/sqlite"
+	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
 

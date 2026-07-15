@@ -43,7 +43,7 @@ fi
 echo "==> Building sidecar: $BINARY_NAME ($GOOS/$GOARCH)"
 
 cd "$ROOT_DIR"
-GOOS=$GOOS GOARCH=$GOARCH go build -o "$BIN_DIR/$BINARY_NAME" ./server
+GOOS=$GOOS GOARCH=$GOARCH go build -ldflags "-w" -o "$BIN_DIR/$BINARY_NAME" ./server
 
 if [[ "$GOOS" != "windows" ]]; then
   chmod +x "$BIN_DIR/$BINARY_NAME"

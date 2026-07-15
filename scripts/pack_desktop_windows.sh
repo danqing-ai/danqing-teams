@@ -26,9 +26,14 @@ fi
 # Desktop app needs to know the backend API URL
 export VITE_API_BASE_URL="http://127.0.0.1:${DQ_BACKEND_PORT:-7801}"
 
-# Build Go backend as Tauri sidecar binary
+# Build Go backend as Tauri sidecar binary (with -w to strip DWARF while keeping Go symbols)
 echo "==> Building backend sidecar..."
 "$SCRIPT_DIR/build_sidecar.sh"
+
+# Ensure only the target-tripled sidecar exists in bin/ to avoid duplicates in the bundle
+BIN_DIR="$DQ_ROOT/desktop/src-tauri/bin"
+rm -f "$BIN_DIR"/danqing-teams-backend.exe
+rm -f "$BIN_DIR"/danqing-teams-backend
 
 echo "==> Tauri build ($APP_NAME) -> $CARGO_TARGET_DIR"
 npm run tauri build -- -b nsis

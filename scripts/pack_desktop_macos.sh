@@ -60,6 +60,9 @@ if [[ -n "$APP_BUNDLE" ]]; then
   if [[ -f "$SIDECAR_BIN" ]]; then
     cp "$SIDECAR_BIN" "$APP_BUNDLE/Contents/MacOS/"
     echo "==> Injected sidecar: $(basename "$SIDECAR_BIN") -> $APP_BUNDLE/Contents/MacOS/"
+    # Tauri externalBin also copies a sidecar without target triple; remove duplicate
+    rm -f "$APP_BUNDLE/Contents/MacOS/danqing-teams-backend"
+    echo "==> Removed duplicate sidecar without target triple"
     # Re-sign the .app after injecting sidecar (injection breaks code signature)
     codesign --force --deep --sign - "$APP_BUNDLE" 2>/dev/null && echo "==> Re-signed .app bundle" || echo "WARNING: codesign failed"
     # Remove all quarantine-related extended attributes so macOS doesn't block the app
