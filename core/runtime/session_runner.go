@@ -566,7 +566,9 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 			childTurnID := fmt.Sprintf("turn-%d", time.Now().UnixNano())
 			workDir := e.dataDir
 			projectID := ""
+			var session domain.Session
 			if s, err := e.sessions.Get(ctx, sessionID); err == nil {
+				session = s
 				workDir = e.resolveWorkDir(ctx, s.ProjectID)
 				projectID = s.ProjectID
 			}
@@ -607,10 +609,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 			oldSkills := e.turnRunner.SkillList
 			oldBindings := e.turnRunner.ToolBindings
 			oldLog := e.turnRunner.Log
-			e.turnRunner.Registry = e.buildWorkerRegistry(workerAgent)
-			workerSkills := e.resolveAgentSkills(workerAgent)
-			e.turnRunner.SkillList = workerSkills
-			e.turnRunner.ToolBindings = workerAgent.Tools
+			e.turnRunner.Registry = e.setupRegistry(session, workerAgent)
 			defer func() {
 				e.turnRunner.Registry = oldReg
 				e.turnRunner.SkillList = oldSkills
@@ -618,7 +617,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 				e.turnRunner.Log = oldLog
 			}()
 
-			sys := buildSystemPrompt(workerAgent.SystemPrompt, workerSkills, nil, "")
+			sys := buildSystemPrompt(workerAgent.SystemPrompt, e.turnRunner.SkillList, nil, "")
 			messages := []Message{
 				{Role: RoleSystem, Content: sys},
 			}
