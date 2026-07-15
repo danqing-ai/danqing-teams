@@ -43,10 +43,12 @@ type LLMModel struct {
 }
 
 // DefaultEffortsOpenAI is the default reasoning effort levels for OpenAI-compatible models.
-var DefaultEffortsOpenAI = []string{"off", "low", "medium", "high", "xhigh"}
+var DefaultEffortsOpenAI = []string{"off", "none", "minimal", "low", "medium", "high", "xhigh"}
 
 // DefaultEffortsAnthropic is the default reasoning effort levels for Anthropic models.
-var DefaultEffortsAnthropic = []string{"off", "high", "max"}
+// Old models (Sonnet 4.5, Haiku 4.5): budget_tokens only → off/high/max.
+// New models (Sonnet 5, Opus 4.7/4.8, Fable 5): adaptive thinking → off/low/medium/high/xhigh/max.
+var DefaultEffortsAnthropic = []string{"off", "low", "medium", "high", "xhigh", "max"}
 
 // ModelConfig defines per-model configuration including context window, max
 // output tokens, and generation parameter overrides. All fields are optional;

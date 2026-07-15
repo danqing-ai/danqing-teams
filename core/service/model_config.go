@@ -57,6 +57,15 @@ func (r *ModelConfigRegistry) lookup(modelID string) *domain.ModelConfig {
 	return &c
 }
 
+// AvailableEfforts returns the reasoning effort levels for a model.
+// Returns nil when no efforts are configured.
+func (r *ModelConfigRegistry) AvailableEfforts(modelID string) []string {
+	if c := r.lookup(modelID); c != nil && len(c.AvailableEfforts) > 0 {
+		return c.AvailableEfforts
+	}
+	return nil
+}
+
 // ContextWindow returns the context window size for a given model ID.
 // Lookup order: config exact match → default constant (128K).
 func (r *ModelConfigRegistry) ContextWindow(modelID string) int {

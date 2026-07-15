@@ -115,13 +115,14 @@ func New(cfg Config) *Core {
 	mcpManager := service.NewMCPManager(st.MCPServers())
 
 	llmConfigRepo := st.LLMConfig()
-	llmConfig := service.NewLLMConfigManager(llmConfigRepo)
 	searchConfig := service.NewSearchConfigManager(loader)
 	configManager := service.NewConfigManager(loader)
 
 	// Create model config registry for generation params and context window lookups.
 	modelCfg := service.NewModelConfigRegistry()
 	modelCfg.LoadFromConfig(context.Background(), loader)
+
+	llmConfig := service.NewLLMConfigManager(llmConfigRepo, modelCfg)
 
 	client := llm.NewDefaultLLMProvider(llmConfig, modelCfg)
 

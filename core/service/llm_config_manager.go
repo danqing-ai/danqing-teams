@@ -15,14 +15,15 @@ import (
 )
 
 type LLMConfigManager struct {
-	store  port.LLMConfigRepo
-	mu     sync.RWMutex
-	cache  map[string]domain.LLMProviderConfig
-	loaded bool
+	store    port.LLMConfigRepo
+	modelCfg *ModelConfigRegistry
+	mu       sync.RWMutex
+	cache    map[string]domain.LLMProviderConfig
+	loaded   bool
 }
 
-func NewLLMConfigManager(store port.LLMConfigRepo) *LLMConfigManager {
-	return &LLMConfigManager{store: store}
+func NewLLMConfigManager(store port.LLMConfigRepo, modelCfg *ModelConfigRegistry) *LLMConfigManager {
+	return &LLMConfigManager{store: store, modelCfg: modelCfg}
 }
 
 func (m *LLMConfigManager) ensureCache(ctx context.Context) {
@@ -133,12 +134,17 @@ func (m *LLMConfigManager) ListModels(ctx context.Context) []domain.LLMModel {
 				continue
 			}
 			modelID := cfg.Name + "/" + ref.Name
+			var efforts []string
+			if m.modelCfg != nil {
+				efforts = m.modelCfg.AvailableEfforts(modelID)
+			}
 			out = append(out, domain.LLMModel{
 				ID:               modelID,
 				Name:             ref.Name,
 				ProviderID:       cfg.ID,
 				Provider:         string(cfg.Provider),
 				Enabled:          ref.Enabled,
+				AvailableEfforts: efforts,
 			})
 		}
 	}
@@ -260,13 +266,40 @@ func (m *LLMConfigManager) ToggleModel(ctx context.Context, configID, modelName 
 }
 
 var knownAnthropicModels = []string{
+	// Latest (2026): Claude 5 family — adaptive thinking
+	"claude-sonnet-5-20250701",
+	"claude-sonnet-5",
+	"claude-fable-5-20250607",
+	"claude-fable-5",
+	// Latest (2026): Claude Opus 4.5+ — adaptive thinking
+	"claude-opus-4-8-20250528",
+	"claude-opus-4-8",
+	"claude-opus-4-7-20250416",
+	"claude-opus-4-7",
+	"claude-opus-4-6-20250318",
+	"claude-opus-4-6",
+	// Claude Opus 4.5 — flat effort
+	"claude-opus-4-5-20251101",
+	"claude-opus-4-5",
+	// Claude Sonnet 4 / 4.5 / 4.6
+	"claude-sonnet-4-6-20250215",
+	"claude-sonnet-4-6",
+	"claude-sonnet-4-5-20250929",
+	"claude-sonnet-4-5",
 	"claude-sonnet-4-20250514",
+	"claude-sonnet-4",
+	// Claude Haiku 4.5 — budget_tokens thinking
+	"claude-haiku-4-5-20251001",
+	"claude-haiku-4-5",
+	// Claude 3.5 legacy
+	"claude-3-5-sonnet-20241022",
+	"claude-3-5-sonnet-20240620",
+	"claude-3-5-haiku-20241022",
+	// Claude 3 legacy
 	"claude-3-opus-20240229",
 	"claude-3-sonnet-20240229",
 	"claude-3-haiku-20240307",
-	"claude-3-5-sonnet-20240620",
-	"claude-3-5-sonnet-20241022",
-	"claude-3-5-haiku-20241022",
+	// Short aliases
 	"claude-3-opus-latest",
 	"claude-3-sonnet-latest",
 	"claude-3-haiku-latest",

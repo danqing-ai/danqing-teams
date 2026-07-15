@@ -1,6 +1,10 @@
 package llm
 
-import "danqing-teams/core/domain"
+import (
+	"strings"
+
+	"danqing-teams/core/domain"
+)
 
 var effortToAnthropicBudget = map[string]int{
 	"low":    4_000,
@@ -10,19 +14,45 @@ var effortToAnthropicBudget = map[string]int{
 	"max":    32_000,
 }
 
-func ApplyReasoningEffort(provider domain.LLMProviderType, effort string, body map[string]any) {
+func isAnthropicAdaptiveModel(model string) bool {
+	for _, m := range anthropicAdaptiveModels {
+		if strings.Contains(model, m) {
+			return true
+		}
+	}
+	return false
+}
+
+var anthropicAdaptiveModels = []string{
+	"claude-sonnet-5",
+	"claude-fable-5",
+	"claude-opus-4-7",
+	"claude-opus-4-8",
+	"claude-sonnet-4-6",
+	"claude-opus-4-6",
+}
+
+func ApplyReasoningEffort(provider domain.LLMProviderType, model, effort string, body map[string]any) {
 	if effort == "" || effort == "off" {
 		return
 	}
 	switch provider {
 	case domain.LLMProviderAnthropic:
-		budget, ok := effortToAnthropicBudget[effort]
-		if !ok {
-			return
-		}
-		body["thinking"] = map[string]any{
-			"type":          "enabled",
-			"budget_tokens": budget,
+		if isAnthropicAdaptiveModel(model) {
+			body["thinking"] = map[string]any{
+				"type": "adaptive",
+			}
+			body["effort"] = effort
+			body["display"] = "summarized"
+		} else {
+			budget, ok := effortToAnthropicBudget[effort]
+			if !ok {
+				return
+			}
+			body["thinking"] = map[string]any{
+				"type":          "enabled",
+				"budget_tokens": budget,
+			}
 		}
 	default:
 		body["reasoning_effort"] = effort

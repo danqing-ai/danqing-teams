@@ -106,7 +106,7 @@ func (p *AnthropicProvider) Chat(ctx context.Context, req port.LLMChatRequest, e
 		body["tools"] = tools
 	}
 
-	ApplyReasoningEffort(domain.LLMProviderAnthropic, effort, body)
+	ApplyReasoningEffort(domain.LLMProviderAnthropic, model, effort, body)
 
 	b, err := json.Marshal(body)
 	if err != nil {
