@@ -30,3 +30,4 @@
 
 # Node (frontend, added later)
 node_modules/
+/desktop/src-tauri/bin/
