@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { fetchJSON } from '@/api/client'
+import Skeleton from '@/components/common/Skeleton.vue'
 
 interface FileContent {
   name: string
@@ -60,7 +61,10 @@ function formatSize(bytes: number): string {
       {{ content.name }} · {{ formatSize(content.size) }} · {{ content.contentType }}
     </div>
 
-    <div v-if="loading" class="file-viewer__loading">加载中...</div>
+    <div v-if="loading" class="file-viewer__loading">
+      <Skeleton variant="title" width="40%" />
+      <Skeleton variant="block" width="100%" height="180px" />
+    </div>
 
     <div v-else-if="error" class="file-viewer__error">{{ error }}</div>
 

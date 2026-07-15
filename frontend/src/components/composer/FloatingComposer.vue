@@ -202,15 +202,16 @@ defineExpose({ focusInput, appendContent })
     <div class="composer-float__actions">
       <div class="composer-float__chips">
         <!-- Project selector -->
-        <label v-if="sessions.composingNew" class="composer-chip composer-chip--select composer-chip--project">
-          <span class="composer-chip__icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
-          <span class="composer-chip__label">{{ selectedProject?.name || '选择项目' }}</span>
-          <select v-model="sessions.selectedProjectId" class="composer-chip__select" aria-label="选择项目">
-            <option v-for="p in projects.sortedProjects" :key="p.id" :value="p.id">
-              {{ p.name }}
-            </option>
-          </select>
-        </label>
+        <DqSelect
+          v-if="sessions.composingNew"
+          v-model="sessions.selectedProjectId"
+          size="small"
+          class="composer-chip-select"
+          aria-label="选择项目"
+          placeholder="选择项目"
+        >
+          <DqOption v-for="p in projects.sortedProjects" :key="p.id" :value="p.id" :label="p.name" />
+        </DqSelect>
 
         <!-- No LLM warning -->
         <label v-if="llm.modelsLoaded && !availableModels.length" class="composer-chip">
@@ -218,37 +219,39 @@ defineExpose({ focusInput, appendContent })
         </label>
 
         <!-- Agent selector -->
-        <label v-if="(sessions.composingNew || sessions.currentSessionId) && primaryAgents.length" class="composer-chip composer-chip--select composer-chip--agent">
-          <span class="composer-chip__icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
-          <span class="composer-chip__label">{{ selectedAgentLabel }}</span>
-          <select v-model="sessions.selectedAgentId" class="composer-chip__select" aria-label="选择 Agent">
-            <option :value="null">Default</option>
-            <option v-for="a in primaryAgents" :key="a.id" :value="a.id">
-              {{ a.name }}
-            </option>
-          </select>
-        </label>
+        <DqSelect
+          v-if="(sessions.composingNew || sessions.currentSessionId) && primaryAgents.length"
+          v-model="sessions.selectedAgentId"
+          size="small"
+          class="composer-chip-select"
+          aria-label="选择 Agent"
+          placeholder="Default"
+          clearable
+        >
+          <DqOption v-for="a in primaryAgents" :key="a.id" :value="a.id" :label="a.name" />
+        </DqSelect>
 
         <!-- Model selector -->
-        <label v-if="llm.modelsLoaded && availableModels.length" class="composer-chip composer-chip--select composer-chip--model">
-          <span class="composer-chip__icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg></span>
-          <span class="composer-chip__label">{{ selectedModelLabel }}</span>
-          <select v-model="selectedBaseModelId" class="composer-chip__select" aria-label="选择模型">
-            <option v-for="model in availableModels" :key="model.id" :value="model.id">
-              {{ model.label }}
-            </option>
-          </select>
-        </label>
+        <DqSelect
+          v-if="llm.modelsLoaded && availableModels.length"
+          v-model="selectedBaseModelId"
+          size="small"
+          class="composer-chip-select"
+          aria-label="选择模型"
+        >
+          <DqOption v-for="model in availableModels" :key="model.id" :value="model.id" :label="model.label" />
+        </DqSelect>
 
         <!-- Effort selector -->
-        <label v-if="llm.modelsLoaded && availableEfforts.length > 1" class="composer-chip composer-chip--select composer-chip--effort">
-          <span class="composer-chip__label">{{ selectedEffortLabel }}</span>
-          <select v-model="sessions.selectedEffort" class="composer-chip__select" aria-label="选择思考等级">
-            <option v-for="e in availableEfforts" :key="e" :value="e">
-              {{ e }}
-            </option>
-          </select>
-        </label>
+        <DqSelect
+          v-if="llm.modelsLoaded && availableEfforts.length > 1"
+          v-model="sessions.selectedEffort"
+          size="small"
+          class="composer-chip-select"
+          aria-label="选择思考等级"
+        >
+          <DqOption v-for="e in availableEfforts" :key="e" :value="e" :label="e" />
+        </DqSelect>
 
         <!-- Running indicator -->
         <span v-if="isTurnRunning" class="composer-chip composer-chip--running">
@@ -259,9 +262,8 @@ defineExpose({ focusInput, appendContent })
       </div>
 
       <div class="composer-float__actions-right">
-        <button
+        <DqIconButton
           v-if="isTurnRunning"
-          type="button"
           class="composer-float__stop"
           aria-label="停止"
           @click="stop"
@@ -269,10 +271,9 @@ defineExpose({ focusInput, appendContent })
           <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
             <rect x="4" y="4" width="16" height="16" rx="2" />
           </svg>
-        </button>
-        <button
+        </DqIconButton>
+        <DqIconButton
           v-else
-          type="button"
           class="composer-float__send"
           :disabled="sessions.loading || !content.trim()"
           aria-label="发送"
@@ -281,7 +282,7 @@ defineExpose({ focusInput, appendContent })
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M12 19V5M5 12l7-7 7 7" />
           </svg>
-        </button>
+        </DqIconButton>
       </div>
     </div>
   </div>
@@ -455,55 +456,38 @@ defineExpose({ focusInput, appendContent })
 }
 
 .composer-float__send {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: var(--dq-accent);
-  color: var(--dq-color-white);
-  cursor: pointer;
-  transition: opacity 0.12s ease, transform 0.12s ease;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 50% !important;
+  background: var(--dq-accent) !important;
+  color: var(--dq-color-white) !important;
 }
 
 .composer-float__send:hover:not(:disabled) {
   filter: brightness(1.06);
 }
 
-.composer-float__send:active:not(:disabled) {
-  transform: scale(0.96);
-}
-
-.composer-float__send:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
 .composer-float__stop {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: var(--dq-danger, #e53e3e);
-  color: var(--dq-color-white);
-  cursor: pointer;
-  transition: opacity 0.12s ease, transform 0.12s ease;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 50% !important;
+  background: var(--dq-danger) !important;
+  color: var(--dq-color-white) !important;
 }
 
 .composer-float__stop:hover {
   filter: brightness(1.06);
 }
 
-.composer-float__stop:active {
-  transform: scale(0.96);
+.composer-chip-select {
+  min-width: 0;
+  max-width: 160px;
+}
+
+.composer-chip-select :deep(.dq-select__trigger) {
+  background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+  border-color: color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
 }
 </style>

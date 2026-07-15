@@ -9,6 +9,7 @@ import { useModelConfigStore } from '@/stores/modelLimits'
 import { useThemeStore, THEME_OPTIONS } from '@/stores/theme'
 import type { ThemeId } from '@/stores/theme'
 import { toast } from '@/utils/feedback'
+import Skeleton from '@/components/common/Skeleton.vue'
 import type { LLMProviderType, LLMProviderConfig, LLMModelRef, LLMProviderPreset, SearchProvider, ModelConfig } from '@/types/mission'
 
 type SettingsTab = 'runtime' | 'models' | 'modelConfig' | 'search' | 'appearance'
@@ -453,7 +454,11 @@ const hasFooterActions = computed(() => {
           <p>{{ $t('settings.runtimeDesc') }}</p>
         </header>
 
-        <div v-if="runtimeConfig.loading" class="settings-empty">{{ $t('common.loading') }}</div>
+        <div v-if="runtimeConfig.loading" class="settings-empty settings-empty--skeleton">
+          <Skeleton variant="title" width="30%" />
+          <Skeleton variant="card" width="100%" />
+          <Skeleton variant="card" width="100%" />
+        </div>
 
         <div v-else class="settings-form">
           <div class="settings-form-group">
@@ -595,7 +600,11 @@ const hasFooterActions = computed(() => {
           <p>{{ $t('settings.modelsDesc') }}</p>
         </header>
 
-        <div v-if="llm.loading" class="settings-empty">{{ $t('common.loading') }}</div>
+        <div v-if="llm.loading" class="settings-empty settings-empty--skeleton">
+          <Skeleton variant="title" width="30%" />
+          <Skeleton variant="card" width="100%" />
+          <Skeleton variant="card" width="100%" />
+        </div>
 
         <div v-else>
           <div v-if="llm.configs.length" class="provider-list">
@@ -639,7 +648,10 @@ const hasFooterActions = computed(() => {
           <p>{{ $t('settings.searchDesc') }}</p>
         </header>
 
-        <div v-if="searchConfig.loading" class="settings-empty">{{ $t('common.loading') }}</div>
+        <div v-if="searchConfig.loading" class="settings-empty settings-empty--skeleton">
+          <Skeleton variant="title" width="30%" />
+          <Skeleton variant="card" width="100%" />
+        </div>
 
         <div v-else class="settings-form">
           <label class="settings-field">
@@ -690,7 +702,11 @@ const hasFooterActions = computed(() => {
           <p>{{ $t('settings.modelConfigDesc') }}</p>
         </header>
 
-        <div v-if="modelConfig.loading" class="settings-empty">{{ $t('common.loading') }}</div>
+        <div v-if="modelConfig.loading" class="settings-empty settings-empty--skeleton">
+          <Skeleton variant="title" width="30%" />
+          <Skeleton variant="card" width="100%" />
+          <Skeleton variant="card" width="100%" />
+        </div>
 
         <div v-else class="settings-form">
           <label class="settings-field">
@@ -940,12 +956,11 @@ const hasFooterActions = computed(() => {
 
 /* ── Form control consistency ── */
 
-/* Make DqInput visible with solid bg + clear border */
+/* Make DqInput match shared control density */
 .settings-view :deep(.dq-input) {
   background: var(--dq-glass-control-bg-solid);
   border-color: var(--teams-glass-border);
-  height: 34px;
-  min-height: 34px;
+  min-height: 28px;
   font-size: var(--dq-font-size-body);
 }
 
@@ -957,6 +972,7 @@ const hasFooterActions = computed(() => {
 .settings-view :deep(.dq-input:focus-visible) {
   background: var(--dq-bg-elevated);
   border-color: var(--dq-accent);
+  box-shadow: var(--dq-focus-ring);
 }
 
 .settings-view :deep(.dq-input:disabled) {
@@ -995,14 +1011,15 @@ const hasFooterActions = computed(() => {
   gap: 10px;
   padding: 8px 10px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--dq-radius-button);
   background: transparent;
   color: var(--dq-label-primary);
   font-size: var(--dq-font-size-body);
   font-weight: 500;
   cursor: pointer;
   text-align: left;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition: background var(--dq-transition-hover), color var(--dq-transition-hover);
+  box-shadow: inset 0 0 0 0 transparent;
 }
 
 .settings-sidebar__item:hover {
@@ -1012,6 +1029,7 @@ const hasFooterActions = computed(() => {
 .settings-sidebar__item.is-active {
   background: color-mix(in srgb, var(--dq-accent) 12%, var(--dq-fill-tertiary));
   color: var(--dq-accent);
+  box-shadow: inset 2px 0 0 var(--dq-accent);
 }
 
 .settings-panel {
@@ -1260,7 +1278,14 @@ const hasFooterActions = computed(() => {
   color: var(--dq-label-tertiary);
   text-align: center;
   background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
-  border-radius: 10px;
+  border-radius: var(--dq-radius-control);
+}
+
+.settings-empty--skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dq-space-sm);
+  text-align: left;
 }
 
 .provider-list-actions {

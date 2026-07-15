@@ -14,6 +14,28 @@ let term: Terminal | null = null
 let fit: FitAddon | null = null
 let ws: WebSocket | null = null
 let resizeObserver: ResizeObserver | null = null
+let themeObserver: MutationObserver | null = null
+
+function readCssVar(name: string, fallback: string): string {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return value || fallback
+}
+
+function terminalTheme() {
+  return {
+    background: readCssVar('--dq-bg-base', '#1e1e1e'),
+    foreground: readCssVar('--dq-label-primary', '#d4d4d4'),
+    cursor: readCssVar('--dq-accent', '#d4d4d4'),
+    selectionBackground: readCssVar('--dq-accent-tint', 'rgba(10, 132, 255, 0.35)'),
+    black: readCssVar('--dq-bg-page', '#000000'),
+    brightWhite: readCssVar('--dq-label-primary', '#ffffff'),
+  }
+}
+
+function applyTheme() {
+  if (!term) return
+  term.options.theme = terminalTheme()
+}
 
 function wsUrl(): string {
   const httpBase = apiBaseUrl() || window.location.origin
@@ -66,12 +88,8 @@ onMounted(() => {
   term = new Terminal({
     cursorBlink: true,
     fontSize: 12,
-    fontFamily: '"SF Mono", Monaco, Menlo, Consolas, "Liberation Mono", monospace',
-    theme: {
-      background: '#1e1e1e',
-      foreground: '#d4d4d4',
-      cursor: '#d4d4d4',
-    },
+    fontFamily: 'var(--dq-font-mono), "SF Mono", Monaco, Menlo, Consolas, monospace',
+    theme: terminalTheme(),
     scrollback: 5000,
   })
   fit = new FitAddon()
@@ -94,6 +112,10 @@ onMounted(() => {
   })
   if (containerRef.value) resizeObserver.observe(containerRef.value)
 
+  // Re-apply when html class list changes (theme switch)
+  themeObserver = new MutationObserver(() => applyTheme())
+  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+
   connect()
 })
 
@@ -103,6 +125,8 @@ watch(() => props.projectId, () => {
 })
 
 onBeforeUnmount(() => {
+  themeObserver?.disconnect()
+  themeObserver = null
   resizeObserver?.disconnect()
   resizeObserver = null
   if (ws) {
@@ -120,7 +144,7 @@ onBeforeUnmount(() => {
   <div class="terminal-panel">
     <div ref="containerRef" class="terminal-panel__term" />
     <div v-if="status === 'closed'" class="terminal-panel__overlay">
-      <button class="terminal-panel__reconnect" @click="reconnect">重新连接</button>
+      <DqButton class="terminal-panel__reconnect" @click="reconnect">重新连接</DqButton>
     </div>
   </div>
 </template>
@@ -134,7 +158,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #1e1e1e;
+  background: var(--dq-bg-base);
 }
 
 .terminal-panel__term {
@@ -153,21 +177,10 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.45);
+  background: var(--dq-overlay-medium);
 }
 
 .terminal-panel__reconnect {
-  padding: 6px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #d4d4d4;
-  font-size: var(--dq-font-size-footnote);
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.terminal-panel__reconnect:hover {
-  background: rgba(255, 255, 255, 0.16);
+  border-radius: var(--dq-radius-button);
 }
 </style>

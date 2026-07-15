@@ -5,6 +5,7 @@ import { useSkillsStore } from '@/stores/skills'
 import { confirm, toast } from '@/utils/feedback'
 import type { Skill, SkillFile } from '@/types'
 import MdEditor from '@/components/common/MdEditor.vue'
+import WorkspaceShell from '@/components/common/WorkspaceShell.vue'
 
 type SkillTab = 'info' | 'body' | 'files' | 'tools'
 
@@ -59,6 +60,23 @@ const headerTitle = computed(() => {
   if (selectedSkill.value) return selectedSkill.value.name || t('skills.untitled')
   return ''
 })
+const skillTabs = computed(() => [
+  { label: t('common.basicInfo'), value: 'info' as const },
+  { label: t('skills.instructions'), value: 'body' as const },
+  {
+    label: skillFiles.value.length
+      ? `${t('skills.files')} (${skillFiles.value.length})`
+      : t('skills.files'),
+    value: 'files' as const,
+  },
+  {
+    label: (skillForm.value.toolIds ?? []).length
+      ? `${t('common.tools')} (${(skillForm.value.toolIds ?? []).length})`
+      : t('common.tools'),
+    value: 'tools' as const,
+  },
+])
+
 const showViewerDialog = ref(false)
 
 const metadataEntries = computed(() => {
@@ -253,16 +271,28 @@ function formatSize(bytes: number): string {
 </script>
 
 <template>
-  <div class="resource-shell float-island" @keydown="onKeydown">
-    <aside class="resource-rail">
+  <WorkspaceShell
+    custom-rail
+    :has-selection="hasSelection"
+    @keydown="onKeydown"
+    @create="startCreate"
+  >
+    <template #rail>
       <div class="resource-rail__section">
         <div class="resource-rail__section-head">
           <span class="resource-rail__section-title">{{ $t('skills.title') }}</span>
-          <DqIconButton :aria-label="$t('skills.newSkill')" @click="startCreate">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 5v14M5 12h14" stroke-linecap="round" />
-            </svg>
-          </DqIconButton>
+          <div class="resource-rail__section-actions">
+            <DqIconButton :aria-label="$t('skills.import')" @click="showImportDialog = true">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </DqIconButton>
+            <DqIconButton :aria-label="$t('skills.newSkill')" @click="startCreate">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14" stroke-linecap="round" />
+              </svg>
+            </DqIconButton>
+          </div>
         </div>
         <DqEmpty v-if="!sortedSkills.length" class="resource-rail__empty" :description="$t('skills.noSkills')" />
         <template v-else>
@@ -305,153 +335,147 @@ function formatSize(bytes: number): string {
           </div>
         </template>
       </div>
-    </aside>
+    </template>
 
-    <main class="resource-workspace">
-      <div v-if="!hasSelection" class="resource-workspace__empty">
-        <DqEmpty :description="$t('skills.emptySelection')">
-          <div class="resource-workspace__empty-actions">
-            <DqButton @click="startCreate">{{ $t('skills.newSkill') }}</DqButton>
-            <DqButton @click="showImportDialog = true">{{ $t('skills.import') }}</DqButton>
-          </div>
-        </DqEmpty>
-      </div>
-
-      <template v-else>
-        <header class="resource-workspace__bar">
-          <div class="resource-workspace__identity">
-            <h1 class="resource-workspace__title">{{ headerTitle }}</h1>
-          </div>
-          <nav v-if="selectedSkill || isCreating" class="resource-workspace__tabs" role="tablist">
-            <button type="button" class="resource-workspace__tab" :class="{ 'is-active': activeTab === 'info' }" role="tab" @click="activeTab = 'info'">{{ $t('common.basicInfo') }}</button>
-            <button type="button" class="resource-workspace__tab" :class="{ 'is-active': activeTab === 'body' }" role="tab" @click="activeTab = 'body'">{{ $t('skills.instructions') }}</button>
-            <button type="button" class="resource-workspace__tab" :class="{ 'is-active': activeTab === 'files' }" role="tab" @click="activeTab = 'files'">{{ $t('skills.files') }} <span v-if="skillFiles.length" class="resource-workspace__tab-badge">{{ skillFiles.length }}</span></button>
-            <button type="button" class="resource-workspace__tab" :class="{ 'is-active': activeTab === 'tools' }" role="tab" @click="activeTab = 'tools'">{{ $t('common.tools') }} <span v-if="(skillForm.toolIds ?? []).length" class="resource-workspace__tab-badge">{{ (skillForm.toolIds ?? []).length }}</span></button>
-          </nav>
-        </header>
-
-        <div class="resource-workspace__scroll">
-          <!-- Info Tab -->
-          <section v-show="activeTab === 'info'" class="resource-section">
-            <div class="resource-form-grid resource-form-grid--3">
-              <label class="resource-field">
-                <span class="resource-field__label">{{ $t('skills.skillId') }}</span>
-                <DqInput v-model="skillForm.id" class="resource-input-mono" placeholder="my-skill" :disabled="!isCreating" />
-                <span v-if="isCreating" class="resource-field__hint">{{ $t('skills.idHint') }}</span>
-              </label>
-              <label class="resource-field">
-                <span class="resource-field__label">{{ $t('common.name') }}</span>
-                <DqInput v-model="skillForm.name" :placeholder="$t('skills.namePlaceholder')" />
-              </label>
-              <label class="resource-field">
-                <span class="resource-field__label">License</span>
-                <DqInput v-model="skillForm.license" placeholder="MIT" />
-              </label>
-            </div>
-            <div class="resource-form-grid resource-form-grid--2">
-              <label class="resource-field">
-                <span class="resource-field__label">Compatibility</span>
-                <DqInput v-model="skillForm.compatibility" placeholder="Requires git, python3" />
-              </label>
-              <label class="resource-field">
-                <span class="resource-field__label">Allowed Tools</span>
-                <DqInput v-model="skillForm.allowedTools" placeholder="Bash Read" />
-              </label>
-            </div>
-            <div class="resource-form-grid resource-form-grid--2">
-              <label class="resource-field">
-                <span class="resource-field__label">{{ $t('skills.keywords') }}</span>
-                <div class="resource-chip-list">
-                  <span v-for="(kw, idx) in (skillForm.keywords ?? [])" :key="idx" class="resource-chip">
-                    {{ kw }}
-                    <button type="button" class="resource-chip__remove" @click="removeKeyword(idx)">×</button>
-                  </span>
-                  <input v-model="pendingKeyword" class="resource-chip-list__add" placeholder="+" @keydown.enter.prevent="addKeyword" />
-                </div>
-              </label>
-              <label class="resource-field">
-                <span class="resource-field__label">Metadata</span>
-                <div class="resource-meta-list">
-                  <div v-for="(entry, idx) in metadataEntries" :key="idx" class="resource-meta-row">
-                    <input v-model="entry.key" class="resource-meta-key" placeholder="key" @change="updateMetadataKey(metadataEntries[idx].key, entry.key, idx)" />
-                    <input v-model="entry.value" class="resource-meta-value" placeholder="value" @change="updateMetadataValue(entry.key, entry.value, idx)" />
-                    <button type="button" class="resource-meta-remove" @click="removeMetadata(entry.key)">×</button>
-                  </div>
-                  <button type="button" class="resource-meta-add" @click="addMetadata">+ {{ $t('skills.add') }}</button>
-                </div>
-              </label>
-            </div>
-            <label class="resource-field resource-field--block">
-              <span class="resource-field__label">{{ $t('common.description') }}</span>
-              <DqInput v-model="skillForm.description" type="textarea" :rows="4" :placeholder="$t('skills.descriptionPlaceholder')" />
-            </label>
-            <label class="resource-field resource-field--block">
-              <span class="resource-field__label">{{ $t('skills.systemHint') }}</span>
-              <DqInput v-model="skillForm.systemHint" type="textarea" :rows="4" :placeholder="$t('skills.systemHintPlaceholder')" />
-            </label>
-          </section>
-
-          <!-- Body Tab (Markdown Editor) -->
-          <section v-show="activeTab === 'body'" class="resource-section resource-section--body">
-            <MdEditor v-model="skillForm.body" :label="$t('skills.bodyLabel')" :rows="20" :placeholder="$t('skills.bodyPlaceholder')" />
-          </section>
-
-          <!-- Files Tab -->
-          <section v-show="activeTab === 'files'" class="resource-section">
-            <div v-if="!skillFiles.length" class="resource-section__empty">
-              <DqEmpty :description="$t('skills.noFiles')" />
-            </div>
-            <div v-else class="resource-list-card">
-              <div v-for="file in skillFiles" :key="file.id" class="resource-list-card__item">
-                <div class="resource-list-card__meta">
-                  <span class="resource-list-card__name">{{ file.path }}</span>
-                  <span class="resource-list-card__desc">{{ formatSize(file.size) }}</span>
-                </div>
-                <div class="resource-list-card__actions">
-                  <DqButton size="small" @click="viewFileContent(file)">{{ $t('skills.view') }}</DqButton>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <!-- Tools Tab -->
-          <section v-show="activeTab === 'tools'" class="resource-section">
-            <div class="resource-form-grid resource-form-grid--2">
-              <label class="resource-field">
-                <span class="resource-field__label">{{ $t('toolsPage.toolId') }}</span>
-                <DqInput v-model="pendingToolId" class="resource-input-mono" placeholder="search_kb" @keydown.enter.prevent="addSkillTool" />
-              </label>
-              <div class="resource-field resource-field--action">
-                <DqButton @click="addSkillTool">{{ $t('common.addTool') }}</DqButton>
-              </div>
-            </div>
-            <div class="resource-list-card">
-              <div v-for="id in (skillForm.toolIds ?? [])" :key="id" class="resource-list-card__item">
-                <div class="resource-list-card__meta">
-                  <span class="resource-list-card__name">{{ id }}</span>
-                </div>
-                <div class="resource-list-card__actions">
-                  <button type="button" class="resource-list-card__action resource-list-card__action--danger" @click="removeSkillTool(id)">{{ $t('common.delete') }}</button>
-                </div>
-              </div>
-            </div>
-          </section>
+    <template #empty>
+      <DqEmpty :description="$t('skills.emptySelection')">
+        <div class="resource-workspace__empty-actions">
+          <DqButton @click="startCreate">{{ $t('skills.newSkill') }}</DqButton>
+          <DqButton @click="showImportDialog = true">{{ $t('skills.import') }}</DqButton>
         </div>
+      </DqEmpty>
+    </template>
 
-        <footer class="resource-workspace__footer">
-          <span class="resource-workspace__hint">{{ $t('common.saveShortcut') }}</span>
-          <div class="resource-workspace__footer-actions">
-            <DqButton v-if="isCreating" @click="isCreating = false; selectedId = null">{{ $t('common.cancel') }}</DqButton>
-            <DqButton v-if="!isCreating && selectedSkill?.builtin" @click="resetSelected">{{ $t('common.reset') }}</DqButton>
-            <DqButton v-if="!isCreating" @click="removeSelected">{{ $t('common.delete') }}</DqButton>
-            <DqButton type="primary" :disabled="saving" @click="save">
-              {{ isCreating ? $t('common.create') : $t('common.save') }}
-            </DqButton>
+    <template #header>
+      <div class="resource-workspace__identity">
+        <h1 class="resource-workspace__title">{{ headerTitle }}</h1>
+      </div>
+      <DqSegmented v-model="activeTab" class="resource-workspace__segmented" :options="skillTabs" />
+    </template>
+
+    <template #body>
+        <!-- Info Tab -->
+        <section v-show="activeTab === 'info'" class="resource-section">
+          <div class="resource-form-grid resource-form-grid--3">
+            <label class="resource-field">
+              <span class="resource-field__label">{{ $t('skills.skillId') }}</span>
+              <DqInput v-model="skillForm.id" class="resource-input-mono" placeholder="my-skill" :disabled="!isCreating" />
+              <span v-if="isCreating" class="resource-field__hint">{{ $t('skills.idHint') }}</span>
+            </label>
+            <label class="resource-field">
+              <span class="resource-field__label">{{ $t('common.name') }}</span>
+              <DqInput v-model="skillForm.name" :placeholder="$t('skills.namePlaceholder')" />
+            </label>
+            <label class="resource-field">
+              <span class="resource-field__label">License</span>
+              <DqInput v-model="skillForm.license" placeholder="MIT" />
+            </label>
           </div>
-        </footer>
-      </template>
-    </main>
-  </div>
+          <div class="resource-form-grid resource-form-grid--2">
+            <label class="resource-field">
+              <span class="resource-field__label">Compatibility</span>
+              <DqInput v-model="skillForm.compatibility" placeholder="Requires git, python3" />
+            </label>
+            <label class="resource-field">
+              <span class="resource-field__label">Allowed Tools</span>
+              <DqInput v-model="skillForm.allowedTools" placeholder="Bash Read" />
+            </label>
+          </div>
+          <div class="resource-form-grid resource-form-grid--2">
+            <label class="resource-field">
+              <span class="resource-field__label">{{ $t('skills.keywords') }}</span>
+              <div class="resource-chip-list">
+                <span v-for="(kw, idx) in (skillForm.keywords ?? [])" :key="idx" class="resource-chip">
+                  {{ kw }}
+                  <button type="button" class="resource-chip__remove" @click="removeKeyword(idx)">×</button>
+                </span>
+                <input v-model="pendingKeyword" class="resource-chip-list__add" placeholder="+" @keydown.enter.prevent="addKeyword" />
+              </div>
+            </label>
+            <label class="resource-field">
+              <span class="resource-field__label">Metadata</span>
+              <div class="resource-meta-list">
+                <div v-for="(entry, idx) in metadataEntries" :key="idx" class="resource-meta-row">
+                  <input v-model="entry.key" class="resource-meta-key" placeholder="key" @change="updateMetadataKey(metadataEntries[idx].key, entry.key, idx)" />
+                  <input v-model="entry.value" class="resource-meta-value" placeholder="value" @change="updateMetadataValue(entry.key, entry.value, idx)" />
+                  <button type="button" class="resource-meta-remove" @click="removeMetadata(entry.key)">×</button>
+                </div>
+                <button type="button" class="resource-meta-add" @click="addMetadata">+ {{ $t('skills.add') }}</button>
+              </div>
+            </label>
+          </div>
+          <label class="resource-field resource-field--block">
+            <span class="resource-field__label">{{ $t('common.description') }}</span>
+            <DqInput v-model="skillForm.description" type="textarea" :rows="4" :placeholder="$t('skills.descriptionPlaceholder')" />
+          </label>
+          <label class="resource-field resource-field--block">
+            <span class="resource-field__label">{{ $t('skills.systemHint') }}</span>
+            <DqInput v-model="skillForm.systemHint" type="textarea" :rows="4" :placeholder="$t('skills.systemHintPlaceholder')" />
+          </label>
+        </section>
+
+        <!-- Body Tab (Markdown Editor) -->
+        <section v-show="activeTab === 'body'" class="resource-section resource-section--body">
+          <MdEditor v-model="skillForm.body" :label="$t('skills.bodyLabel')" :rows="20" :placeholder="$t('skills.bodyPlaceholder')" />
+        </section>
+
+        <!-- Files Tab -->
+        <section v-show="activeTab === 'files'" class="resource-section">
+          <div v-if="!skillFiles.length" class="resource-section__empty">
+            <DqEmpty :description="$t('skills.noFiles')" />
+          </div>
+          <div v-else class="resource-list-card">
+            <div v-for="file in skillFiles" :key="file.id" class="resource-list-card__item">
+              <div class="resource-list-card__meta">
+                <span class="resource-list-card__name">{{ file.path }}</span>
+                <span class="resource-list-card__desc">{{ formatSize(file.size) }}</span>
+              </div>
+              <div class="resource-list-card__actions">
+                <DqButton size="small" @click="viewFileContent(file)">{{ $t('skills.view') }}</DqButton>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Tools Tab -->
+        <section v-show="activeTab === 'tools'" class="resource-section">
+          <div class="resource-form-grid resource-form-grid--2">
+            <label class="resource-field">
+              <span class="resource-field__label">{{ $t('toolsPage.toolId') }}</span>
+              <DqInput v-model="pendingToolId" class="resource-input-mono" placeholder="search_kb" @keydown.enter.prevent="addSkillTool" />
+            </label>
+            <div class="resource-field resource-field--action">
+              <DqButton @click="addSkillTool">{{ $t('common.addTool') }}</DqButton>
+            </div>
+          </div>
+          <div class="resource-list-card">
+            <div v-for="id in (skillForm.toolIds ?? [])" :key="id" class="resource-list-card__item">
+              <div class="resource-list-card__meta">
+                <span class="resource-list-card__name">{{ id }}</span>
+              </div>
+              <div class="resource-list-card__actions">
+                <button type="button" class="resource-list-card__action resource-list-card__action--danger" @click="removeSkillTool(id)">{{ $t('common.delete') }}</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+    </template>
+
+    <template #footer>
+      
+        <span class="resource-workspace__hint">{{ $t('common.saveShortcut') }}</span>
+        <div class="resource-workspace__footer-actions">
+          <DqButton v-if="isCreating" @click="isCreating = false; selectedId = null">{{ $t('common.cancel') }}</DqButton>
+          <DqButton v-if="!isCreating && selectedSkill?.builtin" @click="resetSelected">{{ $t('common.reset') }}</DqButton>
+          <DqButton v-if="!isCreating" @click="removeSelected">{{ $t('common.delete') }}</DqButton>
+          <DqButton type="primary" :disabled="saving" @click="save">
+            {{ isCreating ? $t('common.create') : $t('common.save') }}
+          </DqButton>
+        </div>
+      
+    </template>
+  </WorkspaceShell>
 
   <!-- File Viewer Dialog -->
   <DqDialog v-model:open="showViewerDialog" :title="viewingFile?.path ?? ''" variant="glass" width="700px" :closable="true" @update:open="onViewerClose">
@@ -463,7 +487,7 @@ function formatSize(bytes: number): string {
     <div class="import-form">
       <label class="import-field">
         <span class="import-field__label">{{ $t('skills.importPath') }}</span>
-        <input v-model="importPath" class="import-field__input" type="text" placeholder="/path/to/skill-directory" spellcheck="false" @keydown.enter="doImport" />
+        <DqInput v-model="importPath" placeholder="/path/to/skill-directory" spellcheck="false" @keydown.enter="doImport" />
         <span class="import-field__hint">{{ $t('skills.importHint') }}</span>
       </label>
     </div>
@@ -484,6 +508,12 @@ function formatSize(bytes: number): string {
   min-height: 0;
   flex: 1;
   overflow: hidden;
+}
+
+.resource-rail__section-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .resource-rail__section-head {

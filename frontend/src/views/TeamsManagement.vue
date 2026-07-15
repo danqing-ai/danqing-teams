@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import MdEditor from '@/components/common/MdEditor.vue'
+import WorkspaceShell from '@/components/common/WorkspaceShell.vue'
 import { useGlobalAgentsStore } from '@/stores/globalAgents'
 import { useSkillsStore } from '@/stores/skills'
 import { useKnowledgeStore } from '@/stores/knowledge'
@@ -222,8 +223,13 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="resource-shell float-island" @keydown="onWorkspaceKeydown">
-    <aside class="resource-rail">
+  <WorkspaceShell
+    custom-rail
+    :has-selection="hasSelection"
+    @keydown="onWorkspaceKeydown"
+    @create="openCreate"
+  >
+    <template #rail>
       <div class="resource-rail__section">
         <div class="resource-rail__section-head">
           <span class="resource-rail__section-title">{{ $t('teams.workerAgent') }}</span>
@@ -275,182 +281,165 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
           </div>
         </template>
       </div>
-    </aside>
+    </template>
 
-    <main class="resource-workspace">
-      <div v-if="!hasSelection" class="resource-workspace__empty">
-        <DqEmpty :description="$t('teams.emptySelection')">
-          <p class="resource-workspace__hint">{{ $t('teams.emptySelectionHint') }}</p>
-        </DqEmpty>
-      </div>
+    <template #empty>
+      <DqEmpty :description="$t('teams.emptySelection')">
+        <p class="resource-workspace__hint">{{ $t('teams.emptySelectionHint') }}</p>
+      </DqEmpty>
+    </template>
 
-      <template v-else>
-        <header class="resource-workspace__bar">
-          <div class="resource-workspace__identity">
-            <h1 class="resource-workspace__title">{{ headerTitle }}</h1>
-            <div v-if="!isCreating" class="resource-workspace__badges">
-              <code v-if="selectedAgent?.id" class="resource-workspace__id">
-                {{ compactId(selectedAgent.id) }}
-              </code>
-            </div>
-          </div>
-          <nav class="resource-workspace__tabs" role="tablist">
-            <button
-              v-for="tab in sectionTabs"
-              :key="tab.id"
-              type="button"
-              class="resource-workspace__tab"
-              :class="{ 'is-active': activeTab === tab.id }"
-              role="tab"
-              :aria-selected="activeTab === tab.id"
-              @click="activeTab = tab.id"
-            >
-              {{ tab.label }}
-            </button>
-          </nav>
-        </header>
-
-        <div class="resource-workspace__scroll">
-          <section v-show="activeTab === 'overview'" class="resource-section">
-            <div class="resource-form-grid resource-form-grid--2">
-              <label class="resource-field">
-                <span class="resource-field__label">{{ $t('teams.agentId') }}</span>
-                <DqInput v-model="agentForm.id" class="resource-input-mono" placeholder="alert-analyst" :disabled="!isCreating" />
-                <span v-if="isCreating" class="resource-field__hint">{{ $t('teams.idHint') }}</span>
-              </label>
-              <label class="resource-field">
-                <span class="resource-field__label">{{ $t('teams.displayName') }}</span>
-                <DqInput v-model="agentForm.name" placeholder="Alert Analyst" />
-              </label>
-            </div>
-            <div class="resource-form-grid resource-form-grid--2">
-              <label class="resource-field">
-                <span class="resource-field__label">{{ $t('teams.mode') }}</span>
-                <select v-model="agentForm.mode" class="resource-field__select">
-                  <option value="primary">{{ $t('teams.primary') }}</option>
-                  <option value="subagent">{{ $t('teams.subagent') }}</option>
-                </select>
-              </label>
-              <div class="resource-field">
-                <span class="resource-field__label">{{ $t('teams.maxSteps') }}</span>
-                <div class="slider-row">
-                  <DqSlider v-model="agentForm.steps" :min="1" :max="100" :step="1" />
-                  <span class="slider-row__value">{{ agentForm.steps }}</span>
-                </div>
-              </div>
-            </div>
-            <label class="resource-field resource-field--block">
-              <span class="resource-field__label">{{ $t('teams.persona') }}</span>
-              <DqInput v-model="agentForm.persona" :placeholder="$t('teams.personaPlaceholder')" />
-            </label>
-            <label class="resource-field resource-field--block">
-              <span class="resource-field__label">{{ $t('common.description') }}</span>
-              <DqInput v-model="agentForm.description" type="textarea" :rows="4" :placeholder="$t('teams.descriptionPlaceholder')" />
-            </label>
-            <div class="resource-field resource-field--block resource-field--inline" @click="agentForm.canDelegate = !agentForm.canDelegate">
-              <div class="resource-field__inline-meta">
-                <span class="resource-field__label">{{ $t('teams.canDelegate') }}</span>
-              </div>
-              <DqSwitch :model-value="agentForm.canDelegate" size="small" />
-            </div>
-          </section>
-
-          <section v-show="activeTab === 'prompt'" class="resource-section resource-section--prompt">
-            <MdEditor v-model="agentForm.systemPrompt" :rows="18" :placeholder="$t('teams.promptPlaceholder')" />
-          </section>
-
-          <section v-show="activeTab === 'skills'" class="resource-section">
-            <DqEmpty v-if="!skills.items.length" :description="$t('teams.noSkills')" />
-            <div v-else class="resource-list-card">
-              <div
-                v-for="skill in skills.items"
-                :key="skill.id"
-                class="resource-list-card__item"
-                :class="{ 'is-active': agentForm.skillIds?.includes(skill.id) }"
-                @click="toggleSkill(skill.id)"
-              >
-                <DqCheckbox :model-value="agentForm.skillIds?.includes(skill.id)" />
-                <div class="resource-list-card__meta">
-                  <span class="resource-list-card__name">{{ skill.name }}</span>
-                  <span class="resource-list-card__desc">{{ skill.description }}</span>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section v-show="activeTab === 'tools'" class="resource-section">
-            <div class="resource-form-grid resource-form-grid--3">
-              <label class="resource-field">
-                <span class="resource-field__label">Tool ID</span>
-                <DqInput v-model="pendingTool.toolId" class="resource-input-mono" placeholder="search_kb" @keydown.enter.prevent="addTool" />
-              </label>
-              <label class="resource-field">
-                <span class="resource-field__label">MCP Server</span>
-                <DqInput v-model="pendingTool.mcpServer" class="resource-input-mono" :placeholder="$t('teams.riskOptional')" />
-              </label>
-              <label class="resource-field">
-                <span class="resource-field__label">{{ $t('common.riskLevel') }}</span>
-                <select v-model="pendingTool.riskLevel" class="resource-field__select">
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                </select>
-              </label>
-              <div class="resource-field resource-field--action">
-                <DqButton @click="addTool">{{ $t('common.addTool') }}</DqButton>
-              </div>
-            </div>
-            <div class="resource-list-card">
-              <div v-for="(tool, idx) in agentForm.tools" :key="idx" class="resource-list-card__item">
-                <div class="resource-list-card__meta">
-                  <span class="resource-list-card__name">{{ tool.toolId }}</span>
-                  <span class="resource-list-card__desc">{{ tool.mcpServer ? `${tool.mcpServer} · ` : '' }}{{ tool.riskLevel || 'low' }}</span>
-                </div>
-                <div class="resource-list-card__actions">
-                  <select v-model="tool.riskLevel" class="resource-field__select resource-list-card__risk">
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
-                  <button type="button" class="resource-list-card__action resource-list-card__action--danger" @click="removeTool(idx)">{{ $t('common.delete') }}</button>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section v-show="activeTab === 'knowledge'" class="resource-section">
-            <DqEmpty v-if="!knowledge.bases.length" :description="$t('teams.noKnowledge')" />
-            <div v-else class="resource-list-card">
-              <div
-                v-for="base in knowledge.bases"
-                :key="base.id"
-                class="resource-list-card__item"
-                @click="toggleKnowledge(base.id)"
-              >
-                <DqCheckbox :model-value="agentForm.knowledgeIds?.includes(base.id)" />
-                <div class="resource-list-card__meta">
-                  <span class="resource-list-card__name">{{ base.name }}</span>
-                  <span class="resource-list-card__desc">{{ $t('teams.documents', { count: base.documentCount }) }}</span>
-                </div>
-              </div>
-            </div>
-          </section>
+    <template #header>
+      <div class="resource-workspace__identity">
+        <h1 class="resource-workspace__title">{{ headerTitle }}</h1>
+        <div v-if="!isCreating" class="resource-workspace__badges">
+          <code v-if="selectedAgent?.id" class="resource-workspace__id">
+            {{ compactId(selectedAgent.id) }}
+          </code>
         </div>
+      </div>
+      <DqSegmented v-model="activeTab" class="resource-workspace__segmented" :options="sectionTabs.map((t) => ({ label: t.label, value: t.id }))" />
+    </template>
 
-        <footer class="resource-workspace__footer">
-          <span class="resource-workspace__hint">{{ $t('common.saveShortcut') }}</span>
-          <div class="resource-workspace__footer-actions">
-            <DqButton v-if="isCreating" @click="isCreating = false; selectedId = null">{{ $t('common.cancel') }}</DqButton>
-            <DqButton v-if="!isCreating" @click="removeSelected">{{ $t('common.delete') }}</DqButton>
-            <DqButton v-if="!isCreating" @click="resetSelected">{{ $t('common.reset') }}</DqButton>
-            <DqButton type="primary" :disabled="saving" @click="save">
-              {{ isCreating ? $t('teams.createAgent') : $t('common.save') }}
-            </DqButton>
+    <template #body>
+      <section v-show="activeTab === 'overview'" class="resource-section">
+        <div class="resource-form-grid resource-form-grid--2">
+          <label class="resource-field">
+            <span class="resource-field__label">{{ $t('teams.agentId') }}</span>
+            <DqInput v-model="agentForm.id" class="resource-input-mono" placeholder="alert-analyst" :disabled="!isCreating" />
+            <span v-if="isCreating" class="resource-field__hint">{{ $t('teams.idHint') }}</span>
+          </label>
+          <label class="resource-field">
+            <span class="resource-field__label">{{ $t('teams.displayName') }}</span>
+            <DqInput v-model="agentForm.name" placeholder="Alert Analyst" />
+          </label>
+        </div>
+        <div class="resource-form-grid resource-form-grid--2">
+          <label class="resource-field">
+            <span class="resource-field__label">{{ $t('teams.mode') }}</span>
+            <DqSelect v-model="agentForm.mode" :placeholder="$t('teams.mode')">
+              <DqOption value="primary" :label="$t('teams.primary')" />
+              <DqOption value="subagent" :label="$t('teams.subagent')" />
+            </DqSelect>
+          </label>
+          <div class="resource-field">
+            <span class="resource-field__label">{{ $t('teams.maxSteps') }}</span>
+            <div class="slider-row">
+              <DqSlider v-model="agentForm.steps" :min="1" :max="100" :step="1" />
+              <span class="slider-row__value">{{ agentForm.steps }}</span>
+            </div>
           </div>
-        </footer>
-      </template>
-    </main>
-  </div>
+        </div>
+        <label class="resource-field resource-field--block">
+          <span class="resource-field__label">{{ $t('teams.persona') }}</span>
+          <DqInput v-model="agentForm.persona" :placeholder="$t('teams.personaPlaceholder')" />
+        </label>
+        <label class="resource-field resource-field--block">
+          <span class="resource-field__label">{{ $t('common.description') }}</span>
+          <DqInput v-model="agentForm.description" type="textarea" :rows="4" :placeholder="$t('teams.descriptionPlaceholder')" />
+        </label>
+        <div class="resource-field resource-field--block resource-field--inline" @click="agentForm.canDelegate = !agentForm.canDelegate">
+          <div class="resource-field__inline-meta">
+            <span class="resource-field__label">{{ $t('teams.canDelegate') }}</span>
+          </div>
+          <DqSwitch :model-value="agentForm.canDelegate" size="small" />
+        </div>
+      </section>
+
+      <section v-show="activeTab === 'prompt'" class="resource-section resource-section--prompt">
+        <MdEditor v-model="agentForm.systemPrompt" :rows="18" :placeholder="$t('teams.promptPlaceholder')" />
+      </section>
+
+      <section v-show="activeTab === 'skills'" class="resource-section">
+        <DqEmpty v-if="!skills.items.length" :description="$t('teams.noSkills')" />
+        <div v-else class="resource-list-card">
+          <div
+            v-for="skill in skills.items"
+            :key="skill.id"
+            class="resource-list-card__item"
+            :class="{ 'is-active': agentForm.skillIds?.includes(skill.id) }"
+            @click="toggleSkill(skill.id)"
+          >
+            <DqCheckbox :model-value="agentForm.skillIds?.includes(skill.id)" />
+            <div class="resource-list-card__meta">
+              <span class="resource-list-card__name">{{ skill.name }}</span>
+              <span class="resource-list-card__desc">{{ skill.description }}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section v-show="activeTab === 'tools'" class="resource-section">
+        <div class="resource-form-grid resource-form-grid--3">
+          <label class="resource-field">
+            <span class="resource-field__label">Tool ID</span>
+            <DqInput v-model="pendingTool.toolId" class="resource-input-mono" placeholder="search_kb" @keydown.enter.prevent="addTool" />
+          </label>
+          <label class="resource-field">
+            <span class="resource-field__label">MCP Server</span>
+            <DqInput v-model="pendingTool.mcpServer" class="resource-input-mono" :placeholder="$t('teams.riskOptional')" />
+          </label>
+          <label class="resource-field">
+            <span class="resource-field__label">{{ $t('common.riskLevel') }}</span>
+            <DqSelect v-model="pendingTool.riskLevel" placeholder="Risk">
+              <DqOption value="low" label="Low" />
+              <DqOption value="medium" label="Medium" />
+              <DqOption value="high" label="High" />
+            </DqSelect>
+          </label>
+          <div class="resource-field resource-field--action">
+            <DqButton @click="addTool">{{ $t('common.addTool') }}</DqButton>
+          </div>
+        </div>
+        <div class="resource-list-card">
+          <div v-for="(tool, idx) in agentForm.tools" :key="idx" class="resource-list-card__item">
+            <div class="resource-list-card__meta">
+              <span class="resource-list-card__name">{{ tool.toolId }}</span>
+              <span class="resource-list-card__desc">{{ tool.mcpServer ? `${tool.mcpServer} · ` : '' }}{{ tool.riskLevel || 'low' }}</span>
+            </div>
+            <div class="resource-list-card__actions">
+              <DqSelect v-model="tool.riskLevel" class="resource-list-card__risk-select" size="small">
+                <DqOption value="low" label="Low" />
+                <DqOption value="medium" label="Medium" />
+                <DqOption value="high" label="High" />
+              </DqSelect>
+              <button type="button" class="resource-list-card__action resource-list-card__action--danger" @click="removeTool(idx)">{{ $t('common.delete') }}</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section v-show="activeTab === 'knowledge'" class="resource-section">
+        <DqEmpty v-if="!knowledge.bases.length" :description="$t('teams.noKnowledge')" />
+        <div v-else class="resource-list-card">
+          <div
+            v-for="base in knowledge.bases"
+            :key="base.id"
+            class="resource-list-card__item"
+            @click="toggleKnowledge(base.id)"
+          >
+            <DqCheckbox :model-value="agentForm.knowledgeIds?.includes(base.id)" />
+            <div class="resource-list-card__meta">
+              <span class="resource-list-card__name">{{ base.name }}</span>
+              <span class="resource-list-card__desc">{{ $t('teams.documents', { count: base.documentCount }) }}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </template>
+
+    <template #footer>
+      <span class="resource-workspace__hint">{{ $t('common.saveShortcut') }}</span>
+      <div class="resource-workspace__footer-actions">
+        <DqButton v-if="isCreating" @click="isCreating = false; selectedId = null">{{ $t('common.cancel') }}</DqButton>
+        <DqButton v-if="!isCreating" @click="removeSelected">{{ $t('common.delete') }}</DqButton>
+        <DqButton v-if="!isCreating" @click="resetSelected">{{ $t('common.reset') }}</DqButton>
+        <DqButton type="primary" :disabled="saving" @click="save">
+          {{ isCreating ? $t('teams.createAgent') : $t('common.save') }}
+        </DqButton>
+      </div>
+    </template>
+  </WorkspaceShell>
 </template>
 
 <style scoped>
@@ -510,19 +499,11 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
   min-height: 360px;
 }
 
-.resource-list-card__risk {
-  width: 90px;
-  height: 28px;
-  padding: 0 6px;
-  border: 1px solid var(--dq-border-subtle);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--dq-bg-elevated) 65%, transparent);
-  color: var(--dq-label-primary);
-  font: inherit;
-  font-size: var(--dq-font-size-footnote);
+.resource-list-card__risk-select {
+  width: 96px;
 }
 
-.resource-list-card__actions .resource-list-card__risk {
+.resource-list-card__actions .resource-list-card__risk-select {
   margin-right: 4px;
 }
 

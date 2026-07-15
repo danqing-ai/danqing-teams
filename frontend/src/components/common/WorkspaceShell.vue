@@ -1,29 +1,43 @@
 <script setup lang="ts">
-defineProps<{
-  title: string
-  count?: number
-  countLabel?: string
-  createLabel?: string
-  hasSelection?: boolean
-}>()
+withDefaults(
+  defineProps<{
+    title?: string
+    count?: number
+    countLabel?: string
+    createLabel?: string
+    hasSelection?: boolean
+    /** When true, skip default count/create rail head — use #rail for full rail chrome */
+    customRail?: boolean
+  }>(),
+  {
+    customRail: false,
+  },
+)
 
 defineEmits<{
   create: []
+  keydown: [event: KeyboardEvent]
 }>()
 </script>
 
 <template>
-  <div class="resource-shell float-island">
+  <div
+    class="resource-shell float-island"
+    tabindex="-1"
+    @keydown="$emit('keydown', $event)"
+  >
     <aside class="resource-rail">
-      <div class="resource-rail__head">
-        <span class="resource-rail__count">{{ count }}</span>
-        <DqIconButton :aria-label="createLabel ?? '新建'" @click="$emit('create')">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 5v14M5 12h14" stroke-linecap="round" />
-          </svg>
-        </DqIconButton>
-      </div>
-      <div class="resource-rail__body">
+      <template v-if="!customRail">
+        <div class="resource-rail__head">
+          <span class="resource-rail__count">{{ count }}</span>
+          <DqIconButton :aria-label="createLabel ?? '新建'" @click="$emit('create')">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 5v14M5 12h14" stroke-linecap="round" />
+            </svg>
+          </DqIconButton>
+        </div>
+      </template>
+      <div class="resource-rail__body" :class="{ 'resource-rail__body--flush': customRail }">
         <slot name="rail" />
       </div>
     </aside>
@@ -48,3 +62,12 @@ defineEmits<{
     </main>
   </div>
 </template>
+
+<style scoped>
+.resource-rail__body--flush {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+</style>

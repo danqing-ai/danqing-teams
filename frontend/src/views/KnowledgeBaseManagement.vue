@@ -175,28 +175,15 @@ function onKeydown(e: KeyboardEvent) {
           <span class="resource-workspace__hint">{{ $t('knowledge.updated') }}{{ formatDate(selected.updatedAt) }}</span>
         </div>
       </div>
-      <nav v-if="!isCreating" class="resource-workspace__tabs" role="tablist">
-        <button
-          type="button"
-          class="resource-workspace__tab"
-          :class="{ 'is-active': activeTab === 'info' }"
-          role="tab"
-          :aria-selected="activeTab === 'info'"
-          @click="activeTab = 'info'"
-        >
-          {{ $t('knowledge.basicInfo') }}
-        </button>
-        <button
-          type="button"
-          class="resource-workspace__tab"
-          :class="{ 'is-active': activeTab === 'documents' }"
-          role="tab"
-          :aria-selected="activeTab === 'documents'"
-          @click="activeTab = 'documents'"
-        >
-          {{ $t('knowledge.documents') }}
-        </button>
-      </nav>
+      <DqSegmented
+        v-if="!isCreating"
+        v-model="activeTab"
+        class="resource-workspace__segmented"
+        :options="[
+          { label: $t('knowledge.basicInfo'), value: 'info' },
+          { label: $t('knowledge.documents'), value: 'documents' },
+        ]"
+      />
     </template>
 
     <template #body>

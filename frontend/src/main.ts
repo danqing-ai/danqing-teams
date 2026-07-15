@@ -24,8 +24,8 @@ import '@danqing/dq-ui/style.css'
 import '@danqing/dq-shell/style.css'
 import '@/styles/teams.css'
 
-// Theme class is managed by theme store
-document.documentElement.classList.add('dq-shadcn-light')
+// Theme class is managed by theme store; default flash before init is mac dark
+document.documentElement.classList.add('dq-mac', 'dark')
 
 function showFatalError(err: unknown) {
   const container = document.getElementById('app')

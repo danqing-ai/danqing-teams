@@ -2,6 +2,7 @@
 import { ref, watch, computed } from 'vue'
 import { useSessionsStore } from '@/stores/sessions'
 import { fetchJSON, asArray } from '@/api/client'
+import Skeleton from '@/components/common/Skeleton.vue'
 
 const sessions = useSessionsStore()
 
@@ -135,7 +136,11 @@ defineExpose({ refresh: loadRoot })
 
 <template>
   <div class="file-tree">
-    <div v-if="loading" class="file-tree__loading">加载中...</div>
+    <div v-if="loading" class="file-tree__loading">
+      <Skeleton variant="text" width="70%" />
+      <Skeleton variant="text" width="55%" />
+      <Skeleton variant="text" width="62%" />
+    </div>
     <div v-else-if="!rootNodes.length" class="file-tree__empty">
       <p>暂无文件</p>
     </div>
@@ -216,6 +221,13 @@ defineExpose({ refresh: loadRoot })
   padding: 24px 16px;
   text-align: center;
   color: var(--dq-label-tertiary);
+}
+
+.file-tree__loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dq-space-sm);
+  text-align: left;
 }
 
 .file-tree__list {

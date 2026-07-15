@@ -3,6 +3,7 @@ import { ref, watch, computed, onMounted } from 'vue'
 import { useSessionsStore } from '@/stores/sessions'
 import { fetchJSON } from '@/api/client'
 import { toast } from '@/utils/feedback'
+import Skeleton from '@/components/common/Skeleton.vue'
 
 interface GitFileChange {
   status: string
@@ -144,8 +145,10 @@ defineExpose({ refresh })
         <span v-if="switching" class="changes-panel__branch-switching">切换中...</span>
       </div>
 
-      <div v-if="loading" class="changes-panel__empty">
-        <p>加载中...</p>
+      <div v-if="loading" class="changes-panel__empty changes-panel__loading">
+        <Skeleton variant="text" width="50%" />
+        <Skeleton variant="card" width="100%" />
+        <Skeleton variant="card" width="100%" />
       </div>
 
       <div v-else-if="data?.error" class="changes-panel__empty">
@@ -203,6 +206,13 @@ defineExpose({ refresh })
   padding: 32px 16px;
   text-align: center;
   color: var(--dq-label-tertiary);
+}
+
+.changes-panel__loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dq-space-sm);
+  text-align: left;
 }
 
 .changes-panel__hint {

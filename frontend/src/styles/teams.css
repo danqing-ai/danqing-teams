@@ -16,12 +16,16 @@ body.app-is-resizing {
 }
 
 :root {
-  /* Teams spacing scale (rem, root = 16px) */
-  --space-xs: 0.25rem;
-  --space-sm: 0.5rem;
-  --space-md: 1rem;
-  --space-lg: 1.5rem;
-  --space-xl: 2rem;
+  /* App semantic layer — only tokens still referenced by product CSS */
+  --teams-radius-island: var(--dq-radius-group);
+  --teams-radius-card: var(--dq-radius-group);
+  --teams-glass-bg: var(--dq-glass-sidebar-bg);
+  --teams-glass-border: var(--dq-glass-border);
+  --teams-glass-border-subtle: var(--dq-border-subtle);
+  --teams-glass-inset: color-mix(in srgb, var(--dq-label-quaternary) 20%, transparent);
+  --teams-glass-shadow: var(--dq-shadow-lg);
+  --teams-surface-muted: color-mix(in srgb, var(--dq-bg-elevated) 55%, transparent);
+  --teams-surface-head: color-mix(in srgb, var(--dq-bg-elevated) 70%, transparent);
 }
 
 html,
@@ -31,15 +35,9 @@ body,
   margin: 0;
 }
 
-/* Smooth theme switching */
+/* Theme switch only — do not transition every element */
 html {
   transition: background-color 0.25s ease, color 0.25s ease;
-}
-
-html *,
-html *::before,
-html *::after {
-  transition: background-color 0.22s ease, border-color 0.22s ease, color 0.22s ease, box-shadow 0.22s ease;
 }
 
 body {
@@ -49,6 +47,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 /* ── Scrollbar ── */
@@ -58,8 +57,8 @@ body {
 }
 
 *::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: var(--dq-scrollbar-size, 6px);
+  height: var(--dq-scrollbar-size, 6px);
 }
 
 *::-webkit-scrollbar-track {
@@ -80,49 +79,16 @@ body {
   font-size: var(--dq-font-size-body);
 }
 
-/* Teams 语义层：仅引用 --dq-* token，便于浮岛与画布复用 */
-html.dark,
-.teams-app {
-  --teams-radius-island: 18px;
-  --teams-radius-card: var(--dq-radius-group);
-  --teams-glass-bg: var(--dq-glass-sidebar-bg);
-  --teams-glass-bg-strong: var(--dq-glass-bar-bg-strong);
-  --teams-glass-border: var(--dq-glass-border);
-  --teams-glass-border-subtle: var(--dq-border-subtle);
-  --teams-glass-inset: color-mix(in srgb, var(--dq-label-quaternary) 20%, transparent);
-  --teams-glass-shadow: var(--dq-shadow-lg);
-  --teams-glass-shadow-md: var(--dq-shadow-md);
-  --teams-surface-muted: color-mix(in srgb, var(--dq-bg-elevated) 55%, transparent);
-  --teams-surface-head: color-mix(in srgb, var(--dq-bg-elevated) 70%, transparent);
-  --teams-dock-bg: color-mix(in srgb, var(--dq-bg-base) 85%, transparent);
-  --teams-page-glow-accent: color-mix(in srgb, var(--dq-accent) 22%, transparent);
-  --teams-page-glow-info: color-mix(in srgb, var(--dq-info) 14%, transparent);
-  --teams-page-glow-deep: color-mix(in srgb, var(--dq-accent-muted) 12%, transparent);
-  --teams-accent-ring: color-mix(in srgb, var(--dq-accent) 20%, transparent);
-  --teams-accent-glow: color-mix(in srgb, var(--dq-accent) 14%, transparent);
-  --teams-shadow-focus: color-mix(in srgb, var(--dq-mask) 50%, transparent);
-  --teams-shadow-elevated: color-mix(in srgb, var(--dq-mask-light) 80%, transparent);
+.dq-select--sm .dq-select__trigger {
+  font-size: var(--dq-font-size-footnote);
 }
 
+/* Flat edge-docked shell marker (no page glow) */
 .teams-app {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  height: 100vh;
+  height: 100%;
+  min-height: 0;
   color: var(--dq-label-primary);
   box-sizing: border-box;
-  padding: 0;
-  background-color: var(--dq-bg-page);
-  background-image:
-    radial-gradient(ellipse 90% 60% at 8% -10%, var(--teams-page-glow-accent), transparent 55%),
-    radial-gradient(ellipse 70% 50% at 92% 8%, var(--teams-page-glow-info), transparent 50%),
-    radial-gradient(ellipse 60% 40% at 50% 100%, var(--teams-page-glow-deep), transparent 55%),
-    linear-gradient(
-      165deg,
-      var(--dq-fill-dimmer) 0%,
-      var(--dq-bg-page) 45%,
-      var(--dq-fill-dim) 100%
-    );
 }
 
 .teams-app__main {
@@ -134,7 +100,6 @@ html.dark,
 }
 
 .teams-top-nav {
-  /* legacy — replaced by .teams-top-bar in TopNav.vue */
   display: none;
 }
 
@@ -144,15 +109,11 @@ html.dark,
   margin: 0;
 }
 
-/* —— 全屏背景上的悬浮玻璃岛 —— */
+/* Resource / panel surface — flat docked (glass only on floating overlays) */
 .float-island {
-  border-radius: var(--teams-radius-island);
+  border-radius: 0;
   border: 1px solid var(--teams-glass-border);
-  background: var(--teams-glass-bg);
-  backdrop-filter: blur(28px) saturate(170%);
-  box-shadow:
-    0 0 0 1px var(--teams-glass-inset) inset,
-    var(--teams-glass-shadow);
+  background: var(--dq-bg-base);
   min-height: 0;
   overflow: hidden;
 }
@@ -241,14 +202,14 @@ html.dark,
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-sm);
+  gap: var(--dq-space-sm);
   flex: 1;
   min-height: 0;
   padding: 10px 0;
   border-radius: var(--teams-radius-island);
   border: 1px solid var(--teams-glass-border);
   background: var(--teams-glass-bg);
-  backdrop-filter: blur(28px) saturate(170%);
+  backdrop-filter: var(--dq-glass-blur-heavy);
   box-shadow:
     0 0 0 1px var(--teams-glass-inset) inset,
     var(--teams-glass-shadow);
@@ -277,7 +238,7 @@ html.dark,
 .teams-left-panel.float-island {
   border: 1px solid var(--teams-glass-border);
   background: var(--teams-glass-bg);
-  backdrop-filter: blur(28px) saturate(170%);
+  backdrop-filter: var(--dq-glass-blur-heavy);
   box-shadow:
     0 0 0 1px var(--teams-glass-inset) inset,
     var(--teams-glass-shadow);
@@ -310,7 +271,7 @@ html.dark,
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  gap: var(--space-sm);
+  gap: var(--dq-space-sm);
   padding: 10px 12px 12px;
   overflow: hidden;
 }
@@ -372,14 +333,14 @@ body.teams-is-resizing {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-sm);
+  gap: var(--dq-space-sm);
   flex: 1;
   min-height: 0;
   padding: 10px 0;
   border-radius: var(--teams-radius-island);
   border: 1px solid var(--teams-glass-border);
   background: var(--teams-glass-bg);
-  backdrop-filter: blur(28px) saturate(170%);
+  backdrop-filter: var(--dq-glass-blur-heavy);
   box-shadow:
     0 0 0 1px var(--teams-glass-inset) inset,
     var(--teams-glass-shadow);
@@ -408,7 +369,7 @@ body.teams-is-resizing {
 .teams-right-panel.float-island {
   border: 1px solid var(--teams-glass-border);
   background: var(--teams-glass-bg);
-  backdrop-filter: blur(28px) saturate(170%);
+  backdrop-filter: var(--dq-glass-blur-heavy);
   box-shadow:
     0 0 0 1px var(--teams-glass-inset) inset,
     var(--teams-glass-shadow);
@@ -453,16 +414,16 @@ body.teams-is-resizing {
 }
 
 .teams-right-section + .teams-right-section {
-  margin-top: var(--space-md);
-  padding-top: var(--space-md);
+  margin-top: var(--dq-space-md);
+  padding-top: var(--dq-space-md);
   border-top: 1px solid var(--dq-separator-light);
 }
 
 .teams-right-section__head {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-sm);
+  gap: var(--dq-space-sm);
+  margin-bottom: var(--dq-space-sm);
 }
 
 .teams-right-section__title {
@@ -694,13 +655,13 @@ body.teams-is-resizing {
 .composer-float {
   pointer-events: auto;
   overflow: hidden;
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--dq-bg-base) 88%, transparent);
-  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
-  box-shadow: 0 12px 40px color-mix(in srgb, var(--dq-mask) 24%, transparent);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  border-radius: var(--dq-radius-menu);
+  background: var(--dq-glass-popover-bg);
+  border: 1px solid var(--dq-glass-border-strong);
+  box-shadow: var(--dq-shadow-glass);
+  backdrop-filter: var(--dq-glass-blur-heavy);
+  -webkit-backdrop-filter: var(--dq-glass-blur-heavy);
+  transition: border-color var(--dq-transition-hover), box-shadow var(--dq-transition-hover);
 }
 
 .composer-float:focus-within {
@@ -769,13 +730,13 @@ body.teams-is-resizing {
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  gap: var(--space-sm);
+  gap: var(--dq-space-sm);
 }
 
 .task-list__toolbar {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  gap: var(--dq-space-sm);
   flex-shrink: 0;
 }
 
@@ -829,7 +790,7 @@ body.teams-is-resizing {
 }
 
 .task-list__group + .task-list__group {
-  margin-top: var(--space-sm);
+  margin-top: var(--dq-space-sm);
 }
 
 .task-list__group-label {
@@ -844,7 +805,7 @@ body.teams-is-resizing {
 
 .task-list__filtered-empty {
   margin: 0;
-  padding: var(--space-md) 0;
+  padding: var(--dq-space-md) 0;
   font-size: var(--dq-font-size-body);
   color: var(--dq-label-tertiary);
   text-align: center;
@@ -985,8 +946,8 @@ body.teams-is-resizing {
   padding: 14px 24px;
   border-bottom: 1px solid var(--teams-glass-border-subtle);
   background: color-mix(in srgb, var(--dq-bg-elevated) 55%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: var(--dq-glass-blur-light);
+  -webkit-backdrop-filter: var(--dq-glass-blur-light);
 }
 
 .task-goal-bar__main {
@@ -1516,8 +1477,8 @@ body.teams-is-resizing {
 }
 
 .teams-todo-group + .teams-todo-group {
-  margin-top: var(--space-sm);
-  padding-top: var(--space-sm);
+  margin-top: var(--dq-space-sm);
+  padding-top: var(--dq-space-sm);
   border-top: 1px solid var(--dq-separator-light);
 }
 
@@ -1556,7 +1517,7 @@ body.teams-is-resizing {
 }
 
 .teams-todo-list__hint {
-  margin: var(--space-sm) 0 0;
+  margin: var(--dq-space-sm) 0 0;
   font-size: var(--dq-font-size-footnote);
   line-height: 1.45;
   color: var(--dq-label-quaternary);
@@ -1765,428 +1726,6 @@ body.teams-is-resizing {
 .agent-member-card--static:hover {
   border-color: var(--dq-border-subtle);
   background: color-mix(in srgb, var(--dq-bg-elevated) 55%, transparent);
-}
-
-.teams-app__main--agents {
-  padding: 0 var(--space-md) var(--space-md);
-}
-
-.teams-app__main--agents .agents-shell {
-  height: 100%;
-  min-height: 0;
-}
-
-.agents-shell {
-  display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  gap: 0;
-  overflow: hidden;
-  border-radius: var(--teams-radius-island);
-}
-
-/* ── Left rail (compact list) ── */
-.agents-rail {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  border-right: 1px solid var(--dq-separator-light);
-  background: color-mix(in srgb, var(--dq-bg-base) 50%, transparent);
-}
-
-.agents-rail__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 10px 10px 14px;
-  border-bottom: 1px solid var(--dq-separator-light);
-  flex-shrink: 0;
-}
-
-.agents-rail__count {
-  font-size: var(--dq-font-size-caption);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--dq-label-tertiary);
-}
-
-.agents-rail__count::after {
-  content: ' Agents';
-}
-
-.agents-rail__empty {
-  padding: 20px 12px;
-}
-
-.agents-rail__list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 6px;
-}
-
-.agents-rail__row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 8px 10px;
-  margin-bottom: 2px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-
-.agents-rail__row:hover {
-  background: var(--dq-fill-tertiary);
-}
-
-.agents-rail__row.is-active {
-  background: color-mix(in srgb, var(--dq-accent) 14%, var(--dq-fill-tertiary));
-  box-shadow: inset 2px 0 0 var(--dq-accent);
-}
-
-.agents-rail__avatar {
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: var(--dq-fill-tertiary);
-  color: var(--dq-label-secondary);
-  font-size: var(--dq-font-size-body);
-  font-weight: 700;
-}
-
-.agents-rail__avatar--new {
-  background: var(--dq-accent-tint);
-  color: var(--dq-accent);
-  font-size: var(--dq-font-size-title);
-  font-weight: 400;
-}
-
-.agents-rail__meta {
-  flex: 1;
-  min-width: 0;
-}
-
-.agents-rail__name {
-  display: block;
-  font-size: var(--dq-font-size-body);
-  font-weight: 600;
-  color: var(--dq-label-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agents-rail__id {
-  display: block;
-  margin-top: 1px;
-  font-size: var(--dq-font-size-caption);
-  font-family: var(--dq-font-mono);
-  color: var(--dq-label-quaternary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agents-rail__role {
-  flex-shrink: 0;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: var(--dq-fill-tertiary);
-  font-size: var(--dq-font-size-caption);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--dq-label-tertiary);
-}
-
-.agents-rail__role.is-controller {
-  background: color-mix(in srgb, var(--dq-accent) 15%, transparent);
-  color: var(--dq-accent);
-}
-
-/* ── Main workspace ── */
-.agents-workspace {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  min-width: 0;
-  background: color-mix(in srgb, var(--dq-bg-elevated) 30%, transparent);
-}
-
-.agents-workspace__empty {
-  flex: 1;
-  display: grid;
-  place-items: center;
-}
-
-.agents-workspace__empty-hint {
-  margin: 0;
-  font-size: var(--dq-font-size-footnote);
-  color: var(--dq-label-quaternary);
-}
-
-.agents-workspace__bar {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 18px 24px 0;
-  flex-shrink: 0;
-}
-
-.agents-workspace__identity {
-  min-width: 0;
-}
-
-.agents-workspace__title {
-  margin: 0;
-  font-size: var(--dq-font-size-display);
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--dq-label-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agents-workspace__badges {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 6px;
-  flex-wrap: wrap;
-}
-
-.agents-workspace__id {
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: var(--dq-fill-tertiary);
-  font-size: var(--dq-font-size-footnote);
-  font-family: var(--dq-font-mono);
-  color: var(--dq-label-tertiary);
-}
-
-.agents-workspace__role {
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: var(--dq-fill-tertiary);
-  font-size: var(--dq-font-size-caption);
-  font-weight: 600;
-  color: var(--dq-label-tertiary);
-}
-
-.agents-workspace__role.is-controller {
-  background: color-mix(in srgb, var(--dq-accent) 15%, transparent);
-  color: var(--dq-accent);
-}
-
-.agents-workspace__tabs {
-  display: inline-flex;
-  gap: 2px;
-  flex-shrink: 0;
-  align-self: flex-start;
-}
-
-.agents-workspace__tab {
-  padding: 6px 14px;
-  border: none;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--dq-label-tertiary);
-  font: inherit;
-  font-size: var(--dq-font-size-body);
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    color 0.12s ease,
-    background 0.12s ease;
-}
-
-.agents-workspace__tab:hover {
-  color: var(--dq-label-secondary);
-}
-
-.agents-workspace__tab.is-active {
-  background: var(--dq-bg-elevated);
-  color: var(--dq-label-primary);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--dq-mask) 10%, transparent);
-}
-
-.agents-workspace__scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 16px 24px 20px;
-  display: flex;
-  flex-direction: column;
-}
-
-.agents-workspace__footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 24px;
-  border-top: 1px solid var(--dq-separator-light);
-  background: color-mix(in srgb, var(--dq-bg-elevated) 50%, transparent);
-  flex-shrink: 0;
-}
-
-.agents-workspace__hint {
-  font-size: var(--dq-font-size-caption);
-  color: var(--dq-label-quaternary);
-}
-
-.agents-workspace__footer-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.agents-section {
-  max-width: 920px;
-  width: 100%;
-}
-
-.agents-section--prompt {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
-
-.agents-section--prompt .md-editor {
-  flex: 1;
-  min-height: 360px;
-}
-
-.agents-section--prompt .md-editor__body {
-  flex: 1;
-  min-height: 320px;
-}
-
-.agents-section--prompt .md-editor__textarea {
-  min-height: 320px;
-  resize: vertical;
-}
-
-.agents-settings {
-  padding-bottom: 8px;
-}
-
-.agents-settings .agents-section + .agents-section {
-  margin-top: 28px;
-  padding-top: 28px;
-  border-top: 1px solid var(--dq-separator-light);
-}
-
-.agents-section__head {
-  margin-bottom: 16px;
-}
-
-.agents-section__title {
-  margin: 0;
-  font-size: var(--dq-font-size-title);
-  font-weight: 600;
-  color: var(--dq-label-primary);
-}
-
-.agents-section__desc {
-  margin: 4px 0 0;
-  font-size: var(--dq-font-size-secondary);
-  line-height: 1.45;
-  color: var(--dq-label-quaternary);
-}
-
-/* Identity row: ID fixed, name grows, role compact */
-.agents-form-grid {
-  display: grid;
-  gap: 14px 16px;
-  margin-bottom: 14px;
-}
-
-.agents-form-grid--identity {
-  grid-template-columns: minmax(200px, 240px) minmax(180px, 1fr) 148px;
-}
-
-.agents-form-grid--llm {
-  grid-template-columns: minmax(220px, 320px) 96px;
-  align-items: start;
-}
-
-.agents-field {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  min-width: 0;
-}
-
-.agents-field--block {
-  margin-bottom: 14px;
-}
-
-.agents-field__label {
-  font-size: var(--dq-font-size-footnote);
-  font-weight: 500;
-  color: var(--dq-label-secondary);
-}
-
-.agents-field__hint {
-  font-size: var(--dq-font-size-caption);
-  line-height: 1.4;
-  color: var(--dq-label-quaternary);
-}
-
-.agents-field__select {
-  height: 36px;
-  padding: 0 10px;
-  border: 1px solid var(--dq-border-subtle);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--dq-bg-elevated) 65%, transparent);
-  color: var(--dq-label-primary);
-  font: inherit;
-  font-size: var(--dq-font-size-body);
-}
-
-.agents-field--block :deep(textarea) {
-  min-height: 96px;
-  line-height: 1.5;
-}
-
-.agents-field--rounds :deep(input) {
-  max-width: 96px;
-}
-
-.agents-input-mono :deep(input),
-.agents-input-mono :deep(textarea) {
-  font-family: var(--dq-font-mono) !important;
-  font-size: var(--dq-font-size-footnote) !important;
-  letter-spacing: -0.01em;
-}
-
-@media (max-width: 900px) {
-  .agents-form-grid--identity {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .agents-field--role {
-    grid-column: 1 / -1;
-    max-width: 200px;
-  }
-
-  .agents-form-grid--llm {
-    grid-template-columns: 1fr;
-  }
-
-  .agents-field--rounds {
-    max-width: 120px;
-  }
 }
 
 .md-editor {
@@ -2674,6 +2213,12 @@ body.teams-is-resizing {
   gap: 2px;
   flex-shrink: 0;
   align-self: flex-start;
+}
+
+.resource-workspace__segmented {
+  margin-top: var(--dq-space-sm);
+  align-self: flex-start;
+  max-width: 100%;
 }
 
 .resource-workspace__tab {
@@ -3222,8 +2767,7 @@ button:active:not(:disabled) {
 }
 
 /* Tab sliding indicator */
-.resource-workspace__tabs,
-.agents-workspace__tabs {
+.resource-workspace__tabs {
   position: relative;
 }
 

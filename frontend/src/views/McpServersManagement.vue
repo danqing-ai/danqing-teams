@@ -246,9 +246,9 @@ function onKeydown(e: KeyboardEvent) {
           </label>
           <label class="resource-field">
             <span class="resource-field__label">{{ $t('mcpServers.transport') }}</span>
-            <select v-model="form.transport" class="resource-field__select">
-              <option v-for="opt in transportOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-            </select>
+            <DqSelect v-model="form.transport" :placeholder="$t('mcpServers.transport')">
+              <DqOption v-for="opt in transportOptions" :key="opt.value" :value="opt.value" :label="opt.label" />
+            </DqSelect>
           </label>
         </div>
         <label class="resource-field resource-field--block">

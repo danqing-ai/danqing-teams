@@ -479,7 +479,7 @@ watch(() => projects.projects.length, (len) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-sm);
+  gap: var(--dq-space-sm);
   flex: 1;
   min-height: 0;
   padding: 10px 0;

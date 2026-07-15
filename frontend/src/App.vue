@@ -52,7 +52,7 @@ watch(() => llm.models, (newModels, oldModels) => {
 </script>
 
 <template>
-  <div class="app-layout">
+  <div class="app-layout teams-app">
     <LeftRail :active-module="activeModule" @navigate="navigateTo" @select-session="onSelectSession" @new-session="(pid?: string) => { sessions.startCompose(pid ?? projects.projects[0]?.id ?? null); router.push({ name: 'sessions' }) }" />
     <main class="app-workspace">
       <RouterView />

@@ -260,6 +260,7 @@ export default {
     modelConfigDesc: 'Configure generation parameters (Temperature, Top P, etc.) per model to override defaults. Context window and max output tokens are managed by built-in rules.',
     addModelConfig: 'Add Model',
     editModelConfig: 'Edit Model Gen Params',
+    editDefaultModel: 'Edit Defaults',
     modelName: 'Model Name',
     modelNamePlaceholder: 'e.g. gpt-4o, deepseek-r1',
     noModelConfig: 'No custom generation params. Built-in pattern rules will apply.',

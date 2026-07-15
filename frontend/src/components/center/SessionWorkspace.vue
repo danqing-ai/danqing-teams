@@ -2927,9 +2927,9 @@ function onTitleKeydown(e: KeyboardEvent) {
   left: 50%;
   transform: translateX(-50%);
   padding: 2px 8px;
-  border-radius: 4px;
-  background: var(--dq-fill-inverse, rgba(0,0,0,0.85));
-  color: var(--dq-color-white, #fff);
+  border-radius: var(--dq-radius-button);
+  background: var(--dq-glass-tooltip-bg);
+  color: var(--dq-color-white);
   font-size: var(--dq-font-size-caption);
   white-space: nowrap;
   pointer-events: none;
@@ -3050,7 +3050,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   min-height: 0;
   overflow-y: auto;
   padding: 24px 32px;
-  background: var(--dq-bg-primary, var(--dq-bg-base));
+  background: var(--dq-bg-base);
 }
 
 .session-workspace__right-empty {

@@ -203,9 +203,9 @@ function onKeydown(e: KeyboardEvent) {
           </label>
           <label class="resource-field">
             <span class="resource-field__label">{{ $t('automations.triggerType') }}</span>
-            <select v-model="form.trigger" class="resource-field__select">
-              <option v-for="opt in triggerOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-            </select>
+            <DqSelect v-model="form.trigger" :placeholder="$t('automations.triggerType')">
+              <DqOption v-for="opt in triggerOptions" :key="opt.value" :value="opt.value" :label="opt.label" />
+            </DqSelect>
           </label>
         </div>
 
@@ -241,10 +241,9 @@ function onKeydown(e: KeyboardEvent) {
         <div class="resource-form-grid resource-form-grid--2">
           <label class="resource-field">
             <span class="resource-field__label">{{ $t('automations.execAgent') }}</span>
-            <select v-model="form.agentId" class="resource-field__select">
-              <option value="">{{ $t('automations.selectAgent') }}</option>
-              <option v-for="agent in agents.items" :key="agent.id" :value="agent.id">{{ agent.name }}</option>
-            </select>
+            <DqSelect v-model="form.agentId" :placeholder="$t('automations.selectAgent')" clearable>
+              <DqOption v-for="agent in agents.items" :key="agent.id" :value="agent.id" :label="agent.name" />
+            </DqSelect>
           </label>
         </div>
 
