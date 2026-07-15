@@ -236,6 +236,6 @@ func parseSkill(content, dirName string) (*domain.Skill, error) {
 		Metadata:      fm.Metadata,
 		AllowedTools:  fm.AllowedTools,
 		Body:          strings.TrimSpace(parts[2]),
-		SourcePath:    ".dq-teams/skills/" + dirName,
+		SourcePath:    dirName,
 	}, nil
 }
