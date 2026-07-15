@@ -401,12 +401,10 @@ const hasFooterActions = computed(() => {
             :class="{ 'is-active': themeStore.currentTheme === theme.id }"
             @click="themeStore.setTheme(theme.id as ThemeId)"
           >
-            <div class="theme-card__preview">
-              <div class="theme-card__swatch" :style="{ background: theme.accent }"></div>
-              <div class="theme-card__bars">
-                <span class="theme-card__bar" :style="{ background: theme.accent, opacity: 0.8 }"></span>
-                <span class="theme-card__bar theme-card__bar--short" :style="{ background: theme.accent, opacity: 0.4 }"></span>
-              </div>
+            <div class="theme-card__preview" :style="{ '--preview-accent': theme.accent }">
+              <div class="theme-card__preview-accent"></div>
+              <div class="theme-card__preview-surface"></div>
+              <div class="theme-card__preview-text"></div>
             </div>
             <div class="theme-card__info">
               <span class="theme-card__name">{{ theme.label }}</span>
@@ -1501,15 +1499,21 @@ const hasFooterActions = computed(() => {
 /* Theme grid */
 .theme-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 14px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 1080px) {
+  .theme-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .theme-card {
   position: relative;
   display: flex;
   flex-direction: column;
-  padding: 16px;
+  padding: 14px;
   border-radius: 14px;
   border: 1.5px solid var(--teams-glass-border);
   background: var(--dq-bg-elevated);
@@ -1521,53 +1525,55 @@ const hasFooterActions = computed(() => {
 .theme-card:hover {
   border-color: color-mix(in srgb, var(--dq-label-primary) 18%, transparent);
   background: color-mix(in srgb, var(--dq-label-primary) 4%, var(--dq-bg-elevated));
+  transform: translateY(-1px);
 }
 
 .theme-card.is-active {
   border-color: var(--dq-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dq-accent) 15%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dq-accent) 18%, transparent);
 }
 
 .theme-card__preview {
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 14px;
-  padding: 12px;
+  align-items: flex-end;
+  gap: 6px;
+  margin-bottom: 12px;
+  height: 48px;
+  padding: 0;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
+  overflow: hidden;
+  background: var(--dq-bg-page);
+  border: 1px solid var(--dq-border-subtle);
 }
 
-.theme-card__swatch {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-}
-
-.theme-card__bars {
+.theme-card__preview-accent {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
+  height: 10px;
+  border-radius: 3px 3px 0 0;
+  background: linear-gradient(135deg, var(--preview-accent, var(--dq-accent)), color-mix(in srgb, var(--preview-accent, var(--dq-accent)) 70%, var(--dq-bg-page)));
 }
 
-.theme-card__bar {
-  display: block;
-  height: 6px;
-  border-radius: 3px;
-  width: 100%;
+.theme-card__preview-surface {
+  flex: 2;
+  height: 10px;
+  border-radius: 3px 3px 0 0;
+  background: var(--dq-bg-elevated);
+  opacity: 0.6;
 }
 
-.theme-card__bar--short {
-  width: 60%;
+.theme-card__preview-text {
+  flex: 3;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--dq-label-tertiary);
+  opacity: 0.5;
 }
 
 .theme-card__info {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 
 .theme-card__name {
@@ -1584,15 +1590,16 @@ const hasFooterActions = computed(() => {
 
 .theme-card__check {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 22px;
-  height: 22px;
+  top: 10px;
+  right: 10px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: var(--dq-accent);
   color: var(--dq-color-white);
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--dq-accent) 40%, transparent);
 }
 </style>

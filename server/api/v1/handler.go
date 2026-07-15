@@ -85,6 +85,9 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.GET("/projects/:id/raw/*filepath", serveProjectFile(h))
 	api.GET("/proxy/*target", proxyDevServer(h))
 	api.GET("/projects/:id/git-changes", getProjectGitChanges(h))
+	api.GET("/projects/:id/git-branches", getProjectGitBranches(h))
+	api.POST("/projects/:id/git-checkout", checkoutProjectGitBranch(h))
+	api.GET("/projects/:id/terminal", projectTerminal(h))
 	api.GET("/llm/configs", getLLMConfigs(h))
 	api.POST("/llm/configs", createLLMConfig(h))
 	api.PUT("/llm/configs/:id", updateLLMConfig(h))
@@ -821,6 +824,35 @@ func getProjectGitChanges(h *Handler) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, changes)
+	}
+}
+
+func getProjectGitBranches(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		branches, err := h.Projects.ListGitBranches(c, c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, branches)
+	}
+}
+
+func checkoutProjectGitBranch(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			Branch string `json:"branch"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		branches, err := h.Projects.CheckoutGitBranch(c, c.Param("id"), req.Branch)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, branches)
 	}
 }
 

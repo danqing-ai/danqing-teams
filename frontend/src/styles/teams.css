@@ -31,6 +31,17 @@ body,
   margin: 0;
 }
 
+/* Smooth theme switching */
+html {
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+html *,
+html *::before,
+html *::after {
+  transition: background-color 0.22s ease, border-color 0.22s ease, color 0.22s ease, box-shadow 0.22s ease;
+}
+
 body {
   background: var(--dq-bg-page);
   color: var(--dq-label-primary);
@@ -2357,7 +2368,7 @@ body.teams-is-resizing {
   margin: 0.75em 0;
   padding: 10px 12px;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--dq-bg-base) 80%, black);
+  background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
   overflow-x: auto;
 }
 
@@ -2376,6 +2387,56 @@ body.teams-is-resizing {
 
 .markdown-body a:hover {
   text-decoration: underline;
+}
+
+.markdown-body strong {
+  font-weight: 600;
+  color: var(--dq-label-primary);
+}
+
+.markdown-body em {
+  font-style: italic;
+  color: var(--dq-label-secondary);
+}
+
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75em 0;
+  font-size: var(--dq-font-size-footnote);
+  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 12%, transparent);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
+  padding: 8px 12px;
+  text-align: left;
+  line-height: 1.5;
+}
+
+.markdown-body th {
+  background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+  font-weight: 600;
+  color: var(--dq-label-primary);
+}
+
+.markdown-body tr:hover td {
+  background: color-mix(in srgb, var(--dq-label-primary) 3%, transparent);
+}
+
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid color-mix(in srgb, var(--dq-label-primary) 12%, transparent);
+  margin: 1.2em 0;
+}
+
+.markdown-body img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 0.5em 0;
 }
 
 .agent-picker__list {
@@ -3009,5 +3070,231 @@ body.teams-is-resizing {
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+}
+
+/* ── Session Workspace Enhanced Visuals ── */
+
+/* Tool card status indicator dot */
+.turn__tool-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.turn__tool-status-dot--running {
+  background: var(--dq-info);
+  animation: tool-dot-pulse 1.2s ease-in-out infinite;
+}
+
+.turn__tool-status-dot--completed {
+  background: var(--dq-success);
+}
+
+.turn__tool-status-dot--error {
+  background: var(--dq-danger);
+}
+
+.turn__tool-status-dot--pending {
+  background: var(--dq-warning);
+  opacity: 0.6;
+}
+
+@keyframes tool-dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+
+/* Tool card expand chevron */
+.turn__tool-chevron {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  color: var(--dq-label-tertiary);
+  transition: transform 0.2s ease;
+}
+
+.turn__tool-card.is-expanded .turn__tool-chevron {
+  transform: rotate(180deg);
+}
+
+/* Smooth expand animation for tool body */
+.turn__tool-body {
+  overflow: hidden;
+  transition: max-height 0.25s ease, opacity 0.2s ease, padding 0.2s ease;
+}
+
+/* Thinking indicator for active turns */
+.turn__thinking {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  color: var(--dq-label-tertiary);
+  font-size: var(--dq-font-size-footnote);
+}
+
+.turn__thinking-dots {
+  display: flex;
+  gap: 3px;
+}
+
+.turn__thinking-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--dq-accent);
+  animation: thinking-bounce 1.4s ease-in-out infinite;
+}
+
+.turn__thinking-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.turn__thinking-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes thinking-bounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+/* Turn answer fade-in */
+.turn__answer {
+  animation: answer-fade-in 0.3s ease-out;
+}
+
+@keyframes answer-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Goal bar collapse toggle */
+.goal-bar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dq-label-tertiary);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.goal-bar-toggle:hover {
+  color: var(--dq-label-primary);
+  background: var(--dq-fill-on-glass);
+}
+
+.goal-bar-toggle.is-collapsed svg {
+  transform: rotate(180deg);
+}
+
+.goal-bar-toggle svg {
+  transition: transform 0.2s ease;
+}
+
+/* ── Micro-interactions ── */
+
+/* Button press feedback */
+.dq-btn:active:not(:disabled),
+button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Card hover lift */
+.resource-list-card__item,
+.agent-member-card,
+.provider-card,
+.theme-card {
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.resource-list-card__item:hover,
+.agent-member-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 12px color-mix(in srgb, var(--dq-mask) 12%, transparent);
+}
+
+/* Tab sliding indicator */
+.resource-workspace__tabs,
+.agents-workspace__tabs {
+  position: relative;
+}
+
+/* Toast enter animation */
+.dq-toast {
+  animation: toast-slide-in 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes toast-slide-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Focus visibility & accessibility ── */
+
+/* Default focus-visible ring for interactive elements */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: none;
+  box-shadow: var(--dq-focus-ring);
+}
+
+/* Remove default outline when not focus-visible */
+button:focus:not(:focus-visible),
+a:focus:not(:focus-visible),
+input:focus:not(:focus-visible),
+textarea:focus:not(:focus-visible),
+select:focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
+}
+
+/* High contrast mode enhancements */
+@media (prefers-contrast: high) {
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid var(--dq-label-primary);
+    outline-offset: 2px;
+  }
+}
+
+/* Ensure minimum touch target size for mobile */
+@media (max-width: 900px) {
+  .module-sidebar__nav,
+  .settings-sidebar__item,
+  .resource-rail__row,
+  .teams-nav__item {
+    min-height: 44px;
+  }
+}
+
+/* Reduced motion: disable all animations */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  html {
+    transition: none !important;
+  }
 }
 

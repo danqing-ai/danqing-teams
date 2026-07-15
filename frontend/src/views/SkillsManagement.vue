@@ -673,7 +673,7 @@ function formatSize(bytes: number): string {
   overflow: auto;
   padding: 14px;
   border-radius: 8px;
-  background: var(--dq-bg-page);
+  background: var(--dq-bg-base);
   font-size: var(--dq-font-size-footnote);
   font-family: ui-monospace, monospace;
   line-height: 1.5;

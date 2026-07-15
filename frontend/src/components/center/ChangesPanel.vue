@@ -2,6 +2,7 @@
 import { ref, watch, computed, onMounted } from 'vue'
 import { useSessionsStore } from '@/stores/sessions'
 import { fetchJSON } from '@/api/client'
+import { toast } from '@/utils/feedback'
 
 interface GitFileChange {
   status: string
@@ -16,9 +17,18 @@ interface GitChanges {
   error?: string
 }
 
+interface GitBranches {
+  current: string
+  branches: string[] | null
+  error?: string
+}
+
 const sessions = useSessionsStore()
 const data = ref<GitChanges | null>(null)
 const loading = ref(false)
+const branches = ref<GitBranches | null>(null)
+const selectedBranch = ref('')
+const switching = ref(false)
 
 async function loadChanges() {
   if (!sessions.selectedProjectId) {
@@ -35,8 +45,48 @@ async function loadChanges() {
   }
 }
 
-watch(() => sessions.selectedProjectId, loadChanges)
-onMounted(loadChanges)
+async function loadBranches() {
+  if (!sessions.selectedProjectId) {
+    branches.value = null
+    selectedBranch.value = ''
+    return
+  }
+  try {
+    branches.value = await fetchJSON<GitBranches>(`/projects/${sessions.selectedProjectId}/git-branches`)
+    selectedBranch.value = branches.value?.current ?? ''
+  } catch {
+    branches.value = null
+    selectedBranch.value = ''
+  }
+}
+
+async function onSelectBranch(branch: unknown) {
+  const target = typeof branch === 'string' ? branch : ''
+  if (!sessions.selectedProjectId || !target || target === branches.value?.current) return
+  switching.value = true
+  try {
+    branches.value = await fetchJSON<GitBranches>(`/projects/${sessions.selectedProjectId}/git-checkout`, {
+      method: 'POST',
+      body: JSON.stringify({ branch: target }),
+    })
+    selectedBranch.value = branches.value?.current ?? target
+    toast.success(`已切换到分支 ${selectedBranch.value}`)
+    await loadChanges()
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : '切换分支失败')
+    selectedBranch.value = branches.value?.current ?? ''
+  } finally {
+    switching.value = false
+  }
+}
+
+function refresh() {
+  loadChanges()
+  loadBranches()
+}
+
+watch(() => sessions.selectedProjectId, refresh)
+onMounted(refresh)
 
 function statusLabel(s: string): string {
   switch (s) {
@@ -64,13 +114,14 @@ function statusType(s: string): string {
 
 const stagedChanges = computed(() => data.value?.changes?.filter(c => c.staged) ?? [])
 const unstagedChanges = computed(() => data.value?.changes?.filter(c => !c.staged) ?? [])
+const branchList = computed(() => branches.value?.branches ?? [])
 
 function changeLabel(c: GitFileChange): string {
   if (c.origFile) return `${c.file} ← ${c.origFile}`
   return c.file
 }
 
-defineExpose({ refresh: loadChanges })
+defineExpose({ refresh })
 </script>
 
 <template>
@@ -79,51 +130,61 @@ defineExpose({ refresh: loadChanges })
       <p>未关联项目</p>
     </div>
 
-    <div v-else-if="loading" class="changes-panel__empty">
-      <p>加载中...</p>
-    </div>
-
-    <div v-else-if="data?.error" class="changes-panel__empty">
-      <p>{{ data.error }}</p>
-    </div>
-
-    <div v-else-if="!data?.changes?.length" class="changes-panel__empty">
-      <p>没有文件变更</p>
-      <p class="changes-panel__hint">暂存区和工作区都是干净的</p>
-    </div>
-
-    <div v-else class="changes-panel__list">
-      <div v-if="data.branch" class="changes-panel__branch">
+    <template v-else>
+      <div v-if="branchList.length" class="changes-panel__branch">
         <span class="changes-panel__branch-icon">⎇</span>
-        <span class="changes-panel__branch-name">{{ data.branch }}</span>
+        <DqSelect
+          v-model="selectedBranch"
+          class="changes-panel__branch-select"
+          :disabled="switching"
+          @update:model-value="onSelectBranch"
+        >
+          <DqOption v-for="b in branchList" :key="b" :value="b" :label="b" />
+        </DqSelect>
+        <span v-if="switching" class="changes-panel__branch-switching">切换中...</span>
       </div>
 
-      <template v-if="stagedChanges.length">
-        <div class="changes-panel__group-label">已暂存</div>
-        <div
-          v-for="c in stagedChanges"
-          :key="c.file"
-          class="changes-panel__item"
-          :class="`is-${statusType(c.status)}`"
-        >
-          <span class="changes-panel__item-status">{{ statusLabel(c.status) }}</span>
-          <span class="changes-panel__item-file" :title="changeLabel(c)">{{ changeLabel(c) }}</span>
-        </div>
-      </template>
+      <div v-if="loading" class="changes-panel__empty">
+        <p>加载中...</p>
+      </div>
 
-      <template v-if="unstagedChanges.length">
-        <div class="changes-panel__group-label">未暂存</div>
-        <div
-          v-for="c in unstagedChanges"
-          :key="c.file"
-          class="changes-panel__item"
-          :class="`is-${statusType(c.status)}`"
-        >
-          <span class="changes-panel__item-status">{{ statusLabel(c.status) }}</span>
-          <span class="changes-panel__item-file" :title="changeLabel(c)">{{ changeLabel(c) }}</span>
-        </div>
-      </template>
-    </div>
+      <div v-else-if="data?.error" class="changes-panel__empty">
+        <p>{{ data.error }}</p>
+      </div>
+
+      <div v-else-if="!data?.changes?.length" class="changes-panel__empty">
+        <p>没有文件变更</p>
+        <p class="changes-panel__hint">暂存区和工作区都是干净的</p>
+      </div>
+
+      <div v-else class="changes-panel__list">
+        <template v-if="stagedChanges.length">
+          <div class="changes-panel__group-label">已暂存</div>
+          <div
+            v-for="c in stagedChanges"
+            :key="c.file"
+            class="changes-panel__item"
+            :class="`is-${statusType(c.status)}`"
+          >
+            <span class="changes-panel__item-status">{{ statusLabel(c.status) }}</span>
+            <span class="changes-panel__item-file" :title="changeLabel(c)">{{ changeLabel(c) }}</span>
+          </div>
+        </template>
+
+        <template v-if="unstagedChanges.length">
+          <div class="changes-panel__group-label">未暂存</div>
+          <div
+            v-for="c in unstagedChanges"
+            :key="c.file"
+            class="changes-panel__item"
+            :class="`is-${statusType(c.status)}`"
+          >
+            <span class="changes-panel__item-status">{{ statusLabel(c.status) }}</span>
+            <span class="changes-panel__item-file" :title="changeLabel(c)">{{ changeLabel(c) }}</span>
+          </div>
+        </template>
+      </div>
+    </template>
   </aside>
 </template>
 
@@ -158,10 +219,11 @@ defineExpose({ refresh: loadChanges })
 }
 
 .changes-panel__branch {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 14px 12px;
+  padding: 8px 14px;
   font-size: var(--dq-font-size-footnote);
   font-weight: 600;
   color: var(--dq-label-primary);
@@ -173,8 +235,17 @@ defineExpose({ refresh: loadChanges })
   color: var(--dq-accent);
 }
 
-.changes-panel__branch-name {
+.changes-panel__branch-select {
+  flex: 1;
+  min-width: 0;
   font-family: var(--dq-font-mono);
+}
+
+.changes-panel__branch-switching {
+  flex-shrink: 0;
+  font-size: var(--dq-font-size-caption);
+  font-weight: 400;
+  color: var(--dq-label-tertiary);
 }
 
 .changes-panel__group-label {

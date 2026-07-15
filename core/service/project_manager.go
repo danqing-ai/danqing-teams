@@ -351,6 +351,12 @@ type GitChanges struct {
 	Error   string           `json:"error,omitempty"`
 }
 
+type GitBranches struct {
+	Current  string   `json:"current"`
+	Branches []string `json:"branches"`
+	Error    string   `json:"error,omitempty"`
+}
+
 func base64Encode(data []byte) string {
 	enc := make([]byte, ((len(data)+2)/3)*4)
 	encode(data, enc)
@@ -438,6 +444,87 @@ func gitRepoRoot(dir string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+func (m *ProjectManager) resolveGitRoot(ctx context.Context, projectID string) (string, error) {
+	p, err := m.Get(ctx, projectID)
+	if err != nil {
+		return "", err
+	}
+	root := p.Directory
+	if root == "" {
+		root = filepath.Join(m.ProjectDir(projectID), "files")
+	}
+	return gitRepoRoot(filepath.Clean(root))
+}
+
+func (m *ProjectManager) ListGitBranches(ctx context.Context, projectID string) (*GitBranches, error) {
+	if _, err := m.Get(ctx, projectID); err != nil {
+		return nil, err
+	}
+	gitRoot, err := m.resolveGitRoot(ctx, projectID)
+	if err != nil {
+		result := &GitBranches{}
+		if _, ok := err.(*exec.Error); ok {
+			result.Error = "git 未安装或不在 PATH 中"
+		} else {
+			result.Error = "不是 git 仓库"
+		}
+		return result, nil
+	}
+
+	result := &GitBranches{}
+
+	cmd := exec.Command("git", "branch", "--format=%(refname:short)")
+	cmd.Dir = gitRoot
+	out, err := cmd.Output()
+	if err != nil {
+		return result, nil
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if b := strings.TrimSpace(line); b != "" {
+			result.Branches = append(result.Branches, b)
+		}
+	}
+
+	cur := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	cur.Dir = gitRoot
+	if out, err := cur.Output(); err == nil {
+		result.Current = strings.TrimSpace(string(out))
+	}
+
+	return result, nil
+}
+
+func (m *ProjectManager) CheckoutGitBranch(ctx context.Context, projectID, branch string) (*GitBranches, error) {
+	branch = strings.TrimSpace(branch)
+	if branch == "" {
+		return nil, fmt.Errorf("branch required")
+	}
+	if strings.HasPrefix(branch, "-") || strings.ContainsAny(branch, " \t\r\n~^:?*[\\") {
+		return nil, fmt.Errorf("invalid branch name")
+	}
+	if _, err := m.Get(ctx, projectID); err != nil {
+		return nil, err
+	}
+	gitRoot, err := m.resolveGitRoot(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("不是 git 仓库")
+	}
+
+	cmd := exec.Command("git", "checkout", branch)
+	cmd.Dir = gitRoot
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(stderr.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		return nil, fmt.Errorf("%s", msg)
+	}
+
+	return m.ListGitBranches(ctx, projectID)
 }
 
 func parseGitStatus(output []byte, gitRoot, projectRoot, prefix string) *GitChanges {

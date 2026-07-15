@@ -855,10 +855,18 @@ watch(() => projects.projects.length, (len) => {
   height: 6px;
   border-radius: 50%;
   background: color-mix(in srgb, var(--dq-label-tertiary) 60%, transparent);
+  transition: background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .project-tree__session.is-active .project-tree__session-dot {
   background: var(--dq-accent);
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--dq-accent) 25%, transparent);
+  animation: session-dot-pulse 2s ease-in-out infinite;
+}
+
+@keyframes session-dot-pulse {
+  0%, 100% { box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--dq-accent) 25%, transparent); }
+  50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--dq-accent) 12%, transparent); }
 }
 
 .project-tree__session-name {

@@ -7,6 +7,7 @@ import PlanPanel from '@/components/center/PlanPanel.vue'
 import FileTree from '@/components/center/FileTree.vue'
 import ExpertsPanel from '@/components/center/ExpertsPanel.vue'
 import ChangesPanel from '@/components/center/ChangesPanel.vue'
+import TerminalPanel from '@/components/center/TerminalPanel.vue'
 import { renderMarkdown } from '@/utils/markdown-render'
 import { toast } from '@/utils/feedback'
 import { apiBaseUrl } from '@/utils/desktop'
@@ -15,7 +16,11 @@ import type { StreamEvent, TurnLog } from '@/types/mission'
 
 const router = useRouter()
 const sessions = useSessionsStore()
-const rightTab = ref<'plan' | 'files' | 'experts' | 'changes' | 'browser'>('plan')
+const rightTab = ref<'plan' | 'files' | 'experts' | 'changes' | 'terminal' | 'browser'>('plan')
+const terminalOpened = ref(false)
+watch(rightTab, (t) => {
+  if (t === 'terminal') terminalOpened.value = true
+})
 const fileTreeRef = ref<InstanceType<typeof FileTree> | null>(null)
 const changesPanelRef = ref<InstanceType<typeof ChangesPanel> | null>(null)
 const isEditingTitle = ref(false)
@@ -142,6 +147,55 @@ function isToolCardExpanded(seq: number) {
   return expandedToolCards.value.has(seq)
 }
 
+// ── Collapsible turns ──
+const collapsedTurns = ref(new Set<string>())
+function toggleTurnCollapse(turnId: string) {
+  if (collapsedTurns.value.has(turnId)) {
+    collapsedTurns.value.delete(turnId)
+  } else {
+    collapsedTurns.value.add(turnId)
+  }
+  collapsedTurns.value = new Set(collapsedTurns.value)
+}
+function isTurnCollapsed(turnId: string) {
+  return collapsedTurns.value.has(turnId)
+}
+
+// ── Smart auto-scroll ──
+const userScrolledUp = ref(false)
+let scrollTimeout: ReturnType<typeof setTimeout> | null = null
+function onScrollAreaScroll() {
+  const el = scrollAreaRef.value
+  if (!el) return
+  const threshold = 120
+  const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold
+  if (!nearBottom) {
+    userScrolledUp.value = true
+    if (scrollTimeout) clearTimeout(scrollTimeout)
+    scrollTimeout = setTimeout(() => { userScrolledUp.value = false }, 3000)
+  } else {
+    userScrolledUp.value = false
+  }
+}
+function autoScrollToBottom(force = false) {
+  if (!force && userScrolledUp.value) return
+  void nextTick(() => {
+    const el = scrollAreaRef.value
+    if (el) {
+      el.scrollTop = el.scrollHeight
+    }
+  })
+}
+
+watch(
+  () => sessions.streamEvents.length,
+  () => { autoScrollToBottom() },
+)
+watch(
+  () => sessions.streamEvents.at(-1)?.type,
+  () => { autoScrollToBottom() },
+)
+
 const scrollAreaRef = ref<HTMLElement | null>(null)
 const composerStyle = ref<Record<string, string>>({})
 
@@ -182,6 +236,53 @@ interface Turn {
   status?: string
   events: StreamEvent[]
   childTurnIds: string[]
+}
+
+// ── Tool SVG icon mapping ──
+function toolSvgIcon(name: string): string {
+  const n = name.toLowerCase()
+  const base = 'width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"'
+  if (n.includes('read') || n.includes('open_file') || n.includes('view'))
+    return `<svg ${base}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`
+  if (n.includes('write') || n.includes('create_file') || n.includes('edit') || n.includes('search_replace') || n.includes('replace'))
+    return `<svg ${base}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`
+  if (n.includes('search') || n.includes('grep') || n.includes('find') || n.includes('glob') || n.includes('codebase') || n.includes('lsp'))
+    return `<svg ${base}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`
+  if (n.includes('bash') || n.includes('terminal') || n.includes('execute') || n.includes('run') || n.includes('shell'))
+    return `<svg ${base}><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`
+  if (n.includes('browser') || n.includes('web') || n.includes('fetch') || n.includes('navigate'))
+    return `<svg ${base}><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`
+  if (n.includes('delegate') || n.includes('agent') || n.includes('task'))
+    return `<svg ${base}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`
+  if (n.includes('ask_user') || n.includes('question') || n.includes('approval') || n.includes('permission'))
+    return `<svg ${base}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`
+  if (n.includes('plan') || n.includes('todo') || n.includes('todowrite'))
+    return `<svg ${base}><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`
+  if (n.includes('git') || n.includes('commit') || n.includes('branch'))
+    return `<svg ${base}><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>`
+  if (n.includes('memory') || n.includes('knowledge') || n.includes('remember'))
+    return `<svg ${base}><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/><line x1="9" y1="21" x2="15" y2="21"/></svg>`
+  if (n.includes('skill') || n.includes('capability'))
+    return `<svg ${base}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`
+  return `<svg ${base}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`
+}
+
+// ── Tool duration calculation ──
+function toolDuration(startSeq: number, endSeq: number, events: StreamEvent[]): number | null {
+  const startEv = events.find(e => e.seq === startSeq)
+  const endEv = events.find(e => e.seq === endSeq)
+  if (startEv?.createdAt && endEv?.createdAt) {
+    return new Date(endEv.createdAt).getTime() - new Date(startEv.createdAt).getTime()
+  }
+  return null
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
+  const mins = Math.floor(ms / 60000)
+  const secs = Math.floor((ms % 60000) / 1000)
+  return `${mins}m ${secs}s`
 }
 
 function mergeToolCard(toolCards: Record<string, ToolCard>, ev: StreamEvent) {
@@ -947,6 +1048,28 @@ function formatTurnGoal(goal: string) {
   return goal.trim().slice(0, 60) || '未命名 Turn'
 }
 
+// ── Turn summary computation ──
+function turnSummary(turn: Turn): { toolCount: number; completedTools: number; errorTools: number; runningTools: number; tokensUsed: number } {
+  let toolCount = 0
+  let completedTools = 0
+  let errorTools = 0
+  let runningTools = 0
+  let tokensUsed = 0
+  for (const ev of turn.events) {
+    if (ev.type === '__tool_card__') {
+      toolCount++
+      const card = ev.payload as ToolCard
+      if (card.status === 'completed') completedTools++
+      if (card.status === 'error') errorTools++
+      if (card.status === 'running' || card.status === 'pending') runningTools++
+    } else if (ev.type === 'llm.usage') {
+      const p = asRecord(ev.payload)
+      tokensUsed += Number(p?.totalTokens ?? p?.total_tokens ?? 0)
+    }
+  }
+  return { toolCount, completedTools, errorTools, runningTools, tokensUsed }
+}
+
 function onTitleKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter') {
     e.preventDefault()
@@ -991,7 +1114,7 @@ function onTitleKeydown(e: KeyboardEvent) {
     </header>
 
     <div ref="bodyRef" class="session-workspace__body" :style="{ gridTemplateColumns: `${splitPercent}% 8px 1fr` }">
-      <div ref="scrollAreaRef" class="session-workspace__scroll">
+      <div ref="scrollAreaRef" class="session-workspace__scroll" @scroll="onScrollAreaScroll">
         <div v-if="sessions.composingNew && !sessions.currentSession" class="session-workspace__empty">
           <DqEmpty description="新建会话">
             <p class="session-workspace__hint">在下方 Composer 输入目标，选择项目并发送。没有项目时点击项目下拉可新建。</p>
@@ -1026,23 +1149,49 @@ function onTitleKeydown(e: KeyboardEvent) {
 
           <section v-for="(turn, turnIndex) in visibleTurns" :key="turn.id" class="turn">
             <div v-if="turnIndex > 0" class="turn__divider" />
-            <div class="turn__header-row">
-              <span class="turn__number">Turn #{{ turnIndex + 1 }}</span>
-              <DqTag
-                v-if="turn.status"
-                :type="turnStatusType(turn.status as TurnLog['status'])"
-                size="small"
-              >
-                {{ turnStatusLabel(turn.status as TurnLog['status']) }}
-              </DqTag>
-              <button class="turn__download-btn" title="下载 Turn Log" @click="downloadTurnLog(turn.id)">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-              </button>
+            <div class="turn__header" @click="toggleTurnCollapse(turn.id)">
+              <div class="turn__header-left">
+                <button class="turn__collapse-btn" :class="{ 'is-collapsed': isTurnCollapsed(turn.id) }" @click.stop="toggleTurnCollapse(turn.id)">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <span class="turn__number">Turn #{{ turnIndex + 1 }}</span>
+                <DqTag
+                  v-if="turn.status"
+                  :type="turnStatusType(turn.status as TurnLog['status'])"
+                  size="small"
+                >
+                  {{ turnStatusLabel(turn.status as TurnLog['status']) }}
+                </DqTag>
+                <span v-if="turnSummary(turn).runningTools > 0" class="turn__live-dot" />
+              </div>
+              <div class="turn__header-right">
+                <div class="turn__summary-strip">
+                  <template v-if="turnSummary(turn).toolCount > 0">
+                    <span class="turn__summary-item turn__summary-item--success" v-if="turnSummary(turn).completedTools > 0">
+                      ✓ {{ turnSummary(turn).completedTools }}
+                    </span>
+                    <span class="turn__summary-item turn__summary-item--error" v-if="turnSummary(turn).errorTools > 0">
+                      ✗ {{ turnSummary(turn).errorTools }}
+                    </span>
+                    <span class="turn__summary-item turn__summary-item--running" v-if="turnSummary(turn).runningTools > 0">
+                      ● {{ turnSummary(turn).runningTools }}
+                    </span>
+                  </template>
+                  <span v-if="turnSummary(turn).tokensUsed > 0" class="turn__summary-item turn__summary-item--tokens">
+                    {{ turnSummary(turn).tokensUsed >= 1000 ? (turnSummary(turn).tokensUsed / 1000).toFixed(1) + 'k' : turnSummary(turn).tokensUsed }} tokens
+                  </span>
+                </div>
+                <button class="turn__download-btn" title="下载 Turn Log" @click.stop="downloadTurnLog(turn.id)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                </button>
+              </div>
             </div>
+
+            <div v-show="!isTurnCollapsed(turn.id)" class="turn__body">
             <div v-if="turn.userText" class="turn__user">
               <div class="turn__bubble turn__bubble--user">
                 <p>{{ turn.userText }}</p>
@@ -1051,107 +1200,113 @@ function onTitleKeydown(e: KeyboardEvent) {
 
             <div class="turn__agent">
               <div class="turn__agent-body">
-                <div class="turn__event-list">
+                <div class="turn__timeline">
                   <div
                     v-for="ev in turn.events"
                     :key="ev.seq"
                     class="turn__event"
-                    :data-type="ev.type"
                   >
-                    <div
-                      v-if="ev.type === '__tool_card__'"
-                      class="turn__tool-card"
-                      :class="{ 'is-expanded': isToolCardExpanded(ev.seq) }"
-                    >
-                      <div class="turn__tool-header" @click="toggleToolCard(ev.seq)">
-                        <div class="turn__tool-meta">
-                          <span class="turn__tool-step">{{ (ev.payload as ToolCard).stepNum }}</span>
-                          <span class="turn__tool-name">{{ (ev.payload as ToolCard).name }}</span>
-                          <span v-if="(ev.payload as ToolCard).description" class="turn__tool-desc">{{ (ev.payload as ToolCard).description }}</span>
-                        </div>
-                        <div class="turn__tool-actions">
-                          <DqTag v-if="(ev.payload as ToolCard).status !== 'completed'" :type="toolCardStatusType((ev.payload as ToolCard).status)" size="small">{{ toolCardStatusLabel((ev.payload as ToolCard).status) }}</DqTag>
-                          <span
-                            v-if="(ev.payload as ToolCard).name === 'delegate_agent' && delegateChildTurnId(ev.seq)"
-                            class="turn__tool-link"
-                            @click.stop="drillIntoChildTurnBySeq(ev.seq)"
-                          >查看 →</span>
-                        </div>
-                      </div>
-                      <div v-show="isToolCardExpanded(ev.seq)" class="turn__tool-body">
-                        <div v-if="(ev.payload as ToolCard).inputStr && (ev.payload as ToolCard).name !== 'ask_user'" class="turn__tool-section">
-                          <span class="turn__tool-section-label">输入</span>
-                          <div v-if="toolInputFields((ev.payload as ToolCard).inputStr)" class="turn__tool-fields">
-                            <div v-for="field in toolInputFields((ev.payload as ToolCard).inputStr)" :key="field.key" class="turn__tool-field">
-                              <span class="turn__tool-field-key">{{ field.key }}</span>
-                              <span class="turn__tool-field-val" :title="field.value">{{ truncateText(field.value) }}</span>
-                            </div>
-                          </div>
-                          <pre v-else class="turn__tool-code">{{ (ev.payload as ToolCard).inputStr }}</pre>
-                        </div>
-                        <div v-if="(ev.payload as ToolCard).output" class="turn__tool-section">
-                          <span class="turn__tool-section-label">输出</span>
-                          <pre class="turn__tool-code">{{ (ev.payload as ToolCard).output }}</pre>
-                        </div>
-                        <div v-if="(ev.payload as ToolCard).error" class="turn__tool-section turn__tool-section--error">
-                          <span class="turn__tool-section-label">错误</span>
-                          <pre class="turn__tool-code">{{ (ev.payload as ToolCard).error }}</pre>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div
-                      v-else-if="ev.type === 'agent.message'"
-                      class="turn__answer"
-                    >
-                      <div class="turn__answer-label">回答</div>
-                      <div class="turn__report" v-html="renderMarkdown(finalText(ev))" />
-                    </div>
-
-                    <div
-                      v-else-if="ev.type === 'report'"
-                      class="turn__report-meta"
-                    >
-                      <DqTag :type="reportStatusType(ev)">
-                        {{ reportStatusLabel(ev) }}
-                      </DqTag>
-                      <span v-if="reportConfidence(ev) !== null" class="turn__report-meta-confidence">
-                        置信度 {{ reportConfidence(ev) }}
-                      </span>
-                      <span v-if="reportSteps(ev)" class="turn__report-meta-steps">
-                        {{ reportSteps(ev) }} 步
-                      </span>
+                    <template v-if="ev.type === '__tool_card__'">
                       <div
-                        v-if="reportSummary(ev)"
-                        class="turn__report-meta-summary"
-                        v-html="renderMarkdown(reportSummary(ev))"
-                      />
-                    </div>
-
-                    <div v-else-if="ev.type === 'capability.activated'" class="turn__skill">
-                      <span class="turn__skill-icon">✨</span>
-                      <span>{{ toolName(ev) }}</span>
-                    </div>
-
-                    <div v-else-if="ev.type === 'permission.ask'" class="turn__permission">
-                      <span class="turn__permission-icon">🔒</span>
-                      <span>高危工具待审批：<strong>{{ approvalTool(ev.payload) }}</strong><template v-if="approvalDescription(ev.payload)"> — {{ approvalDescription(ev.payload) }}</template></span>
-                      <template v-if="isSessionActive && !isApprovalDecided(ev.payload)">
-                        <div class="turn__permission-actions">
-                          <DqButton type="primary" size="small" @click="decide(ev, true)">批准</DqButton>
-                          <DqButton size="small" @click="decide(ev, false)">拒绝</DqButton>
+                        class="tool-card"
+                        :class="{
+                          'is-expanded': isToolCardExpanded(ev.seq),
+                          'is-running': (ev.payload as ToolCard).status === 'running',
+                          'is-completed': (ev.payload as ToolCard).status === 'completed',
+                          'is-error': (ev.payload as ToolCard).status === 'error',
+                        }"
+                      >
+                        <div class="tool-card__header" @click="toggleToolCard(ev.seq)">
+                          <div class="tool-card__meta">
+                            <span class="tool-card__icon" v-html="toolSvgIcon((ev.payload as ToolCard).name)" />
+                            <span class="tool-card__name">{{ (ev.payload as ToolCard).name }}</span>
+                            <span v-if="(ev.payload as ToolCard).description" class="tool-card__desc">{{ (ev.payload as ToolCard).description }}</span>
+                          </div>
+                          <div class="tool-card__actions">
+                            <span v-if="(ev.payload as ToolCard).status === 'running'" class="tool-card__status-badge is-running">
+                              <span class="tool-card__spinner" />
+                              <span>执行中</span>
+                            </span>
+                            <span v-else-if="(ev.payload as ToolCard).status === 'error'" class="tool-card__status-badge is-error">错误</span>
+                            <span
+                              v-if="(ev.payload as ToolCard).name === 'delegate_agent' && delegateChildTurnId(ev.seq)"
+                              class="tool-card__link"
+                              @click.stop="drillIntoChildTurnBySeq(ev.seq)"
+                            >查看 →</span>
+                            <svg class="tool-card__chevron" :class="{ 'is-open': isToolCardExpanded(ev.seq) }" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                          </div>
                         </div>
-                      </template>
-                      <template v-else-if="isApprovalDecided(ev.payload)">
-                        <span class="turn__permission-resolved">已处理</span>
-                      </template>
-                    </div>
-
-                    <div v-else-if="ev.type === 'ask_user.pending'" class="turn__ask-user">
-                      <div class="turn__ask-user-header">
-                        <span class="turn__ask-user-icon">💬</span>
-                        <span class="turn__ask-user-question">{{ askUserQuestion(ev.payload) }}</span>
+                        <div v-show="isToolCardExpanded(ev.seq)" class="tool-card__body">
+                          <div v-if="(ev.payload as ToolCard).inputStr && (ev.payload as ToolCard).name !== 'ask_user'" class="tool-card__section">
+                            <span class="tool-card__section-label">输入</span>
+                            <div v-if="toolInputFields((ev.payload as ToolCard).inputStr)" class="tool-card__fields">
+                              <div v-for="field in toolInputFields((ev.payload as ToolCard).inputStr)" :key="field.key" class="tool-card__field">
+                                <span class="tool-card__field-key">{{ field.key }}</span>
+                                <span class="tool-card__field-val" :title="field.value">{{ truncateText(field.value) }}</span>
+                              </div>
+                            </div>
+                            <pre v-else class="tool-card__code">{{ (ev.payload as ToolCard).inputStr }}</pre>
+                          </div>
+                          <div v-if="(ev.payload as ToolCard).output" class="tool-card__section">
+                            <span class="tool-card__section-label">输出</span>
+                            <pre class="tool-card__code">{{ (ev.payload as ToolCard).output }}</pre>
+                          </div>
+                          <div v-if="(ev.payload as ToolCard).error" class="tool-card__section tool-card__section--error">
+                            <span class="tool-card__section-label">错误</span>
+                            <pre class="tool-card__code">{{ (ev.payload as ToolCard).error }}</pre>
+                          </div>
+                        </div>
                       </div>
+                    </template>
+
+                    <template v-else-if="ev.type === 'agent.message'">
+                      <div class="turn__answer">
+                        <div class="turn__answer-label">
+                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                          <span>回答</span>
+                        </div>
+                        <div class="turn__report" v-html="renderMarkdown(finalText(ev))" />
+                      </div>
+                    </template>
+
+                    <template v-else-if="ev.type === 'report'">
+                      <div class="turn__report-meta">
+                        <DqTag :type="reportStatusType(ev)">{{ reportStatusLabel(ev) }}</DqTag>
+                        <span v-if="reportConfidence(ev) !== null" class="turn__report-meta-confidence">置信度 {{ reportConfidence(ev) }}</span>
+                        <span v-if="reportSteps(ev)" class="turn__report-meta-steps">{{ reportSteps(ev) }} 步</span>
+                        <div v-if="reportSummary(ev)" class="turn__report-meta-summary" v-html="renderMarkdown(reportSummary(ev))" />
+                      </div>
+                    </template>
+
+                    <template v-else-if="ev.type === 'capability.activated'">
+                      <div class="turn__skill">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                        <span>{{ toolName(ev) }}</span>
+                      </div>
+                    </template>
+
+                    <template v-else-if="ev.type === 'permission.ask'">
+                      <div class="turn__permission">
+                        <svg class="turn__permission-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        <span>高危工具待审批：<strong>{{ approvalTool(ev.payload) }}</strong><template v-if="approvalDescription(ev.payload)"> — {{ approvalDescription(ev.payload) }}</template></span>
+                        <template v-if="isSessionActive && !isApprovalDecided(ev.payload)">
+                          <div class="turn__permission-actions">
+                            <DqButton type="primary" size="small" @click="decide(ev, true)">批准</DqButton>
+                            <DqButton size="small" @click="decide(ev, false)">拒绝</DqButton>
+                          </div>
+                        </template>
+                        <template v-else-if="isApprovalDecided(ev.payload)">
+                          <span class="turn__permission-resolved">已处理</span>
+                        </template>
+                      </div>
+                    </template>
+
+                    <template v-else-if="ev.type === 'ask_user.pending'">
+                      <div class="turn__ask-user">
+                        <div class="turn__ask-user-header">
+                          <svg class="turn__ask-user-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                          <span class="turn__ask-user-question">{{ askUserQuestion(ev.payload) }}</span>
+                        </div>
 
                       <template v-if="isAskResolved(askUserCallId(ev.payload))">
                         <div class="turn__ask-user-answer">
@@ -1230,29 +1385,33 @@ function onTitleKeydown(e: KeyboardEvent) {
                           </div>
                         </template>
                       </template>
-                    </div>
-
-
-
-                    <div v-else-if="ev.type === 'llm.usage'" class="turn__usage">
-                      <span>tokens: {{ usageText(ev) }}</span>
-                    </div>
-
-                    <div v-else-if="ev.type === 'context.compacted'" class="turn__compaction">
-                      <span class="turn__compaction-icon">📦</span>
-                      <div class="turn__compaction-body">
-                        <div class="turn__compaction-title">上下文压缩</div>
-                        <div class="turn__compaction-detail">{{ compactionSummary(ev) }}</div>
                       </div>
-                    </div>
+                    </template>
 
-                    <div v-else-if="ev.type === 'error'" class="turn__error">
-                      <span class="turn__error-icon">⚠️</span>
-                      <span class="turn__error-text">{{ errorText(ev) }}</span>
-                    </div>
+                    <template v-else-if="ev.type === 'context.compacted'">
+                      <div class="turn__compaction">
+                        <svg class="turn__compaction-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                        <div class="turn__compaction-body">
+                          <div class="turn__compaction-title">上下文压缩</div>
+                          <div class="turn__compaction-detail">{{ compactionSummary(ev) }}</div>
+                        </div>
+                      </div>
+                    </template>
+
+                    <template v-else-if="ev.type === 'error'">
+                      <div class="turn__error">
+                        <svg class="turn__error-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                        <span class="turn__error-text">{{ errorText(ev) }}</span>
+                      </div>
+                    </template>
+
+                    <template v-else-if="ev.type === 'llm.usage'">
+                      <!-- hidden: tokens shown in turn summary -->
+                    </template>
                   </div>
                 </div>
               </div>
+            </div>
             </div>
           </section>
         </div>
@@ -1308,6 +1467,17 @@ function onTitleKeydown(e: KeyboardEvent) {
               <circle cx="18" cy="6" r="3"/>
               <circle cx="6" cy="18" r="3"/>
               <path d="M18 9a9 9 0 0 1-9 9"/>
+            </svg>
+          </button>
+          <button
+            class="session-workspace__right-tab"
+            :class="{ 'is-active': rightTab === 'terminal' }"
+            @click="rightTab = 'terminal'"
+            title="终端"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="4 17 10 11 4 5"/>
+              <line x1="12" y1="19" x2="20" y2="19"/>
             </svg>
           </button>
           <button
@@ -1368,6 +1538,18 @@ function onTitleKeydown(e: KeyboardEvent) {
             />
           </div>
         </template>
+        <div
+          v-if="rightTab === 'terminal' && !sessions.selectedProjectId"
+          class="session-workspace__right-empty"
+        >
+          未关联项目
+        </div>
+        <TerminalPanel
+          v-if="terminalOpened && sessions.selectedProjectId"
+          v-show="rightTab === 'terminal'"
+          :key="sessions.selectedProjectId"
+          :project-id="sessions.selectedProjectId"
+        />
       </div>
     </div>
 
@@ -1386,7 +1568,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: var(--dq-bg-page);
+  background: var(--dq-bg-base);
 }
 
 .session-workspace__head {
@@ -1569,10 +1751,116 @@ function onTitleKeydown(e: KeyboardEvent) {
   );
 }
 
-.turn__header-row {
+.turn__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 0;
+  border-radius: 6px;
+  transition: background 0.12s ease;
+  user-select: none;
+}
+
+.turn__header:hover {
+  background: color-mix(in srgb, var(--dq-label-primary) 5%, transparent);
+}
+
+.turn__header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.turn__header-right {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
+}
+
+.turn__collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dq-label-tertiary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.2s ease, color 0.12s ease;
+}
+
+.turn__collapse-btn:hover {
+  color: var(--dq-label-primary);
+}
+
+.turn__collapse-btn.is-collapsed svg {
+  transform: rotate(-90deg);
+}
+
+.turn__live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dq-success);
+  flex-shrink: 0;
+  animation: live-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 color-mix(in srgb, var(--dq-success) 40%, transparent); }
+  50% { opacity: 0.6; box-shadow: 0 0 0 4px color-mix(in srgb, var(--dq-success) 0%, transparent); }
+}
+
+.turn__summary-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--dq-font-size-caption);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.turn__summary-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  line-height: 1.4;
+}
+
+.turn__summary-item--success {
+  color: var(--dq-success);
+  background: color-mix(in srgb, var(--dq-success) 14%, transparent);
+}
+
+.turn__summary-item--error {
+  color: var(--dq-danger);
+  background: color-mix(in srgb, var(--dq-danger) 14%, transparent);
+}
+
+.turn__summary-item--running {
+  color: var(--dq-accent);
+  background: color-mix(in srgb, var(--dq-accent) 14%, transparent);
+}
+
+.turn__summary-item--tokens {
+  color: var(--dq-label-secondary);
+  background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+}
+
+.turn__body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .turn__number {
@@ -1601,6 +1889,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 .turn__bubble--user {
   background: var(--dq-accent);
   color: var(--dq-color-white);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--dq-accent) 20%, transparent);
 }
 
 .turn__bubble p {
@@ -1619,74 +1908,174 @@ function onTitleKeydown(e: KeyboardEvent) {
   gap: 0;
 }
 
-.turn__event {
-  font-size: var(--dq-font-size-secondary);
-  line-height: 1.6;
-  color: var(--dq-label-primary);
+.turn__timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.turn__tool-card {
+  /* removed: replaced by .tool-card */
 }
 
 .turn__report :deep(p) {
   margin: 0 0 10px;
+  line-height: 1.65;
 }
 
 .turn__report :deep(p:last-child) {
   margin-bottom: 0;
 }
 
+.turn__report :deep(h1),
+.turn__report :deep(h2),
+.turn__report :deep(h3),
+.turn__report :deep(h4),
+.turn__report :deep(h5),
+.turn__report :deep(h6) {
+  margin: 18px 0 8px;
+  font-weight: 600;
+  color: var(--dq-label-primary);
+  line-height: 1.3;
+}
+.turn__report :deep(h1) { font-size: 1.35em; }
+.turn__report :deep(h2) { font-size: 1.15em; }
+.turn__report :deep(h3) { font-size: 1.05em; }
+.turn__report :deep(h4),
+.turn__report :deep(h5),
+.turn__report :deep(h6) { font-size: 1em; }
+.turn__report :deep(h1:first-child),
+.turn__report :deep(h2:first-child),
+.turn__report :deep(h3:first-child) { margin-top: 0; }
+
+.turn__report :deep(ul),
+.turn__report :deep(ol) {
+  margin: 6px 0;
+  padding-left: 1.5em;
+}
+
+.turn__report :deep(li) {
+  margin: 3px 0;
+  line-height: 1.6;
+}
+
+.turn__report :deep(li > ul),
+.turn__report :deep(li > ol) {
+  margin: 2px 0;
+}
+
+.turn__report :deep(blockquote) {
+  margin: 10px 0;
+  padding: 8px 14px;
+  border-left: 3px solid color-mix(in srgb, var(--dq-accent) 40%, transparent);
+  background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
+  border-radius: 0 6px 6px 0;
+  color: var(--dq-label-secondary);
+}
+
+.turn__report :deep(blockquote p) {
+  margin: 0;
+}
+
 .turn__report :deep(pre) {
-  margin: 8px 0;
-  padding: 12px;
+  margin: 10px 0;
+  padding: 12px 14px;
   border-radius: 8px;
-  background: var(--dq-bg-base);
+  background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
   overflow: auto;
+}
+
+.turn__report :deep(pre code) {
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+  font-size: var(--dq-font-size-caption);
+  color: var(--dq-label-secondary);
 }
 
 .turn__report :deep(code) {
   font-family: var(--dq-font-mono);
-  font-size: var(--dq-font-size-footnote);
+  font-size: 0.88em;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+  color: var(--dq-label-primary);
 }
 
 .turn__report :deep(table) {
   width: 100%;
   border-collapse: collapse;
-  margin: 10px 0;
+  margin: 12px 0;
   font-size: var(--dq-font-size-footnote);
+  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 12%, transparent);
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 .turn__report :deep(th),
 .turn__report :deep(td) {
-  border: 1px solid var(--teams-glass-border);
-  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
+  padding: 8px 12px;
   text-align: left;
+  line-height: 1.5;
 }
 
 .turn__report :deep(th) {
-  background: color-mix(in srgb, var(--dq-label-primary) 5%, transparent);
+  background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
   font-weight: 600;
+  color: var(--dq-label-primary);
 }
 
-.turn__tool {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+.turn__report :deep(tr:hover td) {
+  background: color-mix(in srgb, var(--dq-label-primary) 3%, transparent);
+}
+
+.turn__report :deep(hr) {
+  border: none;
+  border-top: 1px solid color-mix(in srgb, var(--dq-label-primary) 12%, transparent);
+  margin: 16px 0;
+}
+
+.turn__report :deep(a) {
+  color: var(--dq-accent);
+  text-decoration: none;
+}
+
+.turn__report :deep(a:hover) {
+  text-decoration: underline;
+}
+
+.turn__report :deep(strong) {
+  font-weight: 600;
+  color: var(--dq-label-primary);
+}
+
+.turn__report :deep(img) {
+  max-width: 100%;
   border-radius: 8px;
-  background: var(--dq-bg-base);
-  font-size: var(--dq-font-size-footnote);
-  color: var(--dq-label-secondary);
+  margin: 8px 0;
 }
 
-.turn__tool-name {
-  font-weight: 600;
-}
 
-.turn__tool-status {
-  color: var(--dq-label-tertiary);
-}
 
 .turn__skill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--dq-accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dq-accent) 16%, transparent);
+  color: var(--dq-accent);
   font-size: var(--dq-font-size-footnote);
-  color: var(--dq-label-tertiary);
+  font-weight: 500;
+  width: fit-content;
+}
+
+.turn__skill svg {
+  opacity: 0.7;
 }
 
 .turn__permission {
@@ -1694,12 +2083,17 @@ function onTitleKeydown(e: KeyboardEvent) {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--dq-warning);
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--dq-warning) 40%, transparent);
   background: color-mix(in srgb, var(--dq-warning) 8%, transparent);
   color: var(--dq-label-primary);
   font-size: var(--dq-font-size-body);
+}
+
+.turn__permission-icon {
+  flex-shrink: 0;
+  color: var(--dq-warning);
 }
 
 .turn__permission-actions {
@@ -1716,25 +2110,263 @@ function onTitleKeydown(e: KeyboardEvent) {
   opacity: 0.7;
 }
 
-/* Enhanced turn display */
+/* Timeline events */
 
-.turn__event-list {
+.turn__event {
+  display: flex;
+  align-items: stretch;
+}
+
+.turn__event > * {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Tool card ── */
+
+.tool-card {
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 16%, transparent);
+  background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
+  overflow: hidden;
+  transition: border-color 0.15s ease;
+}
+
+.tool-card.is-running {
+  border-color: color-mix(in srgb, var(--dq-accent) 50%, transparent);
+  background: color-mix(in srgb, var(--dq-accent) 7%, transparent);
+}
+
+.tool-card.is-error {
+  border-color: color-mix(in srgb, var(--dq-danger) 35%, transparent);
+  background: color-mix(in srgb, var(--dq-danger) 5%, transparent);
+}
+
+.tool-card.is-completed {
+  /* no opacity change — keep full contrast in both themes */
+}
+
+.tool-card.is-completed:hover {
+  /* no change */
+}
+
+.tool-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s ease;
+}
+
+.tool-card__header:hover {
+  background: color-mix(in srgb, var(--dq-label-primary) 7%, transparent);
+}
+
+.tool-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.tool-card__icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  color: var(--dq-label-secondary);
+  line-height: 1;
+}
+
+.tool-card__icon :deep(svg) {
+  display: block;
+}
+
+.tool-card__name {
+  font-weight: 500;
+  font-size: var(--dq-font-size-secondary);
+  color: var(--dq-label-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tool-card__desc {
+  font-size: var(--dq-font-size-caption);
+  color: var(--dq-label-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 36ch;
+}
+
+.tool-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.tool-card__status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 999px;
+  line-height: 1.4;
+}
+
+.tool-card__status-badge.is-running {
+  color: var(--dq-accent);
+  background: color-mix(in srgb, var(--dq-accent) 10%, transparent);
+}
+
+.tool-card__status-badge.is-error {
+  color: var(--dq-danger);
+  background: color-mix(in srgb, var(--dq-danger) 10%, transparent);
+}
+
+.tool-card__spinner {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.tool-card__chevron {
+  color: var(--dq-label-quaternary);
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.tool-card__chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.tool-card__link {
+  font-size: var(--dq-font-size-caption);
+  color: var(--dq-accent);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.12s ease;
+}
+
+.tool-card__link:hover {
+  opacity: 0.8;
+}
+
+.tool-card__body {
+  padding: 8px 10px 12px;
   display: flex;
   flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
+}
+
+.tool-card__section {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
   gap: 0;
+  padding: 2px 0;
+}
+
+.tool-card__section-label {
+  font-size: var(--dq-font-size-caption);
+  font-weight: 500;
+  color: var(--dq-label-tertiary);
+  flex-shrink: 0;
+  margin-right: 6px;
+}
+
+.tool-card__section--error .tool-card__section-label {
+  color: var(--dq-danger);
+}
+
+.tool-card__fields {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.tool-card__field {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  line-height: 1.5;
+}
+
+.tool-card__field-key {
+  flex-shrink: 0;
+  font-size: var(--dq-font-size-caption);
+  font-weight: 600;
+  color: var(--dq-label-secondary);
+  font-family: var(--dq-font-mono);
+}
+
+.tool-card__field-val {
+  font-size: var(--dq-font-size-footnote);
+  color: var(--dq-label-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+}
+
+.tool-card__code {
+  width: 100%;
+  margin: 2px 0 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--dq-label-primary) 7%, transparent);
+  font-family: var(--dq-font-mono);
+  font-size: var(--dq-font-size-caption);
+  line-height: 1.5;
+  color: var(--dq-label-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 180px;
+  overflow: auto;
 }
 
 .turn__answer {
-  padding: 12px 4px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
 }
 
 .turn__answer-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: var(--dq-font-size-caption);
   font-weight: 600;
   color: var(--dq-label-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: 10px;
+}
+
+.turn__answer-label svg {
+  color: var(--dq-accent);
+  opacity: 0.6;
 }
 
 .turn__report-meta {
@@ -1759,6 +2391,65 @@ function onTitleKeydown(e: KeyboardEvent) {
   font-size: var(--dq-font-size-body);
   line-height: 1.5;
   color: var(--dq-label-secondary);
+}
+
+.turn__report-meta-summary :deep(p) {
+  margin: 0 0 6px;
+}
+.turn__report-meta-summary :deep(p:last-child) {
+  margin-bottom: 0;
+}
+.turn__report-meta-summary :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: var(--dq-font-size-footnote);
+  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 12%, transparent);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.turn__report-meta-summary :deep(th),
+.turn__report-meta-summary :deep(td) {
+  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
+  padding: 6px 10px;
+  text-align: left;
+}
+.turn__report-meta-summary :deep(th) {
+  background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+  font-weight: 600;
+}
+.turn__report-meta-summary :deep(ul),
+.turn__report-meta-summary :deep(ol) {
+  margin: 4px 0;
+  padding-left: 1.5em;
+}
+.turn__report-meta-summary :deep(li) {
+  margin: 2px 0;
+  line-height: 1.5;
+}
+.turn__report-meta-summary :deep(code) {
+  font-family: var(--dq-font-mono);
+  font-size: 0.88em;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+}
+.turn__report-meta-summary :deep(strong) {
+  font-weight: 600;
+  color: var(--dq-label-primary);
+}
+.turn__report-meta-summary :deep(h1),
+.turn__report-meta-summary :deep(h2),
+.turn__report-meta-summary :deep(h3),
+.turn__report-meta-summary :deep(h4) {
+  margin: 14px 0 6px;
+  font-weight: 600;
+  color: var(--dq-label-primary);
+}
+.turn__report-meta-summary :deep(h1:first-child),
+.turn__report-meta-summary :deep(h2:first-child),
+.turn__report-meta-summary :deep(h3:first-child) {
+  margin-top: 0;
 }
 
 .turn__step {
@@ -1832,190 +2523,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   50% { opacity: 0.6; transform: scale(0.92); }
 }
 
-.turn__tool-card {
-  border: none;
-  background: transparent;
-  overflow: hidden;
-}
 
-.turn__tool-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 7px 4px;
-  border-bottom: none;
-  background: transparent;
-  cursor: pointer;
-  user-select: none;
-  border-radius: 6px;
-  transition: background 0.12s ease;
-}
-
-.turn__tool-header:hover {
-  background: color-mix(in srgb, var(--dq-label-primary) 5%, transparent);
-}
-
-.turn__tool-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.turn__tool-step {
-  flex-shrink: 0;
-  font-size: var(--dq-font-size-footnote);
-  font-weight: 500;
-  color: var(--dq-label-tertiary);
-  min-width: 20px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.turn__tool-icon {
-  display: none;
-}
-
-.turn__tool-name {
-  font-weight: 500;
-  font-size: var(--dq-font-size-secondary);
-  color: var(--dq-label-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.turn__tool-desc {
-  font-size: var(--dq-font-size-caption);
-  color: var(--dq-label-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 40ch;
-}
-
-.turn__tool-card :deep(.dq-tag) {
-  font-size: 10px;
-  padding: 1px 6px;
-  opacity: 0.7;
-}
-
-.turn__tool-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.turn__tool-link {
-  font-size: var(--dq-font-size-caption);
-  color: var(--dq-accent);
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: opacity 0.12s ease;
-}
-
-.turn__tool-link:hover {
-  opacity: 0.8;
-}
-
-.turn__tool-body {
-  padding: 6px 10px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.turn__tool-section {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0;
-  cursor: pointer;
-  padding: 2px 0;
-}
-
-.turn__tool-section-label {
-  font-size: var(--dq-font-size-caption);
-  font-weight: 500;
-  color: var(--dq-label-tertiary);
-  flex-shrink: 0;
-  margin-right: 6px;
-}
-
-.turn__tool-section--error .turn__tool-section-label {
-  color: var(--dq-danger);
-}
-
-.turn__tool-fields {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 4px;
-}
-
-.turn__tool-field {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  line-height: 1.5;
-}
-
-.turn__tool-field-key {
-  flex-shrink: 0;
-  font-size: var(--dq-font-size-caption);
-  font-weight: 600;
-  color: var(--dq-label-secondary);
-  font-family: var(--dq-font-mono);
-}
-
-.turn__tool-field-val {
-  font-size: var(--dq-font-size-footnote);
-  color: var(--dq-label-primary);
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-}
-
-.turn__tool-code {
-  width: 100%;
-  margin: 2px 0 0;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--dq-label-primary) 5%, transparent);
-  font-family: var(--dq-font-mono);
-  font-size: var(--dq-font-size-caption);
-  line-height: 1.5;
-  color: var(--dq-label-secondary);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 160px;
-  overflow: auto;
-}
-
-.turn__skill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--dq-accent) 10%, transparent);
-  color: var(--dq-accent);
-  font-size: var(--dq-font-size-footnote);
-  font-weight: 500;
-  width: fit-content;
-}
-
-.turn__skill-icon {
-  font-size: var(--dq-font-size-footnote);
-}
 
 .turn__delegate {
   display: flex;
@@ -2101,17 +2609,17 @@ function onTitleKeydown(e: KeyboardEvent) {
   align-items: flex-start;
   gap: 10px;
   padding: 12px 14px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--dq-accent) 30%, transparent);
-  background: color-mix(in srgb, var(--dq-accent) 6%, transparent);
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 12%, transparent);
+  background: color-mix(in srgb, var(--dq-label-primary) 5%, transparent);
   font-size: var(--dq-font-size-body);
   line-height: 1.5;
 }
 
-.turn__compaction-icon {
-  font-size: var(--dq-font-size-title);
+.turn__compaction-svg {
   flex-shrink: 0;
-  margin-top: 1px;
+  color: var(--dq-label-tertiary);
+  margin-top: 2px;
 }
 
 .turn__compaction-body {
@@ -2134,14 +2642,16 @@ function onTitleKeydown(e: KeyboardEvent) {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 6px 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--dq-danger) 25%, transparent);
+  background: color-mix(in srgb, var(--dq-danger) 6%, transparent);
   color: var(--dq-danger);
   font-size: var(--dq-font-size-body);
   line-height: 1.5;
 }
 
-.turn__error-icon {
-  font-size: var(--dq-font-size-secondary);
+.turn__error-svg {
   flex-shrink: 0;
   margin-top: 1px;
 }
@@ -2154,10 +2664,10 @@ function onTitleKeydown(e: KeyboardEvent) {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--teams-glass-border);
-  background: var(--dq-bg-base);
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--dq-accent) 20%, transparent);
+  background: color-mix(in srgb, var(--dq-accent) 5%, transparent);
   color: var(--dq-label-primary);
   font-size: var(--dq-font-size-body);
 }
@@ -2171,6 +2681,12 @@ function onTitleKeydown(e: KeyboardEvent) {
 .turn__ask-user-icon {
   font-size: var(--dq-font-size-secondary);
   flex-shrink: 0;
+}
+
+.turn__ask-user-svg {
+  flex-shrink: 0;
+  color: var(--dq-accent);
+  opacity: 0.7;
 }
 
 .turn__ask-user-question {

@@ -156,7 +156,9 @@ defineExpose({ focusInput, appendContent })
 
     <div class="composer-float__actions">
       <div class="composer-float__chips">
-        <label v-if="sessions.composingNew" class="composer-chip composer-chip--select">
+        <!-- Project selector -->
+        <label v-if="sessions.composingNew" class="composer-chip composer-chip--select composer-chip--project">
+          <span class="composer-chip__icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
           <span class="composer-chip__label">{{ selectedProject?.name || '选择项目' }}</span>
           <select v-model="sessions.selectedProjectId" class="composer-chip__select" aria-label="选择项目">
             <option v-for="p in projects.sortedProjects" :key="p.id" :value="p.id">
@@ -165,10 +167,14 @@ defineExpose({ focusInput, appendContent })
           </select>
         </label>
 
+        <!-- No LLM warning -->
         <label v-if="llm.modelsLoaded && !availableModels.length" class="composer-chip">
           <span class="composer-chip__label composer-chip__label--accent">请先配置 LLM 提供商</span>
         </label>
-        <label v-else class="composer-chip composer-chip--select">
+
+        <!-- Model selector -->
+        <label v-else class="composer-chip composer-chip--select composer-chip--model">
+          <span class="composer-chip__icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg></span>
           <span class="composer-chip__label">{{ selectedModelLabel }}</span>
           <select v-model="sessions.selectedModelId" class="composer-chip__select" aria-label="选择模型">
             <option v-for="model in availableModels" :key="model.id" :value="model.id">
@@ -177,7 +183,9 @@ defineExpose({ focusInput, appendContent })
           </select>
         </label>
 
-        <label v-if="(sessions.composingNew || sessions.currentSessionId) && primaryAgents.length" class="composer-chip composer-chip--select">
+        <!-- Agent selector -->
+        <label v-if="(sessions.composingNew || sessions.currentSessionId) && primaryAgents.length" class="composer-chip composer-chip--select composer-chip--agent">
+          <span class="composer-chip__icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
           <span class="composer-chip__label">{{ selectedAgentLabel }}</span>
           <select v-model="sessions.selectedAgentId" class="composer-chip__select" aria-label="选择 Agent">
             <option :value="null">Default</option>
@@ -186,6 +194,12 @@ defineExpose({ focusInput, appendContent })
             </option>
           </select>
         </label>
+
+        <!-- Running indicator -->
+        <span v-if="isTurnRunning" class="composer-chip composer-chip--running">
+          <span class="composer-chip__running-dot" />
+          运行中
+        </span>
 
       </div>
 
@@ -346,8 +360,43 @@ defineExpose({ focusInput, appendContent })
   pointer-events: none;
 }
 
+.composer-chip__icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  line-height: 1;
+  pointer-events: none;
+  color: var(--dq-label-tertiary);
+}
+
+.composer-chip__icon :deep(svg) {
+  display: block;
+}
+
 .composer-chip--select {
   padding-right: 22px;
+}
+
+.composer-chip--running {
+  border-color: color-mix(in srgb, var(--dq-accent) 25%, transparent);
+  background: color-mix(in srgb, var(--dq-accent) 12%, transparent);
+  color: var(--dq-accent);
+  cursor: default;
+  padding-right: 10px;
+}
+
+.composer-chip__running-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dq-accent);
+  flex-shrink: 0;
+  animation: composer-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes composer-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 
 .composer-float__send {

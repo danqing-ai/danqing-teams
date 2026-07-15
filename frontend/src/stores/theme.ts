@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 
-export type ThemeId = 'mac' | 'linear-dark' | 'china-red-dark' | 'shadcn-dark' | 'shadcn-light'
+export type ThemeId = 'mac' | 'linear-dark' | 'china-red-dark' | 'shadcn-dark' | 'shadcn-light' | 'catppuccin' | 'tokyo-night' | 'minimal-light' | 'dracula' | 'nord-dark' | 'catppuccin-latte' | 'nord-light' | 'github-light'
 
 export interface ThemeOption {
   id: ThemeId
@@ -19,7 +19,7 @@ export const THEME_OPTIONS: ThemeOption[] = [
   {
     id: 'mac',
     label: 'macOS',
-    description: 'macOS 原生风格',
+    description: 'macOS 26 Liquid Glass 原生风格',
     htmlClass: 'dq-mac',
     accent: '#0a84ff',
     dark: true,
@@ -56,12 +56,76 @@ export const THEME_OPTIONS: ThemeOption[] = [
     accent: '#18181b',
     dark: false,
   },
+  {
+    id: 'catppuccin',
+    label: 'Catppuccin Mocha',
+    description: '暖色柔和暗色主题，护眼舒适',
+    htmlClass: 'dq-catppuccin',
+    accent: '#cba6f7',
+    dark: true,
+  },
+  {
+    id: 'tokyo-night',
+    label: 'Tokyo Night',
+    description: '霓虹都市暗色主题，高对比度',
+    htmlClass: 'dq-tokyo-night',
+    accent: '#7aa2f7',
+    dark: true,
+  },
+  {
+    id: 'minimal-light',
+    label: 'Minimal Light',
+    description: '极简纯白亮色主题，专注编码',
+    htmlClass: 'dq-minimal-light',
+    accent: '#0066cc',
+    dark: false,
+  },
+  {
+    id: 'dracula',
+    label: 'Dracula',
+    description: '经典暗紫开发者主题',
+    htmlClass: 'dq-dracula',
+    accent: '#bd93f9',
+    dark: true,
+  },
+  {
+    id: 'nord-dark',
+    label: 'Nord Dark',
+    description: '北极蓝灰暗色主题，冷静沉稳',
+    htmlClass: 'dq-nord-dark',
+    accent: '#88c0d0',
+    dark: true,
+  },
+  {
+    id: 'catppuccin-latte',
+    label: 'Catppuccin Latte',
+    description: '暖色柔和亮色主题，护眼舒适',
+    htmlClass: 'dq-catppuccin-latte',
+    accent: '#1e66f5',
+    dark: false,
+  },
+  {
+    id: 'nord-light',
+    label: 'Nord Light',
+    description: '北极冰雪亮色主题，清新明快',
+    htmlClass: 'dq-nord-light',
+    accent: '#5e81ac',
+    dark: false,
+  },
+  {
+    id: 'github-light',
+    label: 'GitHub Light',
+    description: 'GitHub Primer 亮色主题，开发者首选',
+    htmlClass: 'dq-github-light',
+    accent: '#0969da',
+    dark: false,
+  },
 ]
 
 const STORAGE_KEY = 'dq-theme'
 
 /** All theme classes that can appear on <html> */
-const ALL_THEME_CLASSES = ['dq-mac', 'dq-linear-dark', 'dq-china-red-dark', 'dq-shadcn-dark', 'dq-shadcn-light']
+const ALL_THEME_CLASSES = ['dq-mac', 'dq-linear-dark', 'dq-china-red-dark', 'dq-shadcn-dark', 'dq-shadcn-light', 'dq-catppuccin', 'dq-tokyo-night', 'dq-minimal-light', 'dq-dracula', 'dq-nord-dark', 'dq-catppuccin-latte', 'dq-nord-light', 'dq-github-light']
 
 function applyTheme(id: ThemeId) {
   const option = THEME_OPTIONS.find((o) => o.id === id)

@@ -67,7 +67,7 @@ watch(() => llm.models, (newModels, oldModels) => {
   grid-template-rows: minmax(0, 1fr);
   height: 100vh;
   overflow: hidden;
-  background: var(--dq-bg-page);
+  background: var(--dq-bg-base);
 }
 
 .app-workspace {
