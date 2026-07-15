@@ -30,7 +30,7 @@ func NewHTTPProvider(baseURL, apiKey string) *HTTPProvider {
 	}
 }
 
-func (p *HTTPProvider) Chat(ctx context.Context, req port.LLMChatRequest) (port.LLMChatResponse, error) {
+func (p *HTTPProvider) Chat(ctx context.Context, req port.LLMChatRequest, effort string) (port.LLMChatResponse, error) {
 	model := req.Model
 	if model == "" {
 		model = "gpt-4o"
@@ -120,6 +120,10 @@ func (p *HTTPProvider) Chat(ctx context.Context, req port.LLMChatRequest) (port.
 		} else {
 			body["tool_choice"] = "auto"
 		}
+	}
+
+	if effort != "" && effort != "off" {
+		body["reasoning_effort"] = effort
 	}
 
 	b, err := json.Marshal(body)

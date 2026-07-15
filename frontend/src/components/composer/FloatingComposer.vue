@@ -4,6 +4,7 @@ import { useSessionsStore } from '@/stores/sessions'
 import { useProjectsStore } from '@/stores/projects'
 import { useLLMStore } from '@/stores/llm'
 import { toast } from '@/utils/feedback'
+import type { LLMModel } from '@/types/mission'
 
 const content = ref('')
 const inputWrap = ref<HTMLElement | null>(null)
@@ -12,12 +13,56 @@ const projects = useProjectsStore()
 const llm = useLLMStore()
 
 const availableModels = computed(() => {
-  return llm.models.map((m) => ({ id: m.id, label: m.id }))
+  return llm.models.map((m) => ({ id: m.id, label: m.id, model: m }))
 })
 
-const selectedModelLabel = computed(
-  () => availableModels.value.find((m) => m.id === sessions.selectedModelId)?.label ?? sessions.selectedModelId,
-)
+const selectedModel = computed<LLMModel | undefined>(() => {
+  const parts = sessions.selectedModelId.split('/')
+  const baseId = parts.length >= 2 ? `${parts[0]}/${parts[1]}` : sessions.selectedModelId
+  return llm.models.find((m) => m.id === baseId)
+})
+
+const selectedBaseModelId = computed({
+  get: () => {
+    const parts = sessions.selectedModelId.split('/')
+    return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : sessions.selectedModelId
+  },
+  set: (v: string) => {
+    const newModel = llm.models.find((m) => m.id === v)
+    const efforts = newModel?.availableEfforts ?? []
+    let effort = sessions.selectedEffort
+    if (effort && efforts.length > 0 && !efforts.includes(effort)) {
+      effort = efforts[0]
+      sessions.selectedEffort = effort
+    }
+    sessions.selectedModelId = effort && effort !== 'off' ? `${v}/${effort}` : v
+  },
+})
+
+const selectedModelLabel = computed(() => {
+  const parts = sessions.selectedModelId.split('/')
+  const baseId = parts.length >= 2 ? `${parts[0]}/${parts[1]}` : sessions.selectedModelId
+  return availableModels.value.find((m) => m.id === baseId)?.label ?? baseId
+})
+
+const availableEfforts = computed<string[]>(() => {
+  return selectedModel.value?.availableEfforts ?? []
+})
+
+const selectedEffortLabel = computed(() => {
+  const e = sessions.selectedEffort
+  if (!e || e === 'off') return 'off'
+  return e
+})
+
+// When effort changes, update the full modelId
+watch(() => sessions.selectedEffort, (effort) => {
+  const parts = sessions.selectedModelId.split('/')
+  if (parts.length >= 2) {
+    const base = `${parts[0]}/${parts[1]}`
+    sessions.selectedModelId = effort && effort !== 'off' ? `${base}/${effort}` : base
+  }
+})
 
 const primaryAgents = computed(() =>
   sessions.agents.filter((a) => a.mode !== 'subagent' && a.id !== 'default'),
@@ -172,17 +217,6 @@ defineExpose({ focusInput, appendContent })
           <span class="composer-chip__label composer-chip__label--accent">请先配置 LLM 提供商</span>
         </label>
 
-        <!-- Model selector -->
-        <label v-else class="composer-chip composer-chip--select composer-chip--model">
-          <span class="composer-chip__icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg></span>
-          <span class="composer-chip__label">{{ selectedModelLabel }}</span>
-          <select v-model="sessions.selectedModelId" class="composer-chip__select" aria-label="选择模型">
-            <option v-for="model in availableModels" :key="model.id" :value="model.id">
-              {{ model.label }}
-            </option>
-          </select>
-        </label>
-
         <!-- Agent selector -->
         <label v-if="(sessions.composingNew || sessions.currentSessionId) && primaryAgents.length" class="composer-chip composer-chip--select composer-chip--agent">
           <span class="composer-chip__icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
@@ -191,6 +225,27 @@ defineExpose({ focusInput, appendContent })
             <option :value="null">Default</option>
             <option v-for="a in primaryAgents" :key="a.id" :value="a.id">
               {{ a.name }}
+            </option>
+          </select>
+        </label>
+
+        <!-- Model selector -->
+        <label v-if="llm.modelsLoaded && availableModels.length" class="composer-chip composer-chip--select composer-chip--model">
+          <span class="composer-chip__icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg></span>
+          <span class="composer-chip__label">{{ selectedModelLabel }}</span>
+          <select v-model="selectedBaseModelId" class="composer-chip__select" aria-label="选择模型">
+            <option v-for="model in availableModels" :key="model.id" :value="model.id">
+              {{ model.label }}
+            </option>
+          </select>
+        </label>
+
+        <!-- Effort selector -->
+        <label v-if="llm.modelsLoaded && availableEfforts.length > 1" class="composer-chip composer-chip--select composer-chip--effort">
+          <span class="composer-chip__label">{{ selectedEffortLabel }}</span>
+          <select v-model="sessions.selectedEffort" class="composer-chip__select" aria-label="选择思考等级">
+            <option v-for="e in availableEfforts" :key="e" :value="e">
+              {{ e }}
             </option>
           </select>
         </label>

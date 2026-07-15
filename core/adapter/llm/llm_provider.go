@@ -20,7 +20,7 @@ func NewDefaultLLMProvider(mgr *service.LLMConfigManager, modelCfg *service.Mode
 }
 
 func (c *DefaultLLMProviderClient) Chat(ctx context.Context, req port.LLMChatRequest) (port.LLMChatResponse, error) {
-	providerName, modelName := ParseModelID(req.Model)
+	providerName, modelName, effort := ParseModelID(req.Model)
 	if providerName == "" {
 		return port.LLMChatResponse{}, fmt.Errorf("model not specified or invalid format (expected provider/model)")
 	}
@@ -41,18 +41,24 @@ func (c *DefaultLLMProviderClient) Chat(ctx context.Context, req port.LLMChatReq
 
 	switch cfg.Provider {
 	case domain.LLMProviderAnthropic:
-		return NewAnthropicProvider(cfg.BaseURL, cfg.APIKey).Chat(ctx, req)
+		return NewAnthropicProvider(cfg.BaseURL, cfg.APIKey).Chat(ctx, req, effort)
 	case domain.LLMProviderMock:
 		return NewMock().Chat(ctx, req)
 	default:
-		return NewHTTPProvider(cfg.BaseURL, cfg.APIKey).Chat(ctx, req)
+		return NewHTTPProvider(cfg.BaseURL, cfg.APIKey).Chat(ctx, req, effort)
 	}
 }
 
-func ParseModelID(modelID string) (providerName, modelName string) {
-	parts := strings.SplitN(modelID, "/", 2)
-	if len(parts) == 2 {
-		return parts[0], parts[1]
+func ParseModelID(modelID string) (providerName, modelName, effort string) {
+	parts := strings.SplitN(modelID, "/", 3)
+	if len(parts) >= 1 {
+		providerName = parts[0]
 	}
-	return "", modelID
+	if len(parts) >= 2 {
+		modelName = parts[1]
+	}
+	if len(parts) >= 3 {
+		effort = parts[2]
+	}
+	return
 }

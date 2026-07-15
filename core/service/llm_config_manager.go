@@ -133,12 +133,19 @@ func (m *LLMConfigManager) ListModels(ctx context.Context) []domain.LLMModel {
 				continue
 			}
 			modelID := cfg.Name + "/" + ref.Name
+			var efforts []string
+			if cfg.Provider == domain.LLMProviderAnthropic {
+				efforts = domain.DefaultEffortsAnthropic
+			} else {
+				efforts = domain.DefaultEffortsOpenAI
+			}
 			out = append(out, domain.LLMModel{
-				ID:         modelID,
-				Name:       ref.Name,
-				ProviderID: cfg.ID,
-				Provider:   string(cfg.Provider),
-				Enabled:    ref.Enabled,
+				ID:               modelID,
+				Name:             ref.Name,
+				ProviderID:       cfg.ID,
+				Provider:         string(cfg.Provider),
+				Enabled:          ref.Enabled,
+				AvailableEfforts: efforts,
 			})
 		}
 	}
@@ -146,8 +153,8 @@ func (m *LLMConfigManager) ListModels(ctx context.Context) []domain.LLMModel {
 }
 
 func (m *LLMConfigManager) ResolveProvider(ctx context.Context, modelID string) (domain.LLMProviderConfig, string, error) {
-	parts := strings.SplitN(modelID, "/", 2)
-	if len(parts) != 2 {
+	parts := strings.SplitN(modelID, "/", 3)
+	if len(parts) < 2 {
 		return domain.LLMProviderConfig{}, "", fmt.Errorf("invalid model identifier: %s, expected format: provider_name/model_name", modelID)
 	}
 	providerName := parts[0]

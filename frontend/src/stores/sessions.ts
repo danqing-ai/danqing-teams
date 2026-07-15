@@ -8,6 +8,20 @@ import { useSkillsStore } from '@/stores/skills'
 
 const base = apiBaseUrl()
 const MODEL_KEY = 'teams-composer-model'
+const EFFORT_KEY = 'teams-composer-effort'
+
+function encodeModelId(modelBaseId: string, effort: string): string {
+  if (!effort || effort === 'off') return modelBaseId
+  return `${modelBaseId}/${effort}`
+}
+
+function decodeModelId(modelId: string): { baseModelId: string; effort: string } {
+  const parts = modelId.split('/')
+  if (parts.length >= 3) {
+    return { baseModelId: `${parts[0]}/${parts[1]}`, effort: parts[2] }
+  }
+  return { baseModelId: modelId, effort: '' }
+}
 
 export const useSessionsStore = defineStore('sessions', () => {
   const sessions = ref<Session[]>([])
@@ -20,6 +34,7 @@ export const useSessionsStore = defineStore('sessions', () => {
   const agentRuns = ref<AgentRun[]>([])
 
   const selectedModelId = ref(localStorage.getItem(MODEL_KEY) ?? '')
+  const selectedEffort = ref(localStorage.getItem(EFFORT_KEY) ?? '')
   const selectedProjectId = ref<string | null>(null)
   const selectedAgentId = ref<string | null>(null)
   const composingNew = ref(true)
@@ -33,13 +48,21 @@ export const useSessionsStore = defineStore('sessions', () => {
     // Detect newly added model and auto-select it
     const added = models.find((m) => !previousIds.has(m.id))
     if (added) {
-      selectedModelId.value = added.id
+      const m = added
+      const efforts = m.availableEfforts && m.availableEfforts.length > 0 ? m.availableEfforts : ['off']
+      const effort = efforts.includes(selectedEffort.value) ? selectedEffort.value : efforts[0]
+      selectedEffort.value = effort
+      selectedModelId.value = encodeModelId(m.id, effort)
       return
     }
 
     // Current selection invalid — fall back to first available
-    if (!selectedModelId.value || !ids.includes(selectedModelId.value)) {
-      selectedModelId.value = ids[0]
+    const current = decodeModelId(selectedModelId.value)
+    if (!selectedModelId.value || !ids.includes(current.baseModelId)) {
+      const m = models[0]
+      const efforts = m.availableEfforts && m.availableEfforts.length > 0 ? m.availableEfforts : ['off']
+      selectedEffort.value = efforts[0]
+      selectedModelId.value = encodeModelId(m.id, efforts[0])
     }
   }
 
@@ -53,6 +76,10 @@ export const useSessionsStore = defineStore('sessions', () => {
         void updateSession(currentSessionId.value, { modelId: v })
       }
     }
+  })
+
+  watch(selectedEffort, (v) => {
+    localStorage.setItem(EFFORT_KEY, v)
   })
 
   watch(selectedAgentId, (v) => {
@@ -104,7 +131,7 @@ export const useSessionsStore = defineStore('sessions', () => {
   }
 
   function defaultAgentId(): string {
-    const priority = ['default', 'team', 'planner']
+    const priority = ['team', 'default', 'planner']
     for (const id of priority) {
       if (agents.value.find((a) => a.id === id && a.mode !== 'subagent')) return id
     }
@@ -311,7 +338,11 @@ export const useSessionsStore = defineStore('sessions', () => {
     selectedProjectId.value = t?.projectId ?? null
     selectedAgentId.value = t?.agentId ?? null
     if (t?.modelId) {
+      const decoded = decodeModelId(t.modelId)
       selectedModelId.value = t.modelId
+      if (decoded.effort) {
+        selectedEffort.value = decoded.effort
+      }
     }
     streamEvents.value = []
     lastSeq = 0
@@ -355,6 +386,7 @@ export const useSessionsStore = defineStore('sessions', () => {
     workers,
     agentRuns,
     selectedModelId,
+    selectedEffort,
     selectedProjectId,
     selectedAgentId,
     composingNew,

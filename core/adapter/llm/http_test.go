@@ -30,7 +30,7 @@ func TestHTTPProviderParsesUsage(t *testing.T) {
 	defer server.Close()
 
 	p := NewHTTPProvider(server.URL, "")
-	resp, err := p.Chat(context.Background(), port.LLMChatRequest{Model: "gpt-4o"})
+	resp, err := p.Chat(context.Background(), port.LLMChatRequest{Model: "gpt-4o"}, "")
 	if err != nil {
 		t.Fatalf("chat: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestHTTPProviderOmitsEmptyUsage(t *testing.T) {
 	defer server.Close()
 
 	p := NewHTTPProvider(server.URL, "")
-	resp, err := p.Chat(context.Background(), port.LLMChatRequest{})
+	resp, err := p.Chat(context.Background(), port.LLMChatRequest{}, "")
 	if err != nil {
 		t.Fatalf("chat: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestHTTPProviderToolCallWithArguments(t *testing.T) {
 	defer server.Close()
 
 	p := NewHTTPProvider(server.URL, "")
-	resp, err := p.Chat(context.Background(), port.LLMChatRequest{Model: "test"})
+	resp, err := p.Chat(context.Background(), port.LLMChatRequest{Model: "test"}, "")
 	if err != nil {
 		t.Fatalf("chat: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestHTTPProviderToolCallNullArguments(t *testing.T) {
 	defer server.Close()
 
 	p := NewHTTPProvider(server.URL, "")
-	_, err := p.Chat(context.Background(), port.LLMChatRequest{Model: "test"})
+	_, err := p.Chat(context.Background(), port.LLMChatRequest{Model: "test"}, "")
 	if err == nil {
 		t.Fatal("expected error for null arguments")
 	}
@@ -167,7 +167,7 @@ func TestHTTPProviderToolCallEmptyStringArguments(t *testing.T) {
 	defer server.Close()
 
 	p := NewHTTPProvider(server.URL, "")
-	_, err := p.Chat(context.Background(), port.LLMChatRequest{Model: "test"})
+	_, err := p.Chat(context.Background(), port.LLMChatRequest{Model: "test"}, "")
 	if err == nil {
 		t.Fatal("expected error for empty string arguments")
 	}

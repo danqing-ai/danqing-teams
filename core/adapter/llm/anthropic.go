@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"danqing-teams/core/domain"
 	"danqing-teams/core/port"
 )
 
@@ -29,7 +30,7 @@ func NewAnthropicProvider(baseURL, apiKey string) *AnthropicProvider {
 	}
 }
 
-func (p *AnthropicProvider) Chat(ctx context.Context, req port.LLMChatRequest) (port.LLMChatResponse, error) {
+func (p *AnthropicProvider) Chat(ctx context.Context, req port.LLMChatRequest, effort string) (port.LLMChatResponse, error) {
 	model := req.Model
 	if model == "" {
 		model = "claude-sonnet-4-20250514"
@@ -104,6 +105,8 @@ func (p *AnthropicProvider) Chat(ctx context.Context, req port.LLMChatRequest) (
 		}
 		body["tools"] = tools
 	}
+
+	ApplyReasoningEffort(domain.LLMProviderAnthropic, effort, body)
 
 	b, err := json.Marshal(body)
 	if err != nil {

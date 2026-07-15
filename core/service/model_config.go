@@ -121,11 +121,11 @@ func (r *ModelConfigRegistry) LoadFromConfig(ctx context.Context, store port.Con
 }
 
 func splitModelID(modelID string) (provider, model string) {
-	idx := strings.Index(modelID, "/")
-	if idx < 0 {
-		return "", modelID
+	parts := strings.SplitN(modelID, "/", 3)
+	if len(parts) >= 2 {
+		return parts[0], parts[1]
 	}
-	return modelID[:idx], modelID[idx+1:]
+	return "", modelID
 }
 
 const (

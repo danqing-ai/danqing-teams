@@ -119,6 +119,7 @@ export interface LLMModel {
   providerId: string
   provider: string
   enabled: boolean
+  availableEfforts: string[]
 }
 
 export interface ModelConfig {
@@ -130,6 +131,7 @@ export interface ModelConfig {
   frequency_penalty?: number
   presence_penalty?: number
   stop?: string[]
+  available_efforts?: string[]
 }
 
 export type SearchProvider =
