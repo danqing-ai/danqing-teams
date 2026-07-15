@@ -14,9 +14,6 @@ import (
 	"danqing-teams/core/port"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/extension"
-	goldmarkHtml "github.com/yuin/goldmark/renderer/html"
 )
 
 // Version is set at build time via -ldflags.
@@ -741,15 +738,6 @@ func serveProjectFile(h *Handler) gin.HandlerFunc {
 		}
 		if i := strings.Index(ct, ";"); i != -1 {
 			ct = ct[:i]
-		}
-		// Render .md to HTML
-		ext := strings.ToLower(filepath[strings.LastIndex(filepath, "."):])
-		if ext == ".md" || ext == ".markdown" {
-			var buf bytes.Buffer
-			goldmark.New(goldmark.WithExtensions(extension.Table), goldmark.WithRendererOptions(goldmarkHtml.WithUnsafe())).Convert(data, &buf)
-			html := fmt.Sprintf(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{background:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#24292f;max-width:900px;margin:0 auto;padding:32px}h1,h2{padding-bottom:.3em;border-bottom:1px solid #d0d7de}h1{font-size:2em}h2{font-size:1.5em}pre{background:#f6f8fa;padding:16px;border-radius:6px;overflow:auto;font-size:85%%}code{font-family:"SF Mono",Monaco,monospace;font-size:85%%;background:#f6f8fa;padding:.2em .4em;border-radius:3px}pre code{background:none;padding:0}table{border-collapse:collapse;width:100%%}td,th{border:1px solid #d0d7de;padding:6px 13px}th{background:#f6f8fa}tr:nth-child(2n){background:#f6f8fa}blockquote{border-left:4px solid #d0d7de;padding:0 1em;color:#57606a}img{max-width:100%%}a{color:#0969da}ul,ol{padding-left:2em}</style></head><body>%s</body></html>`, buf.String())
-			c.Data(http.StatusOK, "text/html", []byte(html + dqInspectScript))
-			return
 		}
 		// Inject inspect listener into HTML responses
 		if ct == "text/html" {
