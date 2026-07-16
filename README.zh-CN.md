@@ -216,7 +216,6 @@ Tag 触发时会将产物附加到 GitHub Release。
 
 | 文档 | 说明 |
 |------|------|
-| [docs/core-design.md](docs/core-design.md) | 核心引擎设计 |
-| [docs/unified_agent_architecture.md](docs/unified_agent_architecture.md) | 统一 Agent 架构 |
+| [docs/core-design.md](docs/core-design.md) | 核心设计：统一 Agent 架构与引擎 |
 | [AGENTS.md](AGENTS.md) | 贡献者 / Agent 速查 |
 | [config.example.yaml](config.example.yaml) | 完整配置参考 |

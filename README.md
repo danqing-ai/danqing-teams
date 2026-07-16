@@ -216,7 +216,6 @@ Tag builds are attached to the GitHub Release.
 
 | Doc | Description |
 |-----|-------------|
-| [docs/core-design.md](docs/core-design.md) | Core engine design |
-| [docs/unified_agent_architecture.md](docs/unified_agent_architecture.md) | Unified agent architecture |
+| [docs/core-design.md](docs/core-design.md) | Core design: unified agent architecture & engine |
 | [AGENTS.md](AGENTS.md) | Contributor / agent quick reference |
 | [config.example.yaml](config.example.yaml) | Full config reference |
