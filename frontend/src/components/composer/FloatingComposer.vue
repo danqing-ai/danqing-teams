@@ -342,8 +342,10 @@ defineExpose({ focusInput, appendContent })
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex: 1 1 0;
+  flex-wrap: nowrap;
   min-width: 0;
+  overflow: hidden;
 }
 
 .composer-float__actions-right {
@@ -434,6 +436,7 @@ defineExpose({ focusInput, appendContent })
 }
 
 .composer-chip--running {
+  flex-shrink: 0;
   border-color: color-mix(in srgb, var(--dq-accent) 25%, transparent);
   background: color-mix(in srgb, var(--dq-accent) 12%, transparent);
   color: var(--dq-accent);
@@ -482,11 +485,16 @@ defineExpose({ focusInput, appendContent })
 }
 
 .composer-chip-select {
+  flex: 0 1 auto;
   min-width: 0;
   max-width: 160px;
 }
 
 .composer-chip-select :deep(.dq-select__trigger) {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
   border-color: color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
 }
