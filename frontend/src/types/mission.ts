@@ -139,6 +139,7 @@ export interface ModelConfig {
 export type SearchProvider =
   | 'duckduckgo'
   | 'bing'
+  | 'brave'
   | 'tavily'
   | 'bocha'
   | 'metaso'
@@ -153,6 +154,9 @@ export interface SearchConfig {
   apiKey?: string
   timeoutMs: number
   maxResults: number
+  proxy?: string
+  userAgent?: string
+  htmlFallback?: boolean
 }
 
 export interface UpsertSearchConfigRequest {
@@ -161,6 +165,9 @@ export interface UpsertSearchConfigRequest {
   apiKey?: string
   timeoutMs?: number
   maxResults?: number
+  proxy?: string
+  userAgent?: string
+  htmlFallback?: boolean
 }
 
 export interface ConfigFile {

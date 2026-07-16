@@ -48,11 +48,14 @@ func (m *ConfigManager) Update(ctx context.Context, req domain.UpdateConfigFileR
 			return nil, fmt.Errorf("invalid search provider: %s", req.Search.Provider)
 		}
 		cfg.Search = domain.SearchConfig{
-			Provider:   req.Search.Provider,
-			BaseURL:    req.Search.BaseURL,
-			APIKey:     req.Search.APIKey,
-			TimeoutMs:  req.Search.TimeoutMs,
-			MaxResults: req.Search.MaxResults,
+			Provider:     req.Search.Provider,
+			BaseURL:      req.Search.BaseURL,
+			APIKey:       req.Search.APIKey,
+			TimeoutMs:    req.Search.TimeoutMs,
+			MaxResults:   req.Search.MaxResults,
+			Proxy:        req.Search.Proxy,
+			UserAgent:    req.Search.UserAgent,
+			HTMLFallback: req.Search.HTMLFallback,
 		}
 	}
 	if req.LLM != nil {

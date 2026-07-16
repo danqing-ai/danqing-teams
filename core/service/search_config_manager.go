@@ -61,11 +61,14 @@ func (m *SearchConfigManager) Upsert(ctx context.Context, req domain.UpsertSearc
 	}
 
 	cfg := domain.SearchConfig{
-		Provider:   req.Provider,
-		BaseURL:    req.BaseURL,
-		APIKey:     req.APIKey,
-		TimeoutMs:  req.TimeoutMs,
-		MaxResults: req.MaxResults,
+		Provider:     req.Provider,
+		BaseURL:      req.BaseURL,
+		APIKey:       req.APIKey,
+		TimeoutMs:    req.TimeoutMs,
+		MaxResults:   req.MaxResults,
+		Proxy:        req.Proxy,
+		UserAgent:    req.UserAgent,
+		HTMLFallback: req.HTMLFallback,
 	}
 	if err := m.store.Upsert(ctx, cfg); err != nil {
 		return domain.SearchConfig{}, err
@@ -83,7 +86,8 @@ func isValidSearchProvider(p domain.SearchProvider) bool {
 	switch p {
 	case domain.SearchProviderDuckDuckGo, domain.SearchProviderBing, domain.SearchProviderTavily,
 		domain.SearchProviderBocha, domain.SearchProviderMetaso, domain.SearchProviderSearxng,
-		domain.SearchProviderBaidu, domain.SearchProviderVolcengine, domain.SearchProviderSofya:
+		domain.SearchProviderBaidu, domain.SearchProviderVolcengine, domain.SearchProviderSofya,
+		domain.SearchProviderBrave:
 		return true
 	}
 	return false

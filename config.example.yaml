@@ -30,9 +30,9 @@ runtime:
   knowledge:
     search_top_k: 3          # knowledge-base hits injected per turn
 
-# Search backend for the web_search tool.
+# Search backend for the web_search / web_fetch tools.
 search:
-  # Supported: duckduckgo (default), bing, tavily, bocha, metaso, searxng, baidu, volcengine, sofya
+  # Supported: duckduckgo (default), bing, brave, tavily, bocha, metaso, searxng, baidu, volcengine, sofya
   provider: "duckduckgo"
 
   # Optional endpoint override.
@@ -41,8 +41,8 @@ search:
   # Unused for other providers.
   base_url: ""
 
-  # API key. Required for tavily, bocha, baidu, volcengine, and sofya.
-  # Optional for metaso (raises quota). Unused for duckduckgo, bing, and searxng.
+  # API key. Required for brave, tavily, bocha, baidu, volcengine, sofya, and metaso.
+  # Unused for duckduckgo, bing, and searxng.
   api_key: ""
 
   # Timeout in milliseconds for each search request (default 15000, min 1000, max 60000).
@@ -50,6 +50,15 @@ search:
 
   # Maximum number of search results returned per query (default 5, max 10).
   max_results: 5
+
+  # Optional HTTP(S) proxy for web_search / web_fetch (falls back to HTTP(S)_PROXY env).
+  proxy: ""
+
+  # Optional User-Agent override (defaults to a current Chrome desktop UA).
+  user_agent: ""
+
+  # When an API provider fails or returns zero results, fall back to DuckDuckGo/Bing HTML (default true).
+  html_fallback: true
 
 # LLM provider presets — shown as quick-start templates when adding a provider.
 # These are defaults; edit or add entries to customise. The frontend "Add Provider"

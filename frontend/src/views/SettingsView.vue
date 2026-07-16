@@ -49,6 +49,9 @@ const searchForm = ref({
   apiKey: '',
   timeoutMs: 15000,
   maxResults: 5,
+  proxy: '',
+  userAgent: '',
+  htmlFallback: true,
 })
 
 const runtimeForm = ref({
@@ -114,6 +117,9 @@ onMounted(async () => {
       apiKey: searchConfig.config.apiKey ?? '',
       timeoutMs: searchConfig.config.timeoutMs ?? 15000,
       maxResults: searchConfig.config.maxResults ?? 5,
+      proxy: searchConfig.config.proxy ?? '',
+      userAgent: searchConfig.config.userAgent ?? '',
+      htmlFallback: searchConfig.config.htmlFallback ?? true,
     }
   }
   if (runtimeConfig.config) {
@@ -319,6 +325,9 @@ async function handleSaveSearch() {
     apiKey: searchForm.value.apiKey.trim() || undefined,
     timeoutMs: searchForm.value.timeoutMs,
     maxResults: searchForm.value.maxResults,
+    proxy: searchForm.value.proxy.trim() || undefined,
+    userAgent: searchForm.value.userAgent.trim() || undefined,
+    htmlFallback: searchForm.value.htmlFallback,
   }
   try {
     await searchConfig.saveConfig(payload)
@@ -696,6 +705,16 @@ const hasFooterActions = computed(() => {
             <DqInput v-model="searchForm.apiKey" type="password" :placeholder="$t('settings.apiKeyOptional')" />
           </label>
 
+          <label class="settings-field">
+            <span class="settings-field__label">{{ $t('settings.searchProxy') }}</span>
+            <DqInput v-model="searchForm.proxy" :placeholder="$t('settings.searchProxyPlaceholder')" />
+          </label>
+
+          <label class="settings-field">
+            <span class="settings-field__label">{{ $t('settings.searchUserAgent') }}</span>
+            <DqInput v-model="searchForm.userAgent" :placeholder="$t('settings.searchUserAgentPlaceholder')" />
+          </label>
+
           <div class="settings-form-row">
             <div class="settings-field settings-field--half">
               <span class="settings-field__label">{{ $t('settings.timeout') }}</span>
@@ -712,6 +731,16 @@ const hasFooterActions = computed(() => {
               </div>
             </div>
           </div>
+
+          <label class="settings-field settings-field--switch">
+            <span class="settings-field__label">{{ $t('settings.htmlFallback') }}</span>
+            <DqSwitch
+              :model-value="searchForm.htmlFallback"
+              size="small"
+              @update:model-value="(v: boolean) => searchForm.htmlFallback = v"
+            />
+          </label>
+          <p class="settings-form-group__desc">{{ $t('settings.htmlFallbackDesc') }}</p>
 
         </div>
       </div>

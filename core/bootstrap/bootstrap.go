@@ -152,10 +152,11 @@ func New(cfg Config) *Core {
 	eng.RegisterTool(&builtin.Grep{})
 	eng.RegisterTool(&builtin.Glob{})
 	eng.RegisterTool(&builtin.TodoWrite{})
-	eng.RegisterTool(&builtin.WebFetch{})
-	eng.RegisterTool(&builtin.WebSearch{ConfigFunc: func(ctx context.Context) (domain.SearchConfig, error) {
+	searchCfgFn := func(ctx context.Context) (domain.SearchConfig, error) {
 		return searchConfig.Get(ctx)
-	}})
+	}
+	eng.RegisterTool(&builtin.WebFetch{ConfigFunc: searchCfgFn})
+	eng.RegisterTool(&builtin.WebSearch{ConfigFunc: searchCfgFn})
 	eng.RegisterTool(&builtin.AskUser{})
 	eng.RegisterTool(&builtin.Sleep{})
 	eng.RegisterTool(&builtin.ReadSkill{Skills: skills})

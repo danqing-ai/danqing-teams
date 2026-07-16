@@ -12,6 +12,7 @@ export const useSearchConfigStore = defineStore('searchConfig', () => {
   const providerOptions: { value: SearchProvider; label: string }[] = [
     { value: 'duckduckgo', label: 'DuckDuckGo (HTML)' },
     { value: 'bing', label: 'Bing (HTML)' },
+    { value: 'brave', label: 'Brave Search' },
     { value: 'tavily', label: 'Tavily' },
     { value: 'bocha', label: 'Bocha' },
     { value: 'metaso', label: 'Metaso' },

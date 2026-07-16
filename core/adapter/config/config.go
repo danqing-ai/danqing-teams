@@ -72,6 +72,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("search.api_key", "")
 	v.SetDefault("search.timeout_ms", 15000)
 	v.SetDefault("search.max_results", 5)
+	v.SetDefault("search.proxy", "")
+	v.SetDefault("search.user_agent", "")
+	v.SetDefault("search.html_fallback", true)
 }
 
 func bindEnv(v *viper.Viper) {
@@ -224,6 +227,21 @@ func (l *Loader) Upsert(ctx context.Context, cfg domain.SearchConfig) error {
 	}
 	search["timeout_ms"] = cfg.TimeoutMs
 	search["max_results"] = cfg.MaxResults
+	if cfg.Proxy != "" {
+		search["proxy"] = cfg.Proxy
+	} else {
+		delete(search, "proxy")
+	}
+	if cfg.UserAgent != "" {
+		search["user_agent"] = cfg.UserAgent
+	} else {
+		delete(search, "user_agent")
+	}
+	if cfg.HTMLFallback != nil {
+		search["html_fallback"] = *cfg.HTMLFallback
+	} else {
+		search["html_fallback"] = true
+	}
 
 	if err := os.MkdirAll(filepath.Dir(l.path), 0755); err != nil {
 		return err
