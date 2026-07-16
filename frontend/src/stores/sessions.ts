@@ -40,42 +40,34 @@ export const useSessionsStore = defineStore('sessions', () => {
   const composingNew = ref(true)
   const loading = ref(false)
 
-  /** Sync selected model: auto-select newly added model, or fix invalid selection */
-  function syncModelSelection(models: LLMModel[], previousIds: Set<string>) {
-    if (!models.length) return
-    const ids = models.map((m) => m.id)
-
-    // Detect newly added model and auto-select it
-    const added = models.find((m) => !previousIds.has(m.id))
-    if (added) {
-      const m = added
-      const efforts = m.availableEfforts && m.availableEfforts.length > 0 ? m.availableEfforts : ['off']
-      const effort = efforts.includes(selectedEffort.value) ? selectedEffort.value : efforts[0]
-      selectedEffort.value = effort
-      selectedModelId.value = encodeModelId(m.id, effort)
+  /** Keep Composer selection valid when the current model is removed; never auto-pick newly added models. */
+  function syncModelSelection(models: LLMModel[], _previousIds?: Set<string>) {
+    if (!models.length) {
+      selectedModelId.value = ''
+      selectedEffort.value = ''
       return
     }
-
-    // Current selection invalid — fall back to first available
+    const ids = models.map((m) => m.id)
     const current = decodeModelId(selectedModelId.value)
-    if (!selectedModelId.value || !ids.includes(current.baseModelId)) {
-      const m = models[0]
-      const efforts = m.availableEfforts && m.availableEfforts.length > 0 ? m.availableEfforts : ['off']
-      selectedEffort.value = efforts[0]
-      selectedModelId.value = encodeModelId(m.id, efforts[0])
+    if (selectedModelId.value && ids.includes(current.baseModelId)) {
+      // Selection still valid — leave Composer / session choice alone.
+      return
     }
+    // No selection or model was deleted — fall back to first available.
+    const m = models[0]
+    const efforts = m.availableEfforts && m.availableEfforts.length > 0 ? m.availableEfforts : ['off']
+    selectedEffort.value = efforts[0]
+    selectedModelId.value = encodeModelId(m.id, efforts[0])
   }
 
   watch(selectedModelId, (v) => {
     localStorage.setItem(MODEL_KEY, v)
-    // Persist model change to current session
-    if (currentSessionId.value) {
-      const idx = sessions.value.findIndex((x) => x.id === currentSessionId.value)
-      if (idx >= 0) {
-        sessions.value[idx] = { ...sessions.value[idx], modelId: v }
-        void updateSession(currentSessionId.value, { modelId: v })
-      }
-    }
+    // Persist model change to current session (skip compose / missing session)
+    if (composingNew.value || !currentSessionId.value) return
+    const idx = sessions.value.findIndex((x) => x.id === currentSessionId.value)
+    if (idx < 0) return
+    sessions.value[idx] = { ...sessions.value[idx], modelId: v }
+    void updateSession(currentSessionId.value, { modelId: v })
   })
 
   watch(selectedEffort, (v) => {
@@ -83,14 +75,12 @@ export const useSessionsStore = defineStore('sessions', () => {
   })
 
   watch(selectedAgentId, (v) => {
-    // Persist agent change to current session
-    if (currentSessionId.value && v) {
-      const idx = sessions.value.findIndex((x) => x.id === currentSessionId.value)
-      if (idx >= 0) {
-        sessions.value[idx] = { ...sessions.value[idx], agentId: v }
-        void updateSession(currentSessionId.value, { agentId: v })
-      }
-    }
+    // Persist agent change to current session (skip compose / missing session)
+    if (composingNew.value || !currentSessionId.value || !v) return
+    const idx = sessions.value.findIndex((x) => x.id === currentSessionId.value)
+    if (idx < 0) return
+    sessions.value[idx] = { ...sessions.value[idx], agentId: v }
+    void updateSession(currentSessionId.value, { agentId: v })
   })
 
   let eventSource: EventSource | null = null
@@ -197,12 +187,27 @@ export const useSessionsStore = defineStore('sessions', () => {
   }
 
   async function updateSession(id: string, payload: UpdateSessionPayload) {
-    const t = await fetchJSON<Session>(`/sessions/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    })
-    const idx = sessions.value.findIndex((x) => x.id === id)
-    if (idx >= 0) sessions.value[idx] = t
+    try {
+      const t = await fetchJSON<Session>(`/sessions/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      })
+      const idx = sessions.value.findIndex((x) => x.id === id)
+      if (idx >= 0) sessions.value[idx] = t
+    } catch (e) {
+      // Stale session id / DB switch must not crash the app (e.g. after saving a provider
+      // syncModelSelection PATCHes the current session and may 404).
+      console.warn('[updateSession]', id, e)
+      const msg = e instanceof Error ? e.message : ''
+      if (msg.includes('record not found') || msg.includes('not found')) {
+        if (currentSessionId.value === id) {
+          sessions.value = sessions.value.filter((s) => s.id !== id)
+          startCompose()
+        }
+        return
+      }
+      throw e
+    }
   }
 
   async function deleteSession(id: string) {

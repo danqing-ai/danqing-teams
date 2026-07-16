@@ -332,8 +332,9 @@ func (e *Engine) RecoverRunning(ctx context.Context) {
 		}
 	}
 
-	// 3. Recover stuck sessions: sessions with status "active" that have no
-	//    running turns are stuck — mark them as failed.
+	// 3. Recover stuck sessions: status "active" with no running turns means the
+	//    process died mid-flight. Derive the terminal status from turns — do NOT
+	//    always mark failed (completed turns would incorrectly show a failure badge).
 	sessions, err := e.sessions.List(ctx)
 	if err != nil {
 		log.Printf("[RecoverRunning] list sessions: %v", err)
@@ -348,18 +349,26 @@ func (e *Engine) RecoverRunning(ctx context.Context) {
 			continue
 		}
 		hasRunning := false
+		hasFailed := false
 		for _, t := range turns {
-			if t.Status == domain.TurnRunning {
+			switch t.Status {
+			case domain.TurnRunning:
 				hasRunning = true
-				break
+			case domain.TurnFailed, domain.TurnCancelled, domain.TurnTimeout:
+				hasFailed = true
 			}
 		}
-		if !hasRunning {
-			log.Printf("[RecoverRunning] session %s stuck in active with no running turns, marking as failed", s.ID)
-			s.Status = domain.SessionStatusFailed
-			s.UpdatedAt = time.Now().UTC()
-			_ = e.sessions.UpdateSession(ctx, s)
+		if hasRunning {
+			continue
 		}
+		status := domain.SessionStatusCompleted
+		if hasFailed || len(turns) == 0 {
+			status = domain.SessionStatusFailed
+		}
+		log.Printf("[RecoverRunning] session %s stuck in active with no running turns, marking as %s", s.ID, status)
+		s.Status = status
+		s.UpdatedAt = time.Now().UTC()
+		_ = e.sessions.UpdateSession(ctx, s)
 	}
 }
 

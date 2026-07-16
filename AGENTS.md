@@ -60,10 +60,28 @@ out/run/             # dev PIDs, logs, wrappers (DQ_DEV markers)
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `TEAMS_CONFIG` | — | YAML config path (`config.example.yaml`) |
+| `TEAMS_CONFIG` | `~/.dq-teams/config.yaml` | YAML config path |
+| `TEAMS_DB_PATH` | `~/.dq-teams/teams.db` | SQLite database |
+| `TEAMS_DATA_DIR` | `~/.dq-teams/data` | Projects / turn logs |
 | `DQ_BACKEND_PORT` | `7801` | Injected by dev scripts |
 | `DQ_FRONTEND_PORT` | `5801` | Injected by dev scripts |
 | `DQ_APP_NAME` | `danqing-teams` | App name for build scripts |
+
+### User data (`~/.dq-teams/`)
+
+Server, CLI, TUI, and desktop all use the same home by default:
+
+```
+~/.dq-teams/
+  config.yaml
+  teams.db
+  data/          # projects, turn logs
+  bin/           # desktop sidecar binary
+  backend.log    # desktop sidecar log
+```
+
+On first launch, existing data may be migrated from
+`~/Library/Application Support/com.danqing.teams/` or `./data/teams.db`.
 
 ## Desktop (Tauri)
 

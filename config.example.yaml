@@ -1,12 +1,13 @@
 # DanQing Teams configuration file
-# Copy this file to .dq-teams/config.yaml and edit values as needed.
-# All entry points (server, cli, tui) read from this file.
+# Default location: ~/.dq-teams/config.yaml
+# All entry points (server, cli, tui, desktop) share this home directory.
+# Override with TEAMS_CONFIG / TEAMS_DATA_DIR / TEAMS_DB_PATH if needed.
 
-# Data and persistence paths.
+# Data and persistence paths (defaults resolve under ~/.dq-teams/).
 data:
-  dir: "./data"
-  database: "./data/teams.db"
-  store: "sqlite"      # sqlite only today; memory backend reserved for future use.
+  dir: "data"                 # -> ~/.dq-teams/data
+  database: "teams.db"        # -> ~/.dq-teams/teams.db
+  store: "sqlite"             # sqlite only today; memory backend reserved for future use.
 
 # HTTP API server settings.
 server:

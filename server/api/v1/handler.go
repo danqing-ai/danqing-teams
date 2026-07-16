@@ -3,6 +3,7 @@ package v1
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"danqing-teams/core/port"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // Version is set at build time via -ldflags.
@@ -196,6 +198,10 @@ func updateSession(h *Handler) gin.HandlerFunc {
 		}
 		session, err := h.Sessions.Update(c, c.Param("id"), req)
 		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+				return
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}

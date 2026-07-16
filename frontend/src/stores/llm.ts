@@ -132,7 +132,7 @@ export const useLLMStore = defineStore('llm', () => {
       await loadModels()
       return res?.models ?? []
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '获取模型失败')
+      toast.error(e instanceof Error ? e.message : '获取模型失败（可改为手动添加模型）')
       throw e
     } finally {
       saving.value = false

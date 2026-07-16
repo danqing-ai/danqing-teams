@@ -7,12 +7,13 @@ import (
 
 	"danqing-teams/core/adapter/config"
 	"danqing-teams/core/adapter/llm"
-	"danqing-teams/core/service"
 	"danqing-teams/core/domain"
+	"danqing-teams/core/paths"
 	"danqing-teams/core/port"
 	dqruntime "danqing-teams/core/runtime"
 	"danqing-teams/core/runtime/prompt"
 	"danqing-teams/core/runtime/tool/builtin"
+	"danqing-teams/core/service"
 	sqlitestore "danqing-teams/core/store/sqlite"
 	"danqing-teams/core/store/turnlog"
 )
@@ -75,17 +76,16 @@ func New(cfg Config) *Core {
 	}
 
 	if appCfg.Data.Dir == "" {
-		appCfg.Data.Dir = "./data"
+		appCfg.Data.Dir = paths.DataDir()
 	}
 	if appCfg.Data.Database == "" {
-		appCfg.Data.Database = appCfg.Data.Dir + "/teams.db"
+		appCfg.Data.Database = paths.DatabaseFile()
 	}
-	configDir := filepath.Dir(loader.Path())
 	if !filepath.IsAbs(appCfg.Data.Dir) {
-		appCfg.Data.Dir = filepath.Join(configDir, appCfg.Data.Dir)
+		appCfg.Data.Dir = paths.ResolveAgainstHome(appCfg.Data.Dir)
 	}
 	if !filepath.IsAbs(appCfg.Data.Database) {
-		appCfg.Data.Database = filepath.Join(configDir, appCfg.Data.Database)
+		appCfg.Data.Database = paths.ResolveAgainstHome(appCfg.Data.Database)
 	}
 	if appCfg.Instance.ID == "" {
 		appCfg.Instance.ID = os.Getenv("TEAMS_INSTANCE_ID")
@@ -126,15 +126,12 @@ func New(cfg Config) *Core {
 
 	client := llm.NewDefaultLLMProvider(llmConfig, modelCfg)
 
+	// Always use the config-backed client so providers added after startup
+	// (Settings → LLM) are picked up on the next Chat call. Mock is only used
+	// when explicitly injected via bootstrap.Config.LLM (tests).
 	provider := cfg.LLM
 	if provider == nil {
-		var cfgs []domain.LLMProviderConfig
-		cfgs, _ = llmConfig.GetAll(context.Background())
-		if len(cfgs) == 0 {
-			provider = llm.NewMock()
-		} else {
-			provider = client
-		}
+		provider = client
 	}
 
 	ensureBuiltinAgents(agents)

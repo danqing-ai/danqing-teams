@@ -33,6 +33,7 @@ const editingId = ref<string | null>(null)
 const showForm = ref(false)
 const refreshingModels = ref(false)
 const dialogStep = ref<'choose' | 'configure'>('choose')
+const manualModelName = ref('')
 
 const form = ref({
   provider: 'openai' as LLMProviderType,
@@ -121,12 +122,7 @@ onMounted(async () => {
   modelConfigForm.value = [...modelConfig.models]
 })
 
-const displayedModels = computed<LLMModelRef[]>(() => {
-  if (editingId.value) {
-    return llm.getConfig(editingId.value)?.models ?? []
-  }
-  return form.value.models
-})
+const displayedModels = computed<LLMModelRef[]>(() => form.value.models)
 
 function providerLabel(p: LLMProviderType) {
   return providerOptions.value.find((o) => o.value === p)?.label ?? p
@@ -135,6 +131,7 @@ function providerLabel(p: LLMProviderType) {
 function openNewForm() {
   editingId.value = null
   dialogStep.value = 'choose'
+  manualModelName.value = ''
   form.value = {
     provider: 'openai',
     name: '',
@@ -203,12 +200,13 @@ function presetAbbr(id: string) {
 function openEditForm(cfg: LLMProviderConfig) {
   editingId.value = cfg.id
   dialogStep.value = 'configure'
+  manualModelName.value = ''
   form.value = {
     provider: cfg.provider,
     name: cfg.name,
     apiKey: cfg.apiKey ?? '',
     baseUrl: cfg.baseUrl ?? '',
-    models: cfg.models ?? [],
+    models: [...(cfg.models ?? [])],
   }
   showForm.value = true
 }
@@ -216,6 +214,32 @@ function openEditForm(cfg: LLMProviderConfig) {
 function cancelForm() {
   showForm.value = false
   editingId.value = null
+  manualModelName.value = ''
+}
+
+function addManualModel() {
+  const name = manualModelName.value.trim()
+  if (!name) {
+    toast.warning(t('settings.manualModelRequired'))
+    return
+  }
+  if (form.value.models.some((m) => m.name === name)) {
+    toast.warning(t('settings.manualModelDuplicate'))
+    return
+  }
+  form.value.models = [...form.value.models, { name, enabled: true }]
+  manualModelName.value = ''
+}
+
+function removeManualModel(modelName: string) {
+  form.value.models = form.value.models.filter((m) => m.name !== modelName)
+}
+
+function onManualModelKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    addManualModel()
+  }
 }
 
 async function handleSave() {
@@ -223,7 +247,7 @@ async function handleSave() {
     toast.warning(t('settings.namePlaceholder'))
     return
   }
-  const models = editingId.value ? displayedModels.value : form.value.models
+  const models = form.value.models
   if (!models.length) {
     toast.warning(t('settings.modelsRequired'))
     return
@@ -258,34 +282,30 @@ async function handleDelete(id: string) {
 async function handleRefreshModels() {
   refreshingModels.value = true
   try {
+    let models: LLMModelRef[]
     if (editingId.value) {
-      await llm.refreshModels(editingId.value)
+      models = await llm.refreshModels(editingId.value)
     } else {
-      const models = await llm.fetchModels({
+      models = await llm.fetchModels({
         provider: form.value.provider,
         name: form.value.name.trim(),
         apiKey: form.value.apiKey.trim(),
         baseUrl: form.value.baseUrl.trim(),
         models: [],
       })
-      form.value.models = models
     }
+    // Keep any manually added models that the remote list does not return.
+    const remoteNames = new Set(models.map((m) => m.name))
+    const kept = form.value.models.filter((m) => !remoteNames.has(m.name))
+    form.value.models = [...models, ...kept]
   } catch {
-    /* toast already shown in store */
+    toast.warning(t('settings.refreshFailedManualHint'))
   } finally {
     refreshingModels.value = false
   }
 }
 
 async function handleToggleModel(modelName: string, enabled: boolean) {
-  if (editingId.value) {
-    try {
-      await llm.toggleModel(editingId.value, modelName, enabled)
-    } catch {
-      /* toast already shown in store */
-    }
-    return
-  }
   const model = form.value.models.find((m) => m.name === modelName)
   if (model) {
     model.enabled = enabled
@@ -903,12 +923,27 @@ const hasFooterActions = computed(() => {
             </div>
           </div>
 
-          <div v-if="displayedModels.length" class="model-list">
+          <div class="settings-field settings-field--manual-model">
+            <span class="settings-field__label">{{ $t('settings.manualModel') }}</span>
+            <div class="settings-field__manual-row">
+              <DqInput
+                v-model="manualModelName"
+                :placeholder="$t('settings.manualModelPlaceholder')"
+                @keydown="onManualModelKeydown"
+              />
+              <DqButton size="small" @click="addManualModel">{{ $t('settings.addManualModel') }}</DqButton>
+            </div>
+            <span class="settings-field__hint">{{ $t('settings.manualModelHint') }}</span>
+          </div>
+
+          <div class="model-list">
             <div class="model-list__head">
               <span class="model-list__title">{{ $t('settings.modelList') }}</span>
-              <span class="model-list__hint">{{ $t('settings.modelToggleHint') }}</span>
+              <span class="model-list__hint">{{
+                displayedModels.length ? $t('settings.modelToggleHint') : $t('settings.modelListEmpty')
+              }}</span>
             </div>
-            <div class="model-list__items">
+            <div v-if="displayedModels.length" class="model-list__items">
               <div
                 v-for="m in displayedModels"
                 :key="m.name"
@@ -922,6 +957,14 @@ const hasFooterActions = computed(() => {
                     size="small"
                     @update:model-value="(v: boolean) => handleToggleModel(m.name, v)"
                   />
+                  <button
+                    type="button"
+                    class="model-list__remove"
+                    :title="$t('common.delete')"
+                    @click="removeManualModel(m.name)"
+                  >
+                    ×
+                  </button>
                 </div>
               </div>
             </div>
@@ -1186,6 +1229,23 @@ const hasFooterActions = computed(() => {
   line-height: 1.4;
 }
 
+.settings-field--manual-model {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-field__manual-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-field__manual-row :deep(.dq-input) {
+  flex: 1;
+  min-width: 0;
+}
+
 .settings-field__label {
   font-size: var(--dq-font-size-body);
   font-weight: 500;
@@ -1263,6 +1323,23 @@ const hasFooterActions = computed(() => {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+}
+
+.model-list__remove {
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dq-label-tertiary);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.model-list__remove:hover {
+  color: var(--dq-danger);
+  background: color-mix(in srgb, var(--dq-danger) 12%, transparent);
 }
 
 .settings-actions {

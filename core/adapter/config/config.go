@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"danqing-teams/core/domain"
+	"danqing-teams/core/paths"
 	"danqing-teams/core/port"
 
 	"github.com/spf13/viper"
@@ -16,11 +17,11 @@ import (
 var _ port.SearchConfigStore = (*Loader)(nil)
 var _ port.ConfigStore = (*Loader)(nil)
 
-// Loader reads and writes the user-editable .dq-teams/config.yaml configuration.
+// Loader reads and writes the user-editable ~/.dq-teams/config.yaml configuration.
 // It is the source of truth for settings that should be readable and editable
-// by all entry points (server, cli, tui). Viper is used for loading, defaults,
-// and environment-variable binding; yaml.v3 is used for writing so that only
-// the touched sections are persisted and other fields are preserved.
+// by all entry points (server, cli, tui, desktop). Viper is used for loading,
+// defaults, and environment-variable binding; yaml.v3 is used for writing so
+// that only the touched sections are persisted and other fields are preserved.
 type Loader struct {
 	path string
 	v    *viper.Viper
@@ -28,12 +29,12 @@ type Loader struct {
 }
 
 // NewLoader returns a config loader for the given path.
-// If path is empty, it defaults to .dq-teams/config.yaml (config dir).
-// Data paths (data.dir, data.database) are always resolved relative to cwd,
-// keeping config (.dq-teams/) and data (data/) cleanly separated.
+// If path is empty, it defaults to ~/.dq-teams/config.yaml.
+// Relative data paths are resolved against ~/.dq-teams (not cwd).
 func NewLoader(path string) *Loader {
+	paths.MigrateLegacyOnce()
 	if path == "" {
-		path = ".dq-teams/config.yaml"
+		path = paths.ConfigFile()
 	}
 	if abs, err := filepath.Abs(path); err == nil {
 		path = abs
@@ -47,8 +48,8 @@ func NewLoader(path string) *Loader {
 }
 
 func setDefaults(v *viper.Viper) {
-	v.SetDefault("data.dir", "./data")
-	v.SetDefault("data.database", "./data/teams.db")
+	v.SetDefault("data.dir", paths.DataDir())
+	v.SetDefault("data.database", paths.DatabaseFile())
 	v.SetDefault("data.store", "sqlite")
 	v.SetDefault("server.listen_addr", "0.0.0.0:7801")
 	v.SetDefault("instance.id", "")
@@ -103,19 +104,17 @@ func (l *Loader) Load(_ context.Context) (*domain.ConfigFile, error) {
 		return nil, err
 	}
 
-	cwd, _ := os.Getwd()
-
 	if cfg.Data.Dir == "" {
-		cfg.Data.Dir = "./data"
+		cfg.Data.Dir = paths.DataDir()
 	}
 	if !filepath.IsAbs(cfg.Data.Dir) {
-		cfg.Data.Dir = filepath.Join(cwd, cfg.Data.Dir)
+		cfg.Data.Dir = paths.ResolveAgainstHome(cfg.Data.Dir)
 	}
 	if cfg.Data.Database == "" {
-		cfg.Data.Database = cfg.Data.Dir + "/teams.db"
+		cfg.Data.Database = paths.DatabaseFile()
 	}
 	if !filepath.IsAbs(cfg.Data.Database) {
-		cfg.Data.Database = filepath.Join(cwd, cfg.Data.Database)
+		cfg.Data.Database = paths.ResolveAgainstHome(cfg.Data.Database)
 	}
 
 	if cfg.Search.Provider == "" {
@@ -130,7 +129,7 @@ func (l *Loader) Load(_ context.Context) (*domain.ConfigFile, error) {
 }
 
 // defaultLLMPresets returns the built-in provider presets for mainstream
-// model vendors. Users can override these in .dq-teams/config.yaml.
+// model vendors. Users can override these in ~/.dq-teams/config.yaml.
 func defaultLLMPresets() []domain.LLMProviderPreset {
 	return []domain.LLMProviderPreset{
 		{ID: "openai", Name: "OpenAI", Provider: "openai", BaseURL: "https://api.openai.com/v1", Icon: "🟢", Description: "GPT 系列、o 系列推理模型"},

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"danqing-teams/core/domain"
+	"danqing-teams/core/paths"
 	"danqing-teams/core/port"
 
 	"github.com/glebarez/sqlite"
@@ -20,7 +21,7 @@ type Store struct {
 
 func New(dbPath string) (*Store, error) {
 	if dbPath == "" {
-		dbPath = "./data/teams.db"
+		dbPath = paths.DatabaseFile()
 	}
 	if abs, err := filepath.Abs(dbPath); err == nil {
 		dbPath = abs

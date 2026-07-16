@@ -76,6 +76,11 @@ func (m *LLMConfigManager) Upsert(ctx context.Context, req domain.UpsertLLMProvi
 		return domain.LLMProviderConfig{}, fmt.Errorf("name required")
 	}
 
+	// Load existing providers from DB first. Otherwise the first Upsert after
+	// startup can mark an incomplete in-memory cache as fully loaded and hide
+	// every other provider (e.g. deepseek disappears after saving a new one).
+	m.ensureCache(ctx)
+
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	m.mu.RLock()
@@ -105,7 +110,6 @@ func (m *LLMConfigManager) Upsert(ctx context.Context, req domain.UpsertLLMProvi
 		m.cache = make(map[string]domain.LLMProviderConfig)
 	}
 	m.cache[cfg.ID] = cfg
-	m.loaded = true
 	m.mu.Unlock()
 
 	return cfg, nil

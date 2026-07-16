@@ -181,7 +181,9 @@ make test-integration  # 集成测试
 
 | 变量 | 默认 | 说明 |
 |------|------|------|
-| `TEAMS_CONFIG` | — | YAML 配置文件路径 (`config.example.yaml`) |
+| `TEAMS_CONFIG` | `~/.dq-teams/config.yaml` | YAML 配置文件路径 |
+| `TEAMS_DB_PATH` | `~/.dq-teams/teams.db` | SQLite 数据库 |
+| `TEAMS_DATA_DIR` | `~/.dq-teams/data` | 项目与 turn 日志目录 |
 | `DQ_BACKEND_PORT` | `7801` | 开发后端端口 |
 | `DQ_FRONTEND_PORT` | `5801` | 开发前端端口 |
 | `VITE_API_BASE_URL` | `""` | 前端 API 基址（空 = 同源） |
