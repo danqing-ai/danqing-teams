@@ -218,6 +218,19 @@ export const useSessionsStore = defineStore('sessions', () => {
     }
   }
 
+  function removeSessionsForProject(projectId: string) {
+    const removed = new Set(
+      sessions.value.filter((s) => s.projectId === projectId).map((s) => s.id),
+    )
+    sessions.value = sessions.value.filter((s) => s.projectId !== projectId)
+    if (selectedProjectId.value === projectId) {
+      selectedProjectId.value = null
+    }
+    if (currentSessionId.value && removed.has(currentSessionId.value)) {
+      startCompose()
+    }
+  }
+
   async function loadTurns(sessionId: string) {
     try {
       turns.value = asArray(await fetchJSON<TurnLog[]>(`/sessions/${sessionId}/turns`))
@@ -403,6 +416,7 @@ export const useSessionsStore = defineStore('sessions', () => {
     createSession,
     updateSession,
     deleteSession,
+    removeSessionsForProject,
     loadTurns,
     sendTurn,
     cancelTurn,

@@ -38,8 +38,8 @@ function onSelectSession(id: string) {
 onMounted(async () => {
   await sessions.loadCatalog()
   await Promise.all([projects.loadProjects(), llm.loadConfigs(), llm.loadModels()])
-  if (projects.projects.length) {
-    sessions.selectedProjectId = projects.projects[0].id
+  if (projects.sortedProjects.length) {
+    sessions.selectedProjectId = projects.sortedProjects[0].id
   }
   sessions.syncModelSelection(llm.models, new Set())
   await sessions.loadSessions()
@@ -53,7 +53,7 @@ watch(() => llm.models, (newModels, oldModels) => {
 
 <template>
   <div class="app-layout teams-app">
-    <LeftRail :active-module="activeModule" @navigate="navigateTo" @select-session="onSelectSession" @new-session="(pid?: string) => { sessions.startCompose(pid ?? projects.projects[0]?.id ?? null); router.push({ name: 'sessions' }) }" />
+    <LeftRail :active-module="activeModule" @navigate="navigateTo" @select-session="onSelectSession" @new-session="(pid?: string) => { sessions.startCompose(pid ?? projects.sortedProjects[0]?.id ?? null); router.push({ name: 'sessions' }) }" />
     <main class="app-workspace">
       <RouterView />
     </main>

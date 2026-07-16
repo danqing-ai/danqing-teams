@@ -106,14 +106,28 @@ async function archiveSession(id: string) {
 }
 
 async function deleteSession(id: string) {
-  const confirmed = await confirm('确定删除该会话？', { title: '删除会话', confirmText: '删除', type: 'danger' })
-  if (!confirmed) return
+  try {
+    await confirm('确定删除该会话？', '删除会话', { confirmButtonText: '删除', type: 'warning' })
+  } catch {
+    return
+  }
   try {
     await sessions.deleteSession(id)
     toast.success('已删除')
   } catch (e) {
     toast.error(e instanceof Error ? e.message : '删除失败')
   }
+}
+
+function onProjectCommand(cmd: string, p: Project) {
+  if (cmd === 'new-session') onNewSession(p.id)
+  else if (cmd === 'rename') startRenameProject(p)
+  else if (cmd === 'delete') void removeProject(p)
+}
+
+function onSessionCommand(cmd: string, sessionId: string) {
+  if (cmd === 'archive') void archiveSession(sessionId)
+  else if (cmd === 'delete') void deleteSession(sessionId)
 }
 
 const renamingProjectId = ref<string | null>(null)
@@ -167,14 +181,32 @@ async function createProject() {
 function startRenameProject(p: Project) {
   renamingProjectId.value = p.id
   renamingName.value = p.name
+  nextTick(() => {
+    const el = document.querySelector('.project-tree__rename-input input') as HTMLInputElement | null
+    el?.focus()
+    el?.select()
+  })
+}
+
+function cancelRenameProject() {
+  renamingProjectId.value = null
 }
 
 async function confirmRenameProject(id: string) {
+  if (renamingProjectId.value !== id) return
   const name = renamingName.value.trim()
-  if (!name) return
+  if (!name) {
+    cancelRenameProject()
+    return
+  }
+  const current = projects.projects.find((x) => x.id === id)
+  if (current && current.name === name) {
+    cancelRenameProject()
+    return
+  }
   try {
     await projects.renameProject(id, name)
-    renamingProjectId.value = null
+    cancelRenameProject()
     toast.success(t('navigation.renamed'))
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('navigation.renameFailed'))
@@ -189,6 +221,7 @@ async function removeProject(p: Project) {
   }
   try {
     await projects.deleteProject(p.id)
+    sessions.removeSessionsForProject(p.id)
     toast.success(t('navigation.deleted'))
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('navigation.deleteFailed'))
@@ -355,19 +388,27 @@ watch(() => projects.projects.length, (len) => {
                     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
                   </svg>
                   <template v-if="renamingProjectId === p.id">
-                    <DqInput v-model="renamingName" size="small" class="project-tree__rename-input" @keydown.enter="confirmRenameProject(p.id)" @blur="renamingProjectId = null" @click.stop />
+                    <DqInput
+                      v-model="renamingName"
+                      size="small"
+                      class="project-tree__rename-input"
+                      @keydown.enter.prevent="confirmRenameProject(p.id)"
+                      @keydown.escape.prevent="cancelRenameProject"
+                      @blur="confirmRenameProject(p.id)"
+                      @click.stop
+                    />
                   </template>
                   <span v-else class="project-tree__name">{{ p.name }}</span>
                   <span @click.stop>
-                    <DqDropdown class="project-tree__menu">
+                    <DqDropdown class="project-tree__menu" @command="(cmd) => onProjectCommand(cmd, p)">
                       <DqIconButton aria-label="项目菜单" @click.stop>
                         <DqIcon :size="14"><MoreFilled /></DqIcon>
                       </DqIconButton>
                       <template #dropdown>
                         <DqDropdownMenu>
-                          <DqDropdownItem @select="onNewSession(p.id)">{{ $t('navigation.newSession') }}</DqDropdownItem>
-                          <DqDropdownItem @select="startRenameProject(p)">{{ $t('navigation.rename') }}</DqDropdownItem>
-                          <DqDropdownItem @select="removeProject(p)">{{ $t('common.delete') }}</DqDropdownItem>
+                          <DqDropdownItem command="new-session">{{ $t('navigation.newSession') }}</DqDropdownItem>
+                          <DqDropdownItem command="rename">{{ $t('navigation.rename') }}</DqDropdownItem>
+                          <DqDropdownItem command="delete">{{ $t('common.delete') }}</DqDropdownItem>
                         </DqDropdownMenu>
                       </template>
                     </DqDropdown>
@@ -390,7 +431,7 @@ watch(() => projects.projects.length, (len) => {
                       <span class="project-tree__session-name">{{ sessionTitle(t_) }}</span>
                       <span class="project-tree__session-time">{{ formatRelativeTime(t_.updatedAt || t_.createdAt) }}</span>
                     </button>
-                    <DqDropdown>
+                    <DqDropdown @command="(cmd) => onSessionCommand(cmd, t_.id)">
                       <button type="button" class="project-tree__session-action" title="会话操作" @click.stop>
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
                           <circle cx="12" cy="5" r="1.5" />
@@ -400,8 +441,8 @@ watch(() => projects.projects.length, (len) => {
                       </button>
                       <template #dropdown>
                         <DqDropdownMenu>
-                          <DqDropdownItem @select="archiveSession(t_.id)">归档</DqDropdownItem>
-                          <DqDropdownItem @select="deleteSession(t_.id)">
+                          <DqDropdownItem command="archive">归档</DqDropdownItem>
+                          <DqDropdownItem command="delete">
                             <span style="color:var(--dq-danger)">删除</span>
                           </DqDropdownItem>
                         </DqDropdownMenu>

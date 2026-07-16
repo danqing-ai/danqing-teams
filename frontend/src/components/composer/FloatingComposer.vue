@@ -144,8 +144,8 @@ watch(
   (v) => {
     if (v) {
       clearComposer()
-      if (!sessions.selectedProjectId && projects.projects.length) {
-        sessions.selectedProjectId = projects.projects[0].id
+      if (!sessions.selectedProjectId && projects.sortedProjects.length) {
+        sessions.selectedProjectId = projects.sortedProjects[0].id
       }
       focusInput()
     }
