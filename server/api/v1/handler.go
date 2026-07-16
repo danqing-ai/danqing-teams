@@ -726,9 +726,6 @@ func readProjectFile(h *Handler) gin.HandlerFunc {
 	}
 }
 
-// dqInspectScript is injected into HTML responses so the browser tab can select elements.
-const dqInspectScript = `<script>(function(){var o=document.createElement('div');o.id='__dq_inspect_overlay';o.style.cssText='position:fixed;pointer-events:none;z-index:99999;border:2px solid #3b82f6;background:rgba(59,130,246,0.1);transition:all 0.08s ease;display:none';document.body.appendChild(o);function u(e){var el=e.target;if(!el||el===document.body||el===document.documentElement||el.id==='__dq_inspect_overlay')return;var r=el.getBoundingClientRect();o.style.display='block';o.style.top=r.top+'px';o.style.left=r.left+'px';o.style.width=r.width+'px';o.style.height=r.height+'px'}function s(e){e.preventDefault();e.stopPropagation();var el=e.target;if(!el||el===document.body||el===document.documentElement)return;var h=el.outerHTML.length>2000?el.outerHTML.slice(0,2000)+'...':el.outerHTML;var t=(el.textContent||'').trim().slice(0,2000);window.parent.postMessage({type:'dq-inspect-selected',html:h,text:t,tag:el.tagName.toLowerCase()},'*');c()}function c(){document.removeEventListener('mouseover',u,true);document.removeEventListener('click',s,true);document.body.style.cursor='';o.remove()}window.addEventListener('message',function(e){if(e.data&&e.data.type==='dq-inspect-start'){document.body.style.cursor='crosshair';document.addEventListener('mouseover',u,true);document.addEventListener('click',s,true)}})})()</script>`
-
 // serveProjectFile serves a project file directly at /projects/:id/files/:filepath
 func serveProjectFile(h *Handler) gin.HandlerFunc {
 	return func(c *gin.Context) {

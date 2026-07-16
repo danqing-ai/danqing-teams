@@ -5,8 +5,17 @@ import { useProjectsStore } from '@/stores/projects'
 import { useLLMStore } from '@/stores/llm'
 import { toast } from '@/utils/feedback'
 import type { LLMModel } from '@/types/mission'
+import {
+  buildUserInputWithAttachments,
+  chipLabel,
+  chipTooltip,
+  type ElementAttachment,
+} from '@/types/element-attachment'
 
 const content = ref('')
+const attachments = ref<ElementAttachment[]>([])
+const editingId = ref<string | null>(null)
+const editingAnnotation = ref('')
 const inputWrap = ref<HTMLElement | null>(null)
 const sessions = useSessionsStore()
 const projects = useProjectsStore()
@@ -39,20 +48,8 @@ const selectedBaseModelId = computed({
   },
 })
 
-const selectedModelLabel = computed(() => {
-  const parts = sessions.selectedModelId.split('/')
-  const baseId = parts.length >= 2 ? `${parts[0]}/${parts[1]}` : sessions.selectedModelId
-  return availableModels.value.find((m) => m.id === baseId)?.label ?? baseId
-})
-
 const availableEfforts = computed<string[]>(() => {
   return selectedModel.value?.availableEfforts ?? []
-})
-
-const selectedEffortLabel = computed(() => {
-  const e = sessions.selectedEffort
-  if (!e || e === 'off') return 'off'
-  return e
 })
 
 // When effort changes, update the full modelId
@@ -68,19 +65,12 @@ const primaryAgents = computed(() =>
   sessions.agents.filter((a) => a.mode !== 'subagent' && a.id !== 'default'),
 )
 
-const selectedAgentLabel = computed(() => {
-  if (sessions.selectedAgentId) {
-    return sessions.agents.find((a) => a.id === sessions.selectedAgentId)?.name ?? sessions.selectedAgentId
-  }
-  return 'Default'
-})
-
-const selectedProject = computed(() =>
-  projects.projects.find((p) => p.id === sessions.selectedProjectId) ?? null,
-)
-
 const placeholder = computed(() =>
   sessions.composingNew ? '输入会话目标…' : '继续输入…',
+)
+
+const canSend = computed(
+  () => Boolean(content.value.trim() || attachments.value.length) && !sessions.loading,
 )
 
 onMounted(async () => {
@@ -109,11 +99,51 @@ function appendContent(text: string) {
   focusInput()
 }
 
+function addElementAttachment(att: ElementAttachment) {
+  attachments.value = [...attachments.value, att]
+  focusInput()
+}
+
+function removeAttachment(id: string) {
+  attachments.value = attachments.value.filter((a) => a.id !== id)
+  if (editingId.value === id) {
+    editingId.value = null
+    editingAnnotation.value = ''
+  }
+}
+
+function startEditAnnotation(att: ElementAttachment) {
+  editingId.value = att.id
+  editingAnnotation.value = att.annotation
+}
+
+function saveEditAnnotation() {
+  const id = editingId.value
+  if (!id) return
+  attachments.value = attachments.value.map((a) =>
+    a.id === id ? { ...a, annotation: editingAnnotation.value.trim() } : a,
+  )
+  editingId.value = null
+  editingAnnotation.value = ''
+}
+
+function cancelEditAnnotation() {
+  editingId.value = null
+  editingAnnotation.value = ''
+}
+
+function clearComposer() {
+  content.value = ''
+  attachments.value = []
+  editingId.value = null
+  editingAnnotation.value = ''
+}
+
 watch(
   () => sessions.composingNew,
   (v) => {
     if (v) {
-      content.value = ''
+      clearComposer()
       if (!sessions.selectedProjectId && projects.projects.length) {
         sessions.selectedProjectId = projects.projects[0].id
       }
@@ -127,7 +157,7 @@ const isTurnRunning = computed(
 )
 
 async function send() {
-  const text = content.value.trim()
+  const text = buildUserInputWithAttachments(content.value, attachments.value)
   if (!text || sessions.loading) return
 
   if (sessions.composingNew) {
@@ -137,7 +167,7 @@ async function send() {
     }
     try {
       await sessions.createSession(text, sessions.selectedProjectId)
-      content.value = ''
+      clearComposer()
       focusInput()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '发送失败')
@@ -147,7 +177,7 @@ async function send() {
 
   try {
     await sessions.sendTurn(text)
-    content.value = ''
+    clearComposer()
     focusInput()
   } catch (e) {
     toast.error(e instanceof Error ? e.message : '发送失败')
@@ -183,11 +213,68 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
-defineExpose({ focusInput, appendContent })
+defineExpose({ focusInput, appendContent, addElementAttachment })
 </script>
 
 <template>
   <div class="composer-float" role="form" aria-label="Session composer">
+    <div v-if="attachments.length" class="composer-float__attachments">
+      <div
+        v-for="att in attachments"
+        :key="att.id"
+        class="composer-el-chip"
+        :title="chipTooltip(att)"
+      >
+        <span class="composer-el-chip__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="22" y1="12" x2="18" y2="12" />
+            <line x1="6" y1="12" x2="2" y2="12" />
+            <line x1="12" y1="6" x2="12" y2="2" />
+            <line x1="12" y1="22" x2="12" y2="18" />
+          </svg>
+        </span>
+        <span class="composer-el-chip__label">{{ chipLabel(att) }}</span>
+        <span v-if="att.annotation" class="composer-el-chip__dot" title="已有批注" />
+        <button
+          type="button"
+          class="composer-el-chip__edit"
+          title="编辑批注"
+          aria-label="编辑批注"
+          @click.stop="startEditAnnotation(att)"
+        >
+          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="composer-el-chip__remove"
+          title="移除"
+          aria-label="移除元素附件"
+          @click.stop="removeAttachment(att.id)"
+        >
+          ×
+        </button>
+      </div>
+    </div>
+
+    <div
+      v-if="editingId"
+      class="composer-float__edit-note"
+    >
+      <input
+        v-model="editingAnnotation"
+        class="composer-float__edit-input"
+        placeholder="编辑批注…"
+        @keydown.enter.prevent="saveEditAnnotation"
+        @keydown.esc.prevent="cancelEditAnnotation"
+      />
+      <button type="button" class="composer-float__edit-btn" @click="saveEditAnnotation">保存</button>
+      <button type="button" class="composer-float__edit-btn composer-float__edit-btn--ghost" @click="cancelEditAnnotation">取消</button>
+    </div>
+
     <div ref="inputWrap" class="composer-float__body">
       <DqInput
         v-model="content"
@@ -275,7 +362,7 @@ defineExpose({ focusInput, appendContent })
         <DqIconButton
           v-else
           class="composer-float__send"
-          :disabled="sessions.loading || !content.trim()"
+          :disabled="!canSend"
           aria-label="发送"
           @click="send"
         >
@@ -304,6 +391,120 @@ defineExpose({ focusInput, appendContent })
   box-shadow:
     var(--dq-shadow-glass),
     0 0 0 1px color-mix(in srgb, var(--dq-accent) 16%, transparent);
+}
+
+.composer-float__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 14px 0;
+}
+
+.composer-el-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 220px;
+  height: 26px;
+  padding: 0 4px 0 8px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--dq-accent) 28%, transparent);
+  background: color-mix(in srgb, var(--dq-accent) 12%, transparent);
+  color: var(--dq-label-primary);
+  font-size: 12px;
+  line-height: 1;
+  cursor: default;
+}
+
+.composer-el-chip__icon {
+  display: flex;
+  color: var(--dq-accent);
+  flex-shrink: 0;
+}
+
+.composer-el-chip__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--dq-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+
+.composer-el-chip__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dq-accent);
+  flex-shrink: 0;
+}
+
+.composer-el-chip__edit,
+.composer-el-chip__remove {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--dq-label-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.composer-el-chip__edit:hover,
+.composer-el-chip__remove:hover {
+  color: var(--dq-label-primary);
+  background: color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
+}
+
+.composer-float__edit-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px 0;
+}
+
+.composer-float__edit-input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--dq-glass-border-strong);
+  background: color-mix(in srgb, var(--dq-bg-base) 50%, transparent);
+  color: var(--dq-label-primary);
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.composer-float__edit-input:focus {
+  outline: none;
+  border-color: var(--dq-accent);
+}
+
+.composer-float__edit-btn {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  cursor: pointer;
+  background: var(--dq-accent);
+  color: #fff;
+  font-family: inherit;
+}
+
+.composer-float__edit-btn--ghost {
+  background: transparent;
+  border-color: var(--dq-glass-border-strong);
+  color: var(--dq-label-secondary);
 }
 
 .composer-float__body :deep(textarea.dq-input) {
@@ -379,36 +580,8 @@ defineExpose({ focusInput, appendContent })
   border-color: color-mix(in srgb, var(--dq-label-primary) 16%, transparent);
 }
 
-.composer-chip.is-on {
-  background: color-mix(in srgb, var(--dq-accent) 18%, transparent);
-  border-color: color-mix(in srgb, var(--dq-accent) 28%, transparent);
-  color: var(--dq-accent);
-}
-
-.composer-chip--select::after {
-  content: '';
-  position: absolute;
-  right: 9px;
-  top: 50%;
-  width: 0;
-  height: 0;
-  margin-top: -1px;
-  border-left: 3.5px solid transparent;
-  border-right: 3.5px solid transparent;
-  border-top: 4px solid currentColor;
-  opacity: 0.7;
-  pointer-events: none;
-}
-
 .composer-chip__label--accent {
   color: var(--dq-accent);
-}
-
-.composer-chip__select {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
 }
 
 .composer-chip__label {
@@ -416,23 +589,6 @@ defineExpose({ focusInput, appendContent })
   text-overflow: ellipsis;
   white-space: nowrap;
   pointer-events: none;
-}
-
-.composer-chip__icon {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  line-height: 1;
-  pointer-events: none;
-  color: var(--dq-label-tertiary);
-}
-
-.composer-chip__icon :deep(svg) {
-  display: block;
-}
-
-.composer-chip--select {
-  padding-right: 22px;
 }
 
 .composer-chip--running {

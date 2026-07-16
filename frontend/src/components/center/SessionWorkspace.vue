@@ -8,9 +8,11 @@ import FileTree from '@/components/center/FileTree.vue'
 import ExpertsPanel from '@/components/center/ExpertsPanel.vue'
 import ChangesPanel from '@/components/center/ChangesPanel.vue'
 import TerminalPanel from '@/components/center/TerminalPanel.vue'
+import ElementAnnotatePopover from '@/components/center/ElementAnnotatePopover.vue'
 import { renderMarkdown } from '@/utils/markdown-render'
 import { toast } from '@/utils/feedback'
 import { apiBaseUrl } from '@/utils/desktop'
+import { fromInspectPayload, type InspectElementPayload } from '@/types/element-attachment'
 
 import type { StreamEvent, TurnLog } from '@/types/mission'
 
@@ -31,6 +33,8 @@ const browserRefresh = ref(0)
 const browserMdHtml = ref('')
 const selectingElement = ref(false)
 const composerRef = ref<InstanceType<typeof FloatingComposer> | null>(null)
+const annotateOpen = ref(false)
+const annotatePayload = ref<InspectElementPayload | null>(null)
 
 function isMdUrl(url: string): boolean {
   const path = url.split('?')[0].split('#')[0]
@@ -154,26 +158,58 @@ function startElementSelect() {
   iframe.contentWindow.postMessage({ type: 'dq-inspect-start' }, '*')
 }
 
-function handleInspectMessage(ev: MessageEvent) {
-  if (ev.data?.type !== 'dq-inspect-selected') return
+function stopElementSelect() {
   selectingElement.value = false
-  const { html, text, tag } = ev.data
-  if (!text && !html) return
-  // Build natural-language injection: "文件 index.html 的 <button> 元素，文字为"提交申请""
-  const userUrl = browserUrlInput.value
-  const isProject = userUrl.includes('/api/v1/projects/')
-  let context = ''
-  if (isProject) {
-    const file = decodeURIComponent((userUrl.split('/').pop() || '').split('?')[0])
-    context = `文件 ${file}`
-  } else if (userUrl && !userUrl.includes('/api/v1/proxy/')) {
-    context = `页面 ${userUrl}`
+  const iframe = document.querySelector('.session-workspace__browser-frame') as HTMLIFrameElement | null
+  iframe?.contentWindow?.postMessage({ type: 'dq-inspect-stop' }, '*')
+}
+
+function resolveProjectSourceFile(): string | undefined {
+  const userUrl = browserUrlInput.value || browserUrl.value
+  if (!userUrl.includes('/api/v1/projects/')) return undefined
+  const marker = '/raw/'
+  const idx = userUrl.indexOf(marker)
+  if (idx === -1) return undefined
+  try {
+    return decodeURIComponent(userUrl.slice(idx + marker.length).split('?')[0].split('#')[0])
+  } catch {
+    return userUrl.slice(idx + marker.length).split('?')[0]
   }
-  let tagPart = tag ? ` <${tag}>` : ''
-  let contentPart = text ? `，文字为"${text.slice(0, 300)}"` : (html ? `，HTML 为\`\`\`html\n${html.slice(0, 300)}\n\`\`\`` : '')
-  const snippet = `${context || '页面'}中的${tagPart}元素${contentPart}`
-  composerRef.value?.appendContent(snippet)
-  toast.success('已添加到 Composer')
+}
+
+function handleInspectMessage(ev: MessageEvent) {
+  const data = ev.data
+  if (!data || typeof data !== 'object') return
+  if (data.type === 'dq-inspect-cancel') {
+    selectingElement.value = false
+    return
+  }
+  if (data.type !== 'dq-inspect-selected') return
+  selectingElement.value = false
+  const payload = data as InspectElementPayload
+  if (!payload.tag && !payload.text && !payload.outerHTML && !payload.html) return
+  annotatePayload.value = payload
+  annotateOpen.value = true
+}
+
+function onAnnotateConfirm(annotation: string) {
+  const raw = annotatePayload.value
+  annotateOpen.value = false
+  annotatePayload.value = null
+  if (!raw) return
+  const pageUrl = browserUrlInput.value || raw.page?.url || ''
+  const att = fromInspectPayload(raw, {
+    annotation,
+    sourceFile: resolveProjectSourceFile(),
+    pageUrl,
+  })
+  composerRef.value?.addElementAttachment(att)
+  toast.success('已提交到创作器')
+}
+
+function onAnnotateCancel() {
+  annotateOpen.value = false
+  annotatePayload.value = null
 }
 
 const expandedToolCards = ref(new Set<number>())
@@ -1566,24 +1602,37 @@ function onTitleKeydown(e: KeyboardEvent) {
                   <polyline points="9 18 15 12 9 6"/>
                 </svg>
               </button>
-              <button class="session-workspace__browser-btn" :class="{ 'is-active': selectingElement }" @click="startElementSelect" title="选择元素">
+              <button
+                class="session-workspace__browser-btn"
+                :class="{ 'is-active': selectingElement }"
+                :title="selectingElement ? '取消选择 (Esc)' : '选择元素'"
+                @click="selectingElement ? stopElementSelect() : startElementSelect()"
+              >
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>
               </button>
               <button class="session-workspace__browser-btn" @click="browserUrl = ''; browserUrlInput = ''; browserMdHtml = ''" title="关闭">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             </div>
-            <div
-              v-if="browserMdHtml"
-              class="session-workspace__browser-md markdown-body"
-              v-html="browserMdHtml"
-            />
-            <iframe
-              v-else
-              :key="browserUrl || 'empty' || browserRefresh"
-              class="session-workspace__browser-frame"
-              :src="browserUrl || 'about:blank'"
-            />
+            <div class="session-workspace__browser-stage">
+              <div
+                v-if="browserMdHtml"
+                class="session-workspace__browser-md markdown-body"
+                v-html="browserMdHtml"
+              />
+              <iframe
+                v-else
+                :key="browserUrl || 'empty' || browserRefresh"
+                class="session-workspace__browser-frame"
+                :src="browserUrl || 'about:blank'"
+              />
+              <ElementAnnotatePopover
+                :open="annotateOpen"
+                :payload="annotatePayload"
+                @confirm="onAnnotateConfirm"
+                @cancel="onAnnotateCancel"
+              />
+            </div>
           </div>
         </template>
         <div
@@ -3037,6 +3086,15 @@ function onTitleKeydown(e: KeyboardEvent) {
 .session-workspace__browser-btn.is-active {
   background: var(--dq-accent);
   color: var(--dq-color-white);
+}
+
+.session-workspace__browser-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .session-workspace__browser-frame {
