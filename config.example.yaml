@@ -109,19 +109,25 @@ llm:
       provider: openai
       base_url: "https://open.bigmodel.cn/api/paas/v4"
       icon: "\U0001F7E3"
-      description: "GLM \u7CFB\u5217"
+      description: "GLM-5.1\u3001GLM-5\u3001GLM-4.7"
     - id: qwen
       name: "\u901A\u4E49\u5343\u95EE (Qwen)"
       provider: openai
       base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
       icon: "\U0001F7E1"
-      description: "Qwen Max\u3001Plus\u3001Turbo"
+      description: "Qwen3.7 Max\u3001Plus\u3001Flash\u3001Coder"
     - id: moonshot
       name: Moonshot (Kimi)
       provider: openai
-      base_url: "https://api.kimi.com/coding/v1"
+      base_url: "https://api.moonshot.cn/v1"
       icon: "\U0001F319"
-      description: "Kimi \u7CFB\u5217"
+      description: "Kimi K3\u3001K2.7 Code\u3001K2.6"
+    - id: minimax
+      name: MiniMax
+      provider: openai
+      base_url: "https://api.minimaxi.com/v1"
+      icon: "\U0001F3AD"
+      description: "MiniMax M3\u3001M2.7"
     - id: ollama
       name: Ollama (Local)
       provider: openai
@@ -152,24 +158,36 @@ llm:
   models:
 
     # ── OpenAI ─────────────────────────────────────────────────────────
+    # GPT-5.6 family — Sol (gpt-5.6), Terra, Luna: 1.05M / 128K
     - model: gpt-5.6
-      context_window: 200000
+      context_window: 1050000
       max_output: 128000
       available_efforts: ["off", "none", "low", "medium", "high", "xhigh"]
 
+    - model: gpt-5.6-terra
+      context_window: 1050000
+      max_output: 128000
+      available_efforts: ["off", "none", "low", "medium", "high", "xhigh"]
+
+    - model: gpt-5.6-luna
+      context_window: 1050000
+      max_output: 128000
+      available_efforts: ["off", "none", "low", "medium", "high", "xhigh"]
+
+    # GPT-5 family — 400K / 128K
     - model: gpt-5
-      context_window: 200000
+      context_window: 400000
       max_output: 128000
       available_efforts: ["off", "none", "minimal", "low", "medium", "high", "xhigh"]
 
     - model: gpt-5-mini
-      context_window: 200000
-      max_output: 65536
+      context_window: 400000
+      max_output: 128000
       available_efforts: ["off", "minimal", "low", "medium", "high"]
 
     - model: gpt-5-nano
-      context_window: 200000
-      max_output: 32768
+      context_window: 400000
+      max_output: 128000
       available_efforts: ["off", "minimal", "low", "medium", "high"]
 
     - model: o4-mini
@@ -193,7 +211,7 @@ llm:
       max_output: 16384
 
     # ── Anthropic Claude ───────────────────────────────────────────────
-    # Claude 5 / Opus 4.7+ — adaptive thinking
+    # Claude 5 / Opus 4.6+ / Sonnet 4.6 — adaptive thinking, 1M / 128K
     - model: claude-sonnet-5
       context_window: 1000000
       max_output: 128000
@@ -218,10 +236,31 @@ llm:
       available_efforts: ["off", "low", "medium", "high", "xhigh", "max"]
       thinking_mode: "adaptive"
 
-    # Claude 4.5 — budget-tokens thinking (only high/max)
+    - model: claude-opus-4-6
+      context_window: 1000000
+      max_output: 128000
+      available_efforts: ["off", "low", "medium", "high", "xhigh", "max"]
+      thinking_mode: "adaptive"
+
+    - model: claude-sonnet-4-6
+      context_window: 1000000
+      max_output: 128000
+      available_efforts: ["off", "low", "medium", "high", "xhigh", "max"]
+      thinking_mode: "adaptive"
+
+    # Claude 4.5 — budget-tokens thinking (high/max), 200K / 64K
     - model: claude-sonnet-4-5
       context_window: 200000
-      max_output: 8192
+      max_output: 64000
+      available_efforts: ["off", "high", "max"]
+      thinking_mode: "enabled"
+      effort_budget_tokens:
+        high: 16000
+        max: 32000
+
+    - model: claude-opus-4-5
+      context_window: 200000
+      max_output: 64000
       available_efforts: ["off", "high", "max"]
       thinking_mode: "enabled"
       effort_budget_tokens:
@@ -230,7 +269,7 @@ llm:
 
     - model: claude-haiku-4-5
       context_window: 200000
-      max_output: 8192
+      max_output: 64000
       available_efforts: ["off", "high", "max"]
       thinking_mode: "enabled"
       effort_budget_tokens:
@@ -238,7 +277,7 @@ llm:
         max: 32000
 
     # ── DeepSeek ───────────────────────────────────────────────────────
-    # DeepSeek V4 — supports extra "max" reasoning effort
+    # DeepSeek V4 — 1M context, 384K max output; supports "max" effort
     - model: deepseek-v4-pro
       context_window: 1000000
       max_output: 384000
@@ -246,31 +285,202 @@ llm:
 
     - model: deepseek-v4-flash
       context_window: 1000000
-      max_output: 131072
+      max_output: 384000
       available_efforts: ["off", "low", "medium", "high", "max"]
 
-    # DeepSeek Chat — non-reasoning, no effort levels
+    # Legacy aliases → deepseek-v4-flash (deprecated 2026-07-24)
     - model: deepseek-chat
-      context_window: 128000
-      max_output: 8192
+      context_window: 1000000
+      max_output: 384000
 
     - model: deepseek-reasoner
-      context_window: 64000
-      max_output: 8192
+      context_window: 1000000
+      max_output: 384000
+      available_efforts: ["off", "low", "medium", "high", "max"]
+
+    # ── 智谱 GLM ───────────────────────────────────────────────────────
+    # GLM-5.x / 4.7 / 4.6 — 200K / 128K，thinking enabled/disabled
+    - model: glm-5.1
+      context_window: 200000
+      max_output: 128000
+      available_efforts: ["off", "high"]
+
+    - model: glm-5
+      context_window: 200000
+      max_output: 128000
+      available_efforts: ["off", "high"]
+
+    - model: glm-5-turbo
+      context_window: 200000
+      max_output: 128000
+      available_efforts: ["off", "high"]
+
+    - model: glm-4.7
+      context_window: 200000
+      max_output: 128000
+      available_efforts: ["off", "high"]
+
+    - model: glm-4.7-flash
+      context_window: 200000
+      max_output: 128000
+      available_efforts: ["off", "high"]
+
+    - model: glm-4.6
+      context_window: 200000
+      max_output: 128000
+      available_efforts: ["off", "high"]
+
+    # GLM-4.5 — 128K context
+    - model: glm-4.5
+      context_window: 128000
+      max_output: 96000
+      available_efforts: ["off", "high"]
+
+    - model: glm-4.5-air
+      context_window: 128000
+      max_output: 96000
+      available_efforts: ["off", "high"]
+
+    # ── 通义千问 Qwen ──────────────────────────────────────────────────
+    # Qwen3.7 — 1M / 64K，深度思考
+    - model: qwen3.7-max
+      context_window: 1000000
+      max_output: 65536
+      available_efforts: ["off", "low", "medium", "high"]
+
+    - model: qwen3.7-plus
+      context_window: 1000000
+      max_output: 65536
+      available_efforts: ["off", "low", "medium", "high"]
+
+    - model: qwen3.6-flash
+      context_window: 1000000
+      max_output: 65536
+      available_efforts: ["off", "low", "medium", "high"]
+
+    # Qwen3.5 — 1M / 64K
+    - model: qwen3.5-plus
+      context_window: 1000000
+      max_output: 65536
+      available_efforts: ["off", "low", "medium", "high"]
+
+    - model: qwen3.5-flash
+      context_window: 1000000
+      max_output: 65536
+      available_efforts: ["off", "low", "medium", "high"]
+
+    # Qwen3 Max / Coder
+    - model: qwen3-max
+      context_window: 256000
+      max_output: 65536
+      available_efforts: ["off", "low", "medium", "high"]
+
+    - model: qwen3-coder-plus
+      context_window: 1000000
+      max_output: 65536
+
+    - model: qwen3-coder-flash
+      context_window: 1000000
+      max_output: 65536
+
+    # 开源权重常用 ID（DashScope / 第三方）
+    - model: qwen3-235b-a22b
+      context_window: 128000
+      max_output: 16384
+      available_efforts: ["off", "high"]
+
+    - model: qwen3-32b
+      context_window: 128000
+      max_output: 16384
+      available_efforts: ["off", "high"]
+
+    # ── Moonshot Kimi ──────────────────────────────────────────────────
+    # Kimi K3 — 1M，reasoning_effort 仅支持 max
+    - model: kimi-k3
+      context_window: 1000000
+      max_output: 128000
+      temperature: 1.0
+      available_efforts: ["off", "max"]
+
+    # Kimi K2.7 Code — 256K，thinking 常开
+    - model: kimi-k2.7-code
+      context_window: 256000
+      max_output: 32768
+      temperature: 1.0
+      available_efforts: ["off", "high"]
+
+    - model: kimi-k2.7-code-highspeed
+      context_window: 256000
+      max_output: 32768
+      temperature: 1.0
+      available_efforts: ["off", "high"]
+
+    # Kimi K2.6 / K2.5 — 256K，thinking enabled/disabled
+    - model: kimi-k2.6
+      context_window: 256000
+      max_output: 32768
+      available_efforts: ["off", "high"]
+
+    - model: kimi-k2.5
+      context_window: 256000
+      max_output: 32768
+      available_efforts: ["off", "high"]
+
+    # ── MiniMax ────────────────────────────────────────────────────────
+    - model: MiniMax-M3
+      context_window: 1000000
+      max_output: 128000
+      available_efforts: ["off", "high"]
+
+    - model: MiniMax-M2.7
+      context_window: 204800
+      max_output: 128000
+      available_efforts: ["off", "high"]
+
+    - model: MiniMax-M2.7-highspeed
+      context_window: 204800
+      max_output: 128000
+      available_efforts: ["off", "high"]
+
+    - model: MiniMax-M2.5
+      context_window: 204800
+      max_output: 128000
+      available_efforts: ["off", "high"]
 
     # ── Google Gemini ──────────────────────────────────────────────────
     # Gemini 2.5 — budget-based thinking
     - model: gemini-2.5-pro
       context_window: 1048576
       max_output: 65536
-      available_efforts: ["off", "high", "max"]
+      available_efforts: ["off", "low", "medium", "high"]
 
     - model: gemini-2.5-flash
       context_window: 1048576
       max_output: 65536
-      available_efforts: ["off", "high", "max"]
+      available_efforts: ["off", "low", "medium", "high"]
 
-    # Gemini 3 — thinkingLevel-based
+    # Gemini 3.x — thinking_level based (minimal/low/medium/high)
+    - model: gemini-3.1-pro-preview
+      context_window: 1048576
+      max_output: 65536
+      available_efforts: ["off", "low", "medium", "high"]
+
+    - model: gemini-3.1-flash-lite
+      context_window: 1048576
+      max_output: 65536
+      available_efforts: ["off", "minimal", "low", "medium", "high"]
+
+    - model: gemini-3-flash-preview
+      context_window: 1048576
+      max_output: 65536
+      available_efforts: ["off", "minimal", "low", "medium", "high"]
+
+    - model: gemini-3.5-flash
+      context_window: 1048576
+      max_output: 65536
+      available_efforts: ["off", "minimal", "low", "medium", "high"]
+
+    # Short aliases (map to nearest 3.x IDs above)
     - model: gemini-3-pro
       context_window: 1048576
       max_output: 65536
@@ -279,11 +489,27 @@ llm:
     - model: gemini-3-flash
       context_window: 1048576
       max_output: 65536
-      available_efforts: ["off", "low", "medium", "high"]
+      available_efforts: ["off", "minimal", "low", "medium", "high"]
 
     # ── xAI Grok ──────────────────────────────────────────────────────
+    - model: grok-4.5
+      context_window: 500000
+      max_output: 128000
+      available_efforts: ["off", "low", "high"]
+
+    - model: grok-4.3
+      context_window: 1000000
+      max_output: 128000
+      available_efforts: ["off", "low", "high"]
+
+    - model: grok-4.1-fast
+      context_window: 2000000
+      max_output: 128000
+      available_efforts: ["off", "low", "high"]
+
+    # Legacy alias → grok-4.3
     - model: grok-3-mini
-      context_window: 131072
-      max_output: 32768
+      context_window: 1000000
+      max_output: 128000
       available_efforts: ["off", "low", "high"]
 
