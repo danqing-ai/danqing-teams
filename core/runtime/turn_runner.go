@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -265,6 +266,12 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		messages = append(messages, Message{Role: RoleAssistant, ToolCalls: assistantToolCalls})
 
 		for _, call := range resp.ToolCalls {
+			select {
+			case <-ctx.Done():
+				return domain.Report{}, messages, ctx.Err()
+			default:
+			}
+
 			handler, ok := p.Registry.Get(call.Name)
 			describe := call.Name
 			if ok {
@@ -335,15 +342,23 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 					Reason: permResult.Reason, ScopeOptions: scopeOpts,
 				})
 				outcome, err := p.Approval.WaitApproval(ctx, approvalID)
-				if err != nil || !outcome.Approved {
+				if err != nil {
+					// Turn cancel during approval is a hard stop (not a soft deny).
+					if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+						return domain.Report{}, messages, ctx.Err()
+					}
+					msg := "approval wait failed: " + err.Error() + toolErrorHint
+					p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolError, domain.ToolPart{
+						CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: "approval wait failed",
+					})
+					messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: msg})
+					processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
+					continue
+				}
+				if !outcome.Approved {
 					// Soft deny: return a tool error and let the agent continue
 					// (mainstream UX — rejection must not kill the whole turn).
-					msg := "User rejected this tool call. Do not retry the same command; choose a safer alternative or ask the user."
-					if err != nil {
-						msg = "approval wait failed: " + err.Error() + toolErrorHint
-					} else {
-						msg = msg + toolErrorHint
-					}
+					msg := "User rejected this tool call. Do not retry the same command; choose a safer alternative or ask the user." + toolErrorHint
 					p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolError, domain.ToolPart{
 						CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: "approval rejected",
 					})
@@ -383,11 +398,19 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 
 		result, err := handler.Execute(ctx, args)
 		if err != nil {
+			errContent := err.Error() + toolErrorHint
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolError, domain.ToolPart{
 				CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: err.Error(),
 			})
-			messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: err.Error() + toolErrorHint})
+			messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: errContent})
 			processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
+			// Pair tool_call in turnlog so LoadForRecovery can keep prior pairs.
+			if p.Log != nil {
+				p.Log("tool_result", map[string]any{"call_id": call.ID, "name": call.Name, "output": errContent})
+			}
+			if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+				return domain.Report{}, messages, ctx.Err()
+			}
 			continue
 		}
 

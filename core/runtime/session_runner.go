@@ -264,11 +264,16 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) {
 			cancel()
 		}()
 
-		goal := s.Content
+		goal := ""
 		var replayEntries []map[string]any
-		if g, entries := e.turnLog.LoadForRecovery(turnID); g != "" {
+		if g, entries := e.turnLog.LoadForRecovery(turnID); g != "" || len(entries) > 0 {
 			goal = g
 			replayEntries = entries
+		}
+		if goal == "" {
+			if t, err := e.turns.Get(ctx, turnID); err == nil && t.Goal != "" {
+				goal = t.Goal
+			}
 		}
 		if goal == "" {
 			goal = s.Content
@@ -279,8 +284,10 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) {
 			TurnID: turnID, AgentID: agentPtr.ID, Goal: goal,
 		})
 		e.stream.Publish(turnCtx, sessionID, turnID, domain.EventUserMessage, domain.UserMessagePayload{Content: goal})
-		e.turnLog.Create(turnID, sessionID, s.ProjectID, agentPtr.ID, goal)
+		// Create reopens existing JSONL for append (no duplicate start) when present.
+		_ = e.turnLog.Create(turnID, sessionID, s.ProjectID, agentPtr.ID, goal)
 		_ = e.turns.Create(turnCtx, domain.TurnLog{ID: turnID, SessionID: sessionID, AgentID: agentPtr.ID, Goal: goal, Status: domain.TurnRunning})
+		_ = e.turns.UpdateStatus(turnCtx, turnID, domain.TurnRunning)
 		e.turnRunner.Log = func(typ string, data map[string]any) {
 			e.turnLog.Append(turnID, typ, data)
 		}
@@ -331,14 +338,17 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) {
 			}
 		}
 
+		workDir := e.resolveWorkDir(turnCtx, s.ProjectID)
 		e.turnRunner.Registry = reg
 		rep, turnMsgs, err := e.turnRunner.Run(turnCtx, TurnContext{
 			SessionID: sessionID, TurnID: turnID, Agent: agentPtr,
-			Model: s.ModelID, MaxSteps: agentPtr.Steps, Messages: messages,
+			Model: s.ModelID, MaxSteps: agentPtr.Steps, WorkDir: workDir, Messages: messages,
 		})
 
 		e.mu.Lock()
-		e.turnMessages[sessionID] = append(e.turnMessages[sessionID], turnMsgs...)
+		if err == nil {
+			e.turnMessages[sessionID] = append(e.turnMessages[sessionID], turnMsgs...)
+		}
 		allMsgs := e.turnMessages[sessionID]
 		e.mu.Unlock()
 
@@ -361,6 +371,8 @@ func (e *Engine) RecoverRunning(ctx context.Context) {
 		if err := e.turns.UpdateStatus(ctx, t.ID, domain.TurnFailed); err != nil {
 			log.Printf("[RecoverRunning] update turn %s status: %v", t.ID, err)
 		}
+		// Rehydrate JSONL from disk (if any) so EndTurn can write the end marker.
+		_ = e.turnLog.Create(t.ID, t.SessionID, "", t.AgentID, t.Goal)
 		e.turnLog.EndTurn(t.ID, domain.TurnFailed)
 	}
 
@@ -535,7 +547,11 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 	})
 
 	e.mu.Lock()
-	e.turnMessages[sessionID] = append(e.turnMessages[sessionID], turnMsgs...)
+	// Do not persist partial messages from cancelled/failed turns — they may
+	// contain unpaired assistant tool_calls that break subsequent turns/resume.
+	if err == nil {
+		e.turnMessages[sessionID] = append(e.turnMessages[sessionID], turnMsgs...)
+	}
 	allMsgs := e.turnMessages[sessionID]
 	e.mu.Unlock()
 
@@ -559,14 +575,17 @@ func (e *Engine) afterTurn(sessionID, turnID, agentID string, rep domain.Report,
 	if err != nil {
 		kind := "turn"
 		msg := err.Error()
+		sessionStatus := domain.SessionStatusFailed
 		if errors.Is(err, context.Canceled) {
 			kind = "cancelled"
 			msg = "cancelled"
+			// Intentional interrupt is not a hard failure for the session.
+			sessionStatus = domain.SessionStatusCompleted
 		}
 		e.stream.Publish(context.Background(), sessionID, turnID, domain.EventTurnFailed, domain.ErrorPayload{
 			Message: msg, Kind: kind,
 		})
-		e.updateSessionStatus(sessionID, domain.SessionStatusFailed)
+		e.updateSessionStatus(sessionID, sessionStatus)
 		_ = e.turns.UpdateStatus(context.Background(), turnID, turnStatus(err, rep))
 		return
 	}

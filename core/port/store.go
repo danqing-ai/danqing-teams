@@ -105,9 +105,9 @@ type MCPServerRepo interface {
 // message reconstruction (turn recovery) and offline debugging (zip download).
 //
 // WHITELIST of allowed entry types:
-//   - "start"        — written by Create
-//   - "tool_call"    — written by Append (called from TurnRunner after tool execution)
-//   - "tool_result"  — written by Append (called from TurnRunner after tool execution)
+//   - "start"        — written by Create (skipped on reopen/resume of existing file)
+//   - "tool_call"    — written by Append before tool Execute
+//   - "tool_result"  — written by Append after tool Execute (success or error)
 //   - "end"          — written by EndTurn
 //
 // DO NOT write diagnostic, audit, or telemetry entries here (e.g. llm_error,
@@ -116,6 +116,7 @@ type MCPServerRepo interface {
 //
 // LoadForRecovery enforces this whitelist: only tool_call / tool_result
 // entries participate in message reconstruction; all others are skipped.
+// An unpaired trailing tool_call is dropped so earlier complete pairs survive.
 type TurnLogStore interface {
 	Create(turnID, sessionID, projectID, agentID, goal string) error
 	Append(turnID, typ string, data map[string]any)

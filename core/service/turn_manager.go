@@ -23,6 +23,10 @@ func (m *TurnManager) UpdateStatus(ctx context.Context, id string, status domain
 	return m.repo.UpdateStatus(ctx, id, status)
 }
 
+func (m *TurnManager) Get(ctx context.Context, id string) (domain.TurnLog, error) {
+	return m.repo.Get(ctx, id)
+}
+
 func (m *TurnManager) ListBySession(ctx context.Context, sessionID string) ([]domain.TurnLog, error) {
 	return m.repo.ListBySession(ctx, sessionID)
 }

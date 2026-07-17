@@ -40,6 +40,11 @@ func (s *TurnLogStore) sessionsDir(projectID string) string {
 	return filepath.Join(s.projector(projectID), "sessions")
 }
 
+// Create opens a turn log for writing.
+//
+// If the JSONL already exists (same-process resume after EndTurn, or process
+// restart with the file still on disk), it reopens for append and does NOT
+// write another "start" entry. Otherwise it creates a fresh file with start.
 func (s *TurnLogStore) Create(turnID, sessionID, projectID, agentID, goal string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -48,6 +53,18 @@ func (s *TurnLogStore) Create(turnID, sessionID, projectID, agentID, goal string
 		projectID = "_default"
 	}
 	s.sessionProjects[sessionID] = projectID
+
+	if tf, ok := s.loadTurnFileLocked(turnID); ok {
+		if goal != "" && tf.log.Goal == "" {
+			tf.log.Goal = goal
+		}
+		if agentID != "" && tf.log.AgentID == "" {
+			tf.log.AgentID = agentID
+		}
+		tf.log.SessionID = sessionID
+		tf.log.Status = domain.TurnRunning
+		return s.reopenAppendLocked(tf)
+	}
 
 	dir := filepath.Join(s.sessionsDir(projectID), sessionID)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -68,8 +85,8 @@ func (s *TurnLogStore) Create(turnID, sessionID, projectID, agentID, goal string
 	}
 	s.logs[turnID] = tf
 
-	entry := TurnLogEntry{Seq: 1, Type: "start", Data: map[string]any{"agent_id": agentID, "goal": goal}}
-	tf.writeEntry(entry)
+	tf.seq = 1
+	tf.writeEntry(TurnLogEntry{Seq: tf.seq, Type: "start", Data: map[string]any{"agent_id": agentID, "goal": goal}})
 	return nil
 }
 
@@ -86,7 +103,7 @@ func (s *TurnLogStore) Append(turnID, typ string, data map[string]any) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tf, ok := s.logs[turnID]
-	if !ok {
+	if !ok || tf.f == nil {
 		return
 	}
 	tf.seq++
@@ -101,10 +118,13 @@ func (s *TurnLogStore) EndTurn(turnID string, status domain.TurnStatus) {
 		return
 	}
 	tf.log.Status = status
-	tf.seq++
-	mapStatus := map[string]any{"status": string(status)}
-	tf.writeEntry(TurnLogEntry{Seq: tf.seq, Type: "end", Data: mapStatus})
-	tf.f.Close()
+	if tf.f != nil {
+		tf.seq++
+		mapStatus := map[string]any{"status": string(status)}
+		tf.writeEntry(TurnLogEntry{Seq: tf.seq, Type: "end", Data: mapStatus})
+		_ = tf.f.Close()
+		tf.f = nil
+	}
 }
 
 func (s *TurnLogStore) LastTurn(sessionID string) (turnID string, status domain.TurnStatus) {
@@ -139,8 +159,10 @@ func (s *TurnLogStore) ListTurns(sessionID string) []domain.TurnLog {
 		name := entry.Name()
 		if len(name) > 6 && name[len(name)-6:] == ".jsonl" {
 			id := name[:len(name)-6]
-			if tf, ok := s.logs[id]; ok {
-				out = append(out, *tf.log)
+			if _, ok := s.loadTurnFileLocked(id); ok {
+				if tf, ok := s.logs[id]; ok {
+					out = append(out, *tf.log)
+				}
 			}
 		}
 	}
@@ -188,7 +210,7 @@ func (s *TurnLogStore) LoadForRecovery(turnID string) (goal string, entries []ma
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	tf, ok := s.logs[turnID]
+	tf, ok := s.loadTurnFileLocked(turnID)
 	if !ok {
 		return "", nil
 	}
@@ -210,7 +232,8 @@ func (s *TurnLogStore) LoadForRecovery(turnID string) (goal string, entries []ma
 	}
 
 	// Whitelist: only tool_call / tool_result participate in recovery.
-	// All other entry types are transparently skipped.
+	// Walk from the end so we can drop an unpaired trailing tool_call
+	// (cancel / tool error mid-flight) without discarding earlier pairs.
 	cut := 0
 	for i := len(all) - 1; i >= 0; i-- {
 		typ, _ := all[i]["type"].(string)
@@ -224,7 +247,8 @@ func (s *TurnLogStore) LoadForRecovery(turnID string) (goal string, entries []ma
 			}
 			return goal, all[:cut]
 		case "tool_call":
-			return goal, all[:cut]
+			// Drop this unpaired call; keep everything before it.
+			return goal, all[:i]
 		}
 		// All other types (start, end, unknown) silently skipped.
 	}
@@ -236,7 +260,7 @@ func (s *TurnLogStore) LoadRawLog(turnID string) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	tf, ok := s.logs[turnID]
+	tf, ok := s.loadTurnFileLocked(turnID)
 	if !ok {
 		return nil, fmt.Errorf("turn log not found: %s", turnID)
 	}
@@ -246,10 +270,10 @@ func (s *TurnLogStore) LoadRawLog(turnID string) ([]byte, error) {
 
 // TurnLogNode represents a turn and its delegated children for zip packaging.
 type TurnLogNode struct {
-	TurnID  string         `json:"turnId"`
-	AgentID string         `json:"agentId,omitempty"`
-	Goal    string         `json:"goal,omitempty"`
-	File    string         `json:"file"`
+	TurnID   string         `json:"turnId"`
+	AgentID  string         `json:"agentId,omitempty"`
+	Goal     string         `json:"goal,omitempty"`
+	File     string         `json:"file"`
 	Children []*TurnLogNode `json:"children,omitempty"`
 }
 
@@ -257,7 +281,7 @@ func (s *TurnLogStore) LoadTurnLogZip(turnID string, events []domain.StreamEvent
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, ok := s.logs[turnID]; !ok {
+	if _, ok := s.loadTurnFileLocked(turnID); !ok {
 		return nil, fmt.Errorf("turn log not found: %s", turnID)
 	}
 
@@ -280,7 +304,7 @@ func (s *TurnLogStore) LoadTurnLogZip(turnID string, events []domain.StreamEvent
 	files := make(map[string]string)
 	var collect func(id string) *TurnLogNode
 	collect = func(id string) *TurnLogNode {
-		tf, exists := s.logs[id]
+		tf, exists := s.loadTurnFileLocked(id)
 		if !exists {
 			return nil
 		}
@@ -330,7 +354,7 @@ func (s *TurnLogStore) ListEntries(turnID string) []EntryJSON {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	tf, ok := s.logs[turnID]
+	tf, ok := s.loadTurnFileLocked(turnID)
 	if !ok {
 		return nil
 	}
@@ -382,4 +406,115 @@ func LoadTurnLog(projector func(projectID string) string, projectID, sessionID s
 func (tf *turnFile) writeEntry(e TurnLogEntry) {
 	b, _ := json.Marshal(e)
 	tf.f.Write(append(b, '\n'))
+}
+
+// loadTurnFileLocked returns an in-memory turnFile, rehydrating from disk when
+// needed (e.g. after process restart). Caller must hold s.mu.
+func (s *TurnLogStore) loadTurnFileLocked(turnID string) (*turnFile, bool) {
+	if tf, ok := s.logs[turnID]; ok {
+		return tf, true
+	}
+	filePath, sessionID, projectID := s.locateTurnFile(turnID)
+	if filePath == "" {
+		return nil, false
+	}
+	goal, agentID, status, lastSeq := readTurnMeta(filePath)
+	tf := &turnFile{
+		log: &domain.TurnLog{
+			ID:        turnID,
+			SessionID: sessionID,
+			Status:    status,
+			AgentID:   agentID,
+			Goal:      goal,
+		},
+		f:        nil,
+		seq:      lastSeq,
+		filePath: filePath,
+	}
+	s.logs[turnID] = tf
+	if sessionID != "" {
+		s.sessionProjects[sessionID] = projectID
+	}
+	return tf, true
+}
+
+func (s *TurnLogStore) reopenAppendLocked(tf *turnFile) error {
+	if tf.f != nil {
+		return nil
+	}
+	f, err := os.OpenFile(tf.filePath, os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	tf.f = f
+	return nil
+}
+
+// locateTurnFile scans project data dirs for sessions/*/{turnID}.jsonl.
+func (s *TurnLogStore) locateTurnFile(turnID string) (filePath, sessionID, projectID string) {
+	root := s.projector("")
+	projectEntries, err := os.ReadDir(root)
+	if err != nil {
+		return "", "", ""
+	}
+	want := turnID + ".jsonl"
+	for _, pe := range projectEntries {
+		if !pe.IsDir() {
+			continue
+		}
+		pid := pe.Name()
+		sessionsRoot := filepath.Join(s.projector(pid), "sessions")
+		sessionEntries, err := os.ReadDir(sessionsRoot)
+		if err != nil {
+			continue
+		}
+		for _, se := range sessionEntries {
+			if !se.IsDir() {
+				continue
+			}
+			candidate := filepath.Join(sessionsRoot, se.Name(), want)
+			if st, err := os.Stat(candidate); err == nil && !st.IsDir() {
+				return candidate, se.Name(), pid
+			}
+		}
+	}
+	return "", "", ""
+}
+
+func readTurnMeta(filePath string) (goal, agentID string, status domain.TurnStatus, lastSeq int) {
+	status = domain.TurnRunning
+	f, err := os.Open(filePath)
+	if err != nil {
+		return "", "", status, 0
+	}
+	defer f.Close()
+
+	dec := json.NewDecoder(f)
+	for dec.More() {
+		var e EntryJSON
+		if err := dec.Decode(&e); err != nil {
+			break
+		}
+		if e.Seq > lastSeq {
+			lastSeq = e.Seq
+		}
+		switch e.Type {
+		case "start":
+			if e.Data != nil {
+				if g, ok := e.Data["goal"].(string); ok && g != "" {
+					goal = g
+				}
+				if a, ok := e.Data["agent_id"].(string); ok && a != "" {
+					agentID = a
+				}
+			}
+		case "end":
+			if e.Data != nil {
+				if st, ok := e.Data["status"].(string); ok && st != "" {
+					status = domain.TurnStatus(st)
+				}
+			}
+		}
+	}
+	return goal, agentID, status, lastSeq
 }
