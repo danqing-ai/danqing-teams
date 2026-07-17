@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"danqing-teams/core/adapter/llm"
@@ -30,6 +31,48 @@ func (h *mockToolHandler) Schema() domain.ToolSchema {
 func (h *mockToolHandler) Execute(_ context.Context, _ map[string]any) (domain.ToolResult, error) {
 	h.calls++
 	return domain.ToolResult{Content: "ok"}, nil
+}
+
+func TestTrackDoomConsecutiveNotCumulative(t *testing.T) {
+	tr := NewTurnRunner(nil, nil, permission.NewGate(nil), tool.NewRegistry(), nil)
+	const turnID = "t1"
+	const threshold = 3
+
+	// Interleaved todowrite/write should not trip consecutive OR short alternating.
+	for i := 0; i < 3; i++ {
+		n := tr.trackDoom(turnID, "todowrite", "todowrite", threshold)
+		if n >= threshold {
+			t.Fatalf("interleaved: unexpected doom after todowrite #%d streak=%d", i+1, n)
+		}
+		n = tr.trackDoom(turnID, "write", "write", threshold)
+		if n >= threshold {
+			t.Fatalf("interleaved: unexpected doom on write streak=%d", n)
+		}
+	}
+
+	// Three consecutive identical calls should trip.
+	tr2 := NewTurnRunner(nil, nil, permission.NewGate(nil), tool.NewRegistry(), nil)
+	var last int
+	for i := 0; i < 3; i++ {
+		last = tr2.trackDoom("t2", "todowrite", "todowrite", threshold)
+	}
+	if last < threshold {
+		t.Fatalf("expected consecutive doom streak>=%d got %d", threshold, last)
+	}
+}
+
+func TestDetectAlternatingLoop(t *testing.T) {
+	// Need >= 8 alternating (4 A-B pairs) with threshold 3
+	pat := []string{"a", "b", "a", "b", "a", "b", "a", "b"}
+	if !detectAlternatingLoop(pat, 3) {
+		t.Fatal("expected alternating doom")
+	}
+	if detectAlternatingLoop([]string{"a", "b", "a", "b", "a", "b"}, 3) {
+		t.Fatal("6-long A-B should not trip (min 8)")
+	}
+	if detectAlternatingLoop([]string{"a", "a", "a"}, 3) {
+		t.Fatal("identical streak is not alternating")
+	}
 }
 
 func TestTurnRunnerDoomLoopMessagesIntegrity(t *testing.T) {
@@ -114,10 +157,10 @@ func TestTurnRunnerDoomLoopMessagesIntegrity(t *testing.T) {
 	validateToolMessagePairs(t, msgs2, "turn 2")
 }
 
-func TestTurnRunnerApprovalRejectMessagesIntegrity(t *testing.T) {
+func TestTurnRunnerApprovalRejectContinues(t *testing.T) {
 	mockLLM := llm.NewMock().
 		AddToolCall("exec_shell", map[string]any{"command": "ls"}).
-		AddText("done")
+		AddText("understood, will use a safer approach")
 
 	stream := NewStreamEventManager(nil)
 	perm := permission.NewGate(nil)
@@ -137,8 +180,8 @@ func TestTurnRunnerApprovalRejectMessagesIntegrity(t *testing.T) {
 
 	tr := NewTurnRunner(mockLLM, stream, perm, reg, configStore)
 
-	approved := make(chan bool, 1)
-	approved <- false
+	approved := make(chan ApprovalOutcome, 1)
+	approved <- ApprovalOutcome{Approved: false, Scope: "once"}
 	tr.Approval = &mockApprovalGate{result: approved}
 
 	ctx := context.Background()
@@ -157,53 +200,32 @@ func TestTurnRunnerApprovalRejectMessagesIntegrity(t *testing.T) {
 
 	rep, msgs, err := tr.Run(ctx, tctx)
 	if err != nil {
-		t.Fatalf("turn 1 unexpected error: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if rep.Status != domain.ReportFailed {
-		t.Errorf("turn 1: expected ReportFailed, got %v", rep.Status)
+	if rep.Status != domain.ReportDone {
+		t.Fatalf("expected ReportDone after soft reject, got %v: %s", rep.Status, rep.Summary)
 	}
-	if rep.Summary != "approval rejected" {
-		t.Errorf("turn 1: expected 'approval rejected', got %q", rep.Summary)
+	foundReject := false
+	for _, m := range msgs {
+		if m.Role == RoleTool && strings.Contains(m.Content, "rejected") {
+			foundReject = true
+		}
 	}
-
-	validateToolMessagePairs(t, msgs, "turn 1")
-
-	mockLLM2 := llm.NewMock().AddText("ok, continuing")
-	stream2 := NewStreamEventManager(nil)
-	reg2 := tool.NewRegistry()
-	reg2.Register(&mockToolHandler{name: "exec_shell", risk: domain.RiskHigh})
-	tr2 := NewTurnRunner(mockLLM2, stream2, perm, reg2, configStore)
-
-	tctx2 := TurnContext{
-		SessionID: "test-session",
-		TurnID:    "turn-approval-2",
-		Agent:     domain.Agent{ID: "test-agent", Steps: 20},
-		Model:     "test-model",
-		MaxSteps:  20,
-		WorkDir:   "/tmp",
-		Messages: append(append([]Message(nil), msgs...), Message{Role: RoleUser, Content: "continue"}),
+	if !foundReject {
+		t.Fatal("expected tool message containing rejection")
 	}
-
-	rep2, msgs2, err2 := tr2.Run(ctx, tctx2)
-	if err2 != nil {
-		t.Fatalf("turn 2 unexpected error: %v", err2)
-	}
-	if rep2.Status != domain.ReportDone {
-		t.Errorf("turn 2: expected ReportDone, got %v: %s", rep2.Status, rep2.Summary)
-	}
-
-	validateToolMessagePairs(t, msgs2, "turn 2")
+	validateToolMessagePairs(t, msgs, "approval soft reject")
 }
 
 type mockApprovalGate struct {
-	result chan bool
+	result chan ApprovalOutcome
 }
 
-func (g *mockApprovalGate) WaitApproval(_ context.Context, _ string) (bool, error) {
+func (g *mockApprovalGate) WaitApproval(_ context.Context, _ string) (ApprovalOutcome, error) {
 	return <-g.result, nil
 }
 
-func (g *mockApprovalGate) CreateApproval(_, _, _ string) string {
+func (g *mockApprovalGate) CreateApproval(_, _, _, _ string) string {
 	return "approval-1"
 }
 

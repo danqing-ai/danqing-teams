@@ -57,6 +57,7 @@ func buildRuntimeEnvironment() string {
 		"OS: " + osName + " (" + osLabel + ")\n" +
 		"Path separator: " + sep + "\n" +
 		"Shell: " + shell + "\n" +
+		"Note: exec_shell runs under the OS sandbox when enabled (workspace-write by default).\n" +
 		"</runtime-environment>"
 }
 

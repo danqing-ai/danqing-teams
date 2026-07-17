@@ -33,6 +33,7 @@ type ConfigInstanceSection struct {
 
 type ConfigRuntimeSection struct {
 	AutoApprove bool                      `json:"autoApprove" mapstructure:"auto_approve"`
+	Sandbox     ConfigSandboxSection      `json:"sandbox" mapstructure:"sandbox"`
 	Turn        ConfigTurnSection         `json:"turn" mapstructure:"turn"`
 	Team        ConfigTeamSection         `json:"team" mapstructure:"team"`
 	Memory      ConfigMemorySection       `json:"memory" mapstructure:"memory"`

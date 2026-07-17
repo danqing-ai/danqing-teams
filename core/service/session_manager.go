@@ -146,7 +146,7 @@ func (m *SessionManager) StreamEvents(sessionID string, since int64) []domain.St
 	return m.engine.StreamEvents(sessionID, since)
 }
 
-func (m *SessionManager) DecideApproval(ctx context.Context, id string, approved bool) error {
+func (m *SessionManager) DecideApproval(ctx context.Context, id string, approved bool, scope string) error {
 	a, err := m.store.Approvals().Get(ctx, id)
 	if err != nil {
 		return err
@@ -159,7 +159,7 @@ func (m *SessionManager) DecideApproval(ctx context.Context, id string, approved
 	if err := m.store.Approvals().Update(ctx, a); err != nil {
 		return err
 	}
-	m.engine.ResolveApproval(id, approved)
+	m.engine.ResolveApproval(id, approved, scope)
 	return nil
 }
 

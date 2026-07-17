@@ -197,7 +197,7 @@ func waitForSpecificEvent(t *testing.T, r http.Handler, sessionID string, since 
 
 func approvePermission(t *testing.T, r http.Handler, approvalID string) {
 	t.Helper()
-	b, _ := json.Marshal(map[string]bool{"approved": true})
+	b, _ := json.Marshal(map[string]any{"approved": true, "scope": "once"})
 	req, _ := http.NewRequest(http.MethodPost, "/api/v1/approvals/"+approvalID+"/decide", nil)
 	req.Header.Set("Content-Type", "application/json")
 	req.Body = io.NopCloser(bytes.NewReader(b))

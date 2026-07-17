@@ -252,6 +252,13 @@ export const useSessionsStore = defineStore('sessions', () => {
         method: 'POST',
         body: JSON.stringify(body),
       })
+      // Refresh turns so runningTurnId is set while waiting (e.g. for approvals).
+      await loadTurns(currentSessionId.value)
+      const idx = sessions.value.findIndex((x) => x.id === currentSessionId.value)
+      if (idx >= 0 && sessions.value[idx].status !== 'active') {
+        sessions.value[idx] = { ...sessions.value[idx], status: 'active' }
+      }
+      pollSession(currentSessionId.value)
     } finally {
       loading.value = false
     }
@@ -305,14 +312,19 @@ export const useSessionsStore = defineStore('sessions', () => {
     if (parsed.seq <= lastSeq) return
     lastSeq = parsed.seq
     streamEvents.value.push(parsed)
+    // Keep turn list in sync so runningTurnId stays accurate during approvals.
+    if (parsed.type === 'turn.started' || parsed.type === 'turn.ended' || parsed.type === 'turn.failed') {
+      const sid = currentSessionId.value
+      if (sid) void loadTurns(sid)
+    }
   }
 
   const decidedApprovalIds = reactive(new Set<string>())
 
-  async function decideApproval(approvalId: string, approved: boolean) {
+  async function decideApproval(approvalId: string, approved: boolean, scope: 'once' | 'session' = 'once') {
     await fetchJSON(`/approvals/${approvalId}/decide`, {
       method: 'POST',
-      body: JSON.stringify({ approved }),
+      body: JSON.stringify({ approved, scope }),
     })
     decidedApprovalIds.add(approvalId)
   }
@@ -328,7 +340,7 @@ export const useSessionsStore = defineStore('sessions', () => {
     streamEvents.value.filter((e) => {
       if (e.type !== 'permission.ask') return false
       const p = e.payload as Record<string, unknown> | null
-      const id = String(p?.approvalId ?? '')
+      const id = String(p?.approvalId ?? p?.id ?? '')
       return id && !decidedApprovalIds.has(id)
     }),
   )

@@ -3,14 +3,16 @@ package builtin
 import (
 	"context"
 	"fmt"
-	"os/exec"
-	"runtime"
 	"strings"
+	"time"
 
 	"danqing-teams/core/domain"
+	"danqing-teams/core/port"
 )
 
-type ExecShell struct{}
+type ExecShell struct {
+	Sandbox port.Sandbox
+}
 
 func (h *ExecShell) Name() string                { return "exec_shell" }
 func (h *ExecShell) RiskLevel() domain.RiskLevel { return domain.RiskHigh }
@@ -28,7 +30,7 @@ func (h *ExecShell) Schema() domain.ToolSchema {
 	return domain.ToolSchema{
 		Name: "exec_shell",
 		Description: "Execute a shell command and return its stdout/stderr. HIGH RISK — requires user approval.\n\n" +
-			"**Important**: Commands run in the project root directory. Use relative paths when referencing project files.\n\n" +
+			"**Important**: Commands run in the project root directory under the OS sandbox when enabled. Use relative paths when referencing project files.\n\n" +
 			"- Use only for builds, tests, git operations, or commands with no tool alternative.\n" +
 			"- Do NOT use for reading/writing files — use read_file, write, edit, or apply_patch instead.\n" +
 			"- Do NOT use for searching file contents — use grep or glob instead.\n" +
@@ -43,21 +45,34 @@ func (h *ExecShell) Schema() domain.ToolSchema {
 		},
 	}
 }
-func (h *ExecShell) Execute(_ context.Context, input map[string]any) (domain.ToolResult, error) {
+
+func (h *ExecShell) Execute(ctx context.Context, input map[string]any) (domain.ToolResult, error) {
 	cmdStr, _ := input["command"].(string)
 	if cmdStr == "" {
 		return domain.ToolResult{}, fmt.Errorf("command is required")
 	}
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command("cmd", "/c", cmdStr)
+	timeout := 30 * time.Second
+	if t, ok := input["timeout"].(float64); ok && t > 0 {
+		timeout = time.Duration(t) * time.Second
+	} else if t, ok := input["timeout"].(int); ok && t > 0 {
+		timeout = time.Duration(t) * time.Second
+	}
+
+	opts := port.SandboxRunOptions{
+		Command:      cmdStr,
+		WorkDir:      workDirFromInput(input),
+		Timeout:      timeout,
+		AllowNetwork: boolFromInput(input, "__sandbox_allow_network"),
+	}
+
+	var out []byte
+	var err error
+	if h.Sandbox != nil {
+		out, err = h.Sandbox.Run(ctx, opts)
 	} else {
-		cmd = exec.Command("sh", "-c", cmdStr)
+		out, err = hostRunShell(ctx, opts)
 	}
-	if wd := workDirFromInput(input); wd != "" {
-		cmd.Dir = wd
-	}
-	out, err := cmd.CombinedOutput()
+
 	content := strings.TrimSpace(string(out))
 	if err != nil {
 		if content == "" {

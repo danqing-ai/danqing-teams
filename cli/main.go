@@ -6,11 +6,16 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
 	"danqing-teams/core/bootstrap"
 	"danqing-teams/core/domain"
+	"danqing-teams/core/runtime/sandbox"
 )
 
 func main() {
+	if sandbox.MaybeReexec() {
+		return
+	}
 	core := bootstrap.New(bootstrap.Config{ConfigPath: os.Getenv("TEAMS_CONFIG")})
 	scanner := bufio.NewScanner(os.Stdin)
 	fmt.Println("DanQing Teams CLI. Type 'exit' to quit.")

@@ -834,7 +834,7 @@ function stepLabel(ev: StreamEvent, phase?: string): string {
   return '思考中…'
 }
 
-async function decide(ev: { payload: unknown }, approved: boolean) {
+async function decide(ev: { payload: unknown }, approved: boolean, scope: 'once' | 'session' = 'once') {
   const p = asRecord(ev.payload)
   const approvalId = p?.approvalId ?? p?.id
   if (!approvalId) {
@@ -842,8 +842,8 @@ async function decide(ev: { payload: unknown }, approved: boolean) {
     return
   }
   try {
-    await sessions.decideApproval(String(approvalId), approved)
-    toast.success(approved ? '已批准' : '已拒绝')
+    await sessions.decideApproval(String(approvalId), approved, scope)
+    toast.success(approved ? (scope === 'session' ? '已允许本会话' : '已批准') : '已拒绝')
   } catch (e) {
     toast.error(e instanceof Error ? e.message : '审批失败')
   }
@@ -859,6 +859,31 @@ function approvalDescription(payload: unknown) {
   return String(p?.description ?? '')
 }
 
+function approvalReason(payload: unknown): string {
+  const p = asRecord(payload)
+  return String(p?.reason ?? '')
+}
+
+function approvalReasonLabel(payload: unknown): string {
+  switch (approvalReason(payload)) {
+    case 'network':
+      return '需要网络访问'
+    case 'dangerous_command':
+      return '危险命令'
+    case 'unsandboxed':
+      return '未隔离环境'
+    default:
+      return '需要确认'
+  }
+}
+
+function approvalAllowsSession(payload: unknown): boolean {
+  const p = asRecord(payload)
+  const opts = p?.scopeOptions
+  if (Array.isArray(opts)) return opts.includes('session')
+  return approvalReason(payload) === 'network'
+}
+
 function approvalId(payload: unknown): string {
   const p = asRecord(payload)
   return String(p?.approvalId ?? p?.id ?? '')
@@ -870,12 +895,15 @@ function isApprovalDecided(payload: unknown): boolean {
   return sessions.decidedApprovalIds.has(id)
 }
 
-const isSessionActive = computed(() => {
-  const s = sessions.currentSession?.status
-  // Session is active when running (not completed/failed/archived)
-  // Also check if there's a running turn (for approval scenarios)
-  return s === 'active' || !!sessions.runningTurnId
-})
+/** Show approve/reject whenever this ask is still undecided in the live stream.
+ *  Do not gate on session/turn status — after sendTurn those can stay stale
+ *  (completed / no running turn) until poll/loadTurns, which hid the first ask's buttons. */
+function shouldShowApprovalActions(payload: unknown): boolean {
+  if (isApprovalDecided(payload)) return false
+  const id = approvalId(payload)
+  if (!id) return false
+  return sessions.pendingApprovals.some((e) => approvalId(e.payload) === id)
+}
 
 const askUserText = ref<Record<string, string>>({})
 const askUserFormValues = ref<Record<string, Record<string, unknown>>>({})
@@ -1366,10 +1394,19 @@ function onTitleKeydown(e: KeyboardEvent) {
                     <template v-else-if="ev.type === 'permission.ask'">
                       <div class="turn__permission">
                         <svg class="turn__permission-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                        <span>高危工具待审批：<strong>{{ approvalTool(ev.payload) }}</strong><template v-if="approvalDescription(ev.payload)"> — {{ approvalDescription(ev.payload) }}</template></span>
-                        <template v-if="isSessionActive && !isApprovalDecided(ev.payload)">
+                        <span>
+                          <strong>{{ approvalReasonLabel(ev.payload) }}</strong>：
+                          <strong>{{ approvalTool(ev.payload) }}</strong>
+                          <template v-if="approvalDescription(ev.payload)"> — {{ approvalDescription(ev.payload) }}</template>
+                        </span>
+                        <template v-if="shouldShowApprovalActions(ev.payload)">
                           <div class="turn__permission-actions">
-                            <DqButton type="primary" size="small" @click="decide(ev, true)">批准</DqButton>
+                            <DqButton type="primary" size="small" @click="decide(ev, true, 'once')">允许一次</DqButton>
+                            <DqButton
+                              v-if="approvalAllowsSession(ev.payload)"
+                              size="small"
+                              @click="decide(ev, true, 'session')"
+                            >本会话允许</DqButton>
                             <DqButton size="small" @click="decide(ev, false)">拒绝</DqButton>
                           </div>
                         </template>

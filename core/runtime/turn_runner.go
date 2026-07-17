@@ -93,24 +93,32 @@ type TurnContext struct {
 }
 
 type approvalGate interface {
-	WaitApproval(ctx context.Context, approvalID string) (approved bool, err error)
-	CreateApproval(sessionID, toolName, description string) string
+	WaitApproval(ctx context.Context, approvalID string) (ApprovalOutcome, error)
+	CreateApproval(sessionID, toolName, description, reason string) string
 }
 
 type TurnRunner struct {
-	LLM               port.LLMProvider
-	Stream            port.EventStream
-	Perm              *permission.Gate
-	Registry          *tool.Registry
-	SkillList         []domain.Skill
-	ToolBindings      []domain.ToolBinding
-	Approval          approvalGate
-	ConfigStore       port.ConfigStore
-	Log               func(typ string, data map[string]any)
-	FileTracker       *tool.FileTracker
-	mu                sync.Mutex
-	doomCounter       map[string]map[string]int
-	doomPatterns      map[string][]string
+	LLM                 port.LLMProvider
+	Stream              port.EventStream
+	Perm                *permission.Gate
+	Registry            *tool.Registry
+	SkillList           []domain.Skill
+	ToolBindings        []domain.ToolBinding
+	Approval            approvalGate
+	ConfigStore         port.ConfigStore
+	Log                 func(typ string, data map[string]any)
+	FileTracker         *tool.FileTracker
+	SandboxStatus       func() domain.SandboxStatus
+	SessionAllowNetwork func(sessionID string) bool
+	mu                  sync.Mutex
+	doomState           map[string]*doomTurnState
+}
+
+// doomTurnState tracks consecutive identical tool signatures (mainstream-style).
+type doomTurnState struct {
+	lastKey  string
+	streak   int
+	patterns []string // recent signatures for A-B-A-B detection
 }
 
 type turnRunCfg struct {
@@ -125,9 +133,8 @@ type turnRunCfg struct {
 func NewTurnRunner(llm port.LLMProvider, stream port.EventStream, perm *permission.Gate, reg *tool.Registry, configStore port.ConfigStore) *TurnRunner {
 	return &TurnRunner{
 		LLM: llm, Stream: stream, Perm: perm, Registry: reg,
-		ConfigStore:  configStore,
-		doomCounter:  make(map[string]map[string]int),
-		doomPatterns: make(map[string][]string),
+		ConfigStore: configStore,
+		doomState:   make(map[string]*doomTurnState),
 	}
 }
 
@@ -289,7 +296,23 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolPending, Input: call.Arguments,
 		})
 
-			decision := p.Perm.Check(call.Name, handler.RiskLevel())
+			cmdStr, _ := call.Arguments["command"].(string)
+			sbStatus := domain.SandboxStatus{}
+			if p.SandboxStatus != nil {
+				sbStatus = p.SandboxStatus()
+			}
+			allowNet := false
+			if p.SessionAllowNetwork != nil {
+				allowNet = p.SessionAllowNetwork(tctx.SessionID)
+			}
+			permResult := p.Perm.CheckRequest(permission.Request{
+				ToolName:            call.Name,
+				Risk:                handler.RiskLevel(),
+				Command:             cmdStr,
+				Sandbox:             sbStatus,
+				SessionAllowNetwork: allowNet,
+			})
+			decision := permResult.Decision
 			if decision == permission.DecisionDeny {
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolError, domain.ToolPart{
 				CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: "permission denied",
@@ -299,28 +322,40 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			continue
 			}
 
+			allowNetworkForRun := allowNet
 			if decision == permission.DecisionAsk && !cfg.autoApprove && p.Approval != nil {
 				description := describe
-				approvalID := p.Approval.CreateApproval(tctx.SessionID, call.Name, description)
+				approvalID := p.Approval.CreateApproval(tctx.SessionID, call.Name, description, permResult.Reason)
+				scopeOpts := []string{"once"}
+				if permResult.Reason == permission.ReasonNetwork {
+					scopeOpts = append(scopeOpts, "session")
+				}
 				p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventPermissionAsk, domain.PermissionAskPayload{
 					ApprovalID: approvalID, Tool: call.Name, Description: description,
+					Reason: permResult.Reason, ScopeOptions: scopeOpts,
 				})
-				approved, err := p.Approval.WaitApproval(ctx, approvalID)
-				if err != nil || !approved {
-					finalReport = domain.Report{Status: domain.ReportFailed, Summary: "approval rejected", MaxPromptTokens: maxPromptTokens}
-					p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepEnded, domain.StepPayload{Step: step})
-					p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventTurnFailed, domain.TurnEndedPayload{
-						TurnID: tctx.TurnID, Status: "failed", Summary: "approval rejected",
+				outcome, err := p.Approval.WaitApproval(ctx, approvalID)
+				if err != nil || !outcome.Approved {
+					// Soft deny: return a tool error and let the agent continue
+					// (mainstream UX — rejection must not kill the whole turn).
+					msg := "User rejected this tool call. Do not retry the same command; choose a safer alternative or ask the user."
+					if err != nil {
+						msg = "approval wait failed: " + err.Error() + toolErrorHint
+					} else {
+						msg = msg + toolErrorHint
+					}
+					p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolError, domain.ToolPart{
+						CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: "approval rejected",
 					})
-					p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventError, domain.ErrorPayload{
-						Message: "approval rejected", Kind: "approval",
-					})
-					// Synthetic tool result to maintain assistant(tool_calls) ↔ tool pairing.
-					messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: "approval rejected"})
-					reportCaptured = true
-					break
+					messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: msg})
+					processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
+					continue
 				}
-				// approved — continue to execute tool
+				if permResult.Reason == permission.ReasonNetwork {
+					allowNetworkForRun = true
+				}
+			} else if decision == permission.DecisionAsk && cfg.autoApprove && permResult.Reason == permission.ReasonNetwork {
+				allowNetworkForRun = true
 			}
 
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolRunning, domain.ToolPart{
@@ -342,6 +377,9 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		args["__work_dir"] = tctx.WorkDir
 		args["__call_id"] = call.ID
 		args["__file_tracker"] = p.FileTracker
+		if allowNetworkForRun {
+			args["__sandbox_allow_network"] = true
+		}
 
 		result, err := handler.Execute(ctx, args)
 		if err != nil {
@@ -394,65 +432,59 @@ func (p *TurnRunner) trackDoom(turnID, tool, describe string, threshold int) int
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.doomCounter[turnID] == nil {
-		p.doomCounter[turnID] = map[string]int{}
+	if p.doomState[turnID] == nil {
+		p.doomState[turnID] = &doomTurnState{}
 	}
+	st := p.doomState[turnID]
 	if len(describe) > doomDescribeMaxLen {
 		describe = describe[:doomDescribeMaxLen]
 	}
 	key := tool + "\x00" + describe
-	p.doomCounter[turnID][key]++
 
-	p.doomPatterns[turnID] = append(p.doomPatterns[turnID], key)
-	if len(p.doomPatterns[turnID]) > doomPatternWindow {
-		p.doomPatterns[turnID] = p.doomPatterns[turnID][1:]
+	// Consecutive identical signatures only; any different tool resets the streak.
+	if key == st.lastKey {
+		st.streak++
+	} else {
+		st.lastKey = key
+		st.streak = 1
 	}
 
-	if p.detectAlternatingLoop(turnID, threshold) {
+	st.patterns = append(st.patterns, key)
+	if len(st.patterns) > doomPatternWindow {
+		st.patterns = st.patterns[1:]
+	}
+
+	if detectAlternatingLoop(st.patterns, threshold) {
 		return threshold
 	}
-
-	return p.doomCounter[turnID][key]
+	return st.streak
 }
 
-func (p *TurnRunner) detectAlternatingLoop(turnID string, threshold int) bool {
-	patterns := p.doomPatterns[turnID]
-	if len(patterns) < doomPatternWindow {
+// detectAlternatingLoop catches A-B-A-B… streaks from the end (consecutive ping-pong).
+func detectAlternatingLoop(patterns []string, threshold int) bool {
+	if threshold < 2 || len(patterns) < threshold*2 {
 		return false
 	}
-
-	recent := patterns[len(patterns)-doomPatternWindow:]
-	seen := make(map[string]int)
-	for _, t := range recent {
-		seen[t]++
+	a, b := patterns[len(patterns)-1], patterns[len(patterns)-2]
+	if a == b {
+		return false
 	}
-
-	for _, count := range seen {
-		if count >= threshold {
-			return true
+	altCount := 0
+	for i := len(patterns) - 1; i >= 0; i-- {
+		expect := a
+		if (len(patterns)-1-i)%2 == 1 {
+			expect = b
 		}
-	}
-
-	if len(recent) >= 4 {
-		a, b := recent[len(recent)-1], recent[len(recent)-2]
-		if a != b {
-			altCount := 0
-			for i := len(recent) - 1; i >= 0; i-- {
-				if (len(recent)-1-i)%2 == 0 && recent[i] == a {
-					altCount++
-				} else if (len(recent)-1-i)%2 == 1 && recent[i] == b {
-					altCount++
-				} else {
-					break
-				}
-			}
-			if altCount >= threshold {
-				return true
-			}
+		if patterns[i] != expect {
+			break
 		}
+		altCount++
 	}
-
-	return false
+	need := threshold * 2
+	if need < 8 {
+		need = 8 // at least 4 A-B pairs; avoids false positives like todowrite↔write
+	}
+	return altCount >= need
 }
 
 func (p *TurnRunner) compactMessages(messages []Message, cfg turnRunCfg) []Message {

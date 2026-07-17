@@ -54,6 +54,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.listen_addr", "0.0.0.0:7801")
 	v.SetDefault("instance.id", "")
 	v.SetDefault("runtime.auto_approve", false)
+	v.SetDefault("runtime.sandbox.enabled", true)
+	v.SetDefault("runtime.sandbox.mode", "workspace-write")
+	v.SetDefault("runtime.sandbox.network", "deny")
+	v.SetDefault("runtime.sandbox.backend", "")
 	v.SetDefault("runtime.turn.doom_loop_threshold", 5)
 	v.SetDefault("runtime.turn.max_steps_default", 20)
 	v.SetDefault("runtime.team.max_delegation_depth", 3)
@@ -83,6 +87,10 @@ func bindEnv(v *viper.Viper) {
 	_ = v.BindEnv("data.store", "TEAMS_STORE")
 	_ = v.BindEnv("server.listen_addr", "TEAMS_ADDR")
 	_ = v.BindEnv("runtime.auto_approve", "TEAMS_AUTO_APPROVE")
+	_ = v.BindEnv("runtime.sandbox.enabled", "TEAMS_SANDBOX_ENABLED")
+	_ = v.BindEnv("runtime.sandbox.mode", "TEAMS_SANDBOX_MODE")
+	_ = v.BindEnv("runtime.sandbox.network", "TEAMS_SANDBOX_NETWORK")
+	_ = v.BindEnv("runtime.sandbox.backend", "TEAMS_SANDBOX_BACKEND")
 	_ = v.BindEnv("instance.id", "TEAMS_INSTANCE_ID")
 }
 

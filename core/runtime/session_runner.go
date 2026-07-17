@@ -36,6 +36,7 @@ type Engine struct {
 	knowledge     *builtin.Knowledge
 	llm           port.LLMProvider
 	stream        port.EventStream
+	sandbox       port.Sandbox
 	turnRunner    *TurnRunner
 	toolCatalog   *tool.Registry
 	compactionMgr *CompactionManager
@@ -44,10 +45,28 @@ type Engine struct {
 	dataDir       string
 	turnMessages  map[string][]Message
 	mu            sync.Mutex
-	approvalWait  map[string]chan bool
+	approvalWait  map[string]chan ApprovalOutcome
+	approvalMeta  map[string]approvalMeta
+	sessionPerm   map[string]sessionPermState
 	askUserWait   map[string]chan string
 	cancel        map[string]context.CancelFunc
 	agentChain    []string
+}
+
+type approvalMeta struct {
+	SessionID string
+	Reason    string
+}
+
+type sessionPermState struct {
+	AllowNetwork bool
+}
+
+// ApprovalOutcome is returned when a pending approval is resolved.
+type ApprovalOutcome struct {
+	Approved bool
+	Scope    string // once | session
+	Reason   string
 }
 
 func (e *Engine) loadRunCfg(ctx context.Context) engineRunCfg {
@@ -101,12 +120,39 @@ func NewEngine(sessions *service.SessionManager, turns *service.TurnManager, pro
 		configStore:   configStore,
 		dataDir:       dataDir,
 		turnMessages:  make(map[string][]Message),
-		approvalWait:  make(map[string]chan bool),
+		approvalWait:  make(map[string]chan ApprovalOutcome),
+		approvalMeta:  make(map[string]approvalMeta),
+		sessionPerm:   make(map[string]sessionPermState),
 		askUserWait:   make(map[string]chan string),
 		cancel:        make(map[string]context.CancelFunc),
 	}
 	turnRunner.Approval = e
+	turnRunner.SandboxStatus = e.sandboxStatus
+	turnRunner.SessionAllowNetwork = e.sessionAllowsNetwork
 	return e
+}
+
+// SetSandbox wires the process sandbox used for policy decisions and tool execution status.
+func (e *Engine) SetSandbox(sb port.Sandbox) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.sandbox = sb
+}
+
+func (e *Engine) sandboxStatus() domain.SandboxStatus {
+	e.mu.Lock()
+	sb := e.sandbox
+	e.mu.Unlock()
+	if sb == nil {
+		return domain.SandboxStatus{Enabled: false, Backend: domain.SandboxBackendDisabled}
+	}
+	return sb.Status()
+}
+
+func (e *Engine) sessionAllowsNetwork(sessionID string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.sessionPerm[sessionID].AllowNetwork
 }
 
 func (e *Engine) RegisterTool(h tool.Handler) {
@@ -730,40 +776,51 @@ func (e *Engine) Subscribe(sessionID string) chan domain.StreamEvent {
 func (e *Engine) Unsubscribe(sessionID string, ch chan domain.StreamEvent) {
 	e.stream.Unsubscribe(sessionID, ch)
 }
-func (e *Engine) ResolveApproval(id string, approved bool) {
+func (e *Engine) ResolveApproval(id string, approved bool, scope string) {
+	if scope == "" {
+		scope = "once"
+	}
 	e.mu.Lock()
 	ch := e.approvalWait[id]
+	meta := e.approvalMeta[id]
 	delete(e.approvalWait, id)
+	delete(e.approvalMeta, id)
+	if approved && scope == "session" && meta.Reason == permission.ReasonNetwork && meta.SessionID != "" {
+		st := e.sessionPerm[meta.SessionID]
+		st.AllowNetwork = true
+		e.sessionPerm[meta.SessionID] = st
+	}
 	e.mu.Unlock()
 	if ch != nil {
 		select {
-		case ch <- approved:
+		case ch <- ApprovalOutcome{Approved: approved, Scope: scope, Reason: meta.Reason}:
 		default:
 		}
 	}
 }
-func (e *Engine) WaitApproval(ctx context.Context, id string) (bool, error) {
+func (e *Engine) WaitApproval(ctx context.Context, id string) (ApprovalOutcome, error) {
 	if e.isAutoApprove() {
-		return true, nil
+		return ApprovalOutcome{Approved: true, Scope: "once"}, nil
 	}
 	e.mu.Lock()
 	ch := e.approvalWait[id]
 	e.mu.Unlock()
 	if ch == nil {
-		return false, fmt.Errorf("approval not found")
+		return ApprovalOutcome{}, fmt.Errorf("approval not found")
 	}
 	select {
-	case approved := <-ch:
-		return approved, nil
+	case out := <-ch:
+		return out, nil
 	case <-ctx.Done():
-		return false, ctx.Err()
+		return ApprovalOutcome{}, ctx.Err()
 	}
 }
-func (e *Engine) CreateApproval(sessionID, toolName, description string) string {
+func (e *Engine) CreateApproval(sessionID, toolName, description, reason string) string {
 	id := fmt.Sprintf("appr-%d", time.Now().UnixNano())
-	ch := make(chan bool, 1)
+	ch := make(chan ApprovalOutcome, 1)
 	e.mu.Lock()
 	e.approvalWait[id] = ch
+	e.approvalMeta[id] = approvalMeta{SessionID: sessionID, Reason: reason}
 	e.mu.Unlock()
 	_ = e.approvals.Create(context.Background(), domain.Approval{
 		ID: id, SessionID: sessionID, ToolName: toolName,

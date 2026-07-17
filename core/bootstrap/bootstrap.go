@@ -12,6 +12,7 @@ import (
 	"danqing-teams/core/port"
 	dqruntime "danqing-teams/core/runtime"
 	"danqing-teams/core/runtime/prompt"
+	"danqing-teams/core/runtime/sandbox"
 	"danqing-teams/core/runtime/tool/builtin"
 	"danqing-teams/core/service"
 	sqlitestore "danqing-teams/core/store/sqlite"
@@ -33,6 +34,7 @@ type Config struct {
 type Core struct {
 	Store         port.Repository
 	Engine        port.Engine
+	Sandbox       port.Sandbox
 	Config        *domain.ConfigFile
 	Loader        *config.Loader
 	Sessions      *service.SessionManager
@@ -144,7 +146,9 @@ func New(cfg Config) *Core {
 	eng := dqruntime.NewEngine(sessions, turnManager, pm, approvalManager, turnLogManager, agents, skills, knowledge, provider, stream, checkpointStore, loader, appCfg.Data.Dir)
 	sessions.SetEngine(eng)
 
-	eng.RegisterTool(&builtin.ExecShell{})
+	sb := sandbox.New(appCfg.Runtime.Sandbox)
+	eng.SetSandbox(sb)
+	eng.RegisterTool(&builtin.ExecShell{Sandbox: sb})
 	eng.RegisterTool(&builtin.ReadFile{})
 	eng.RegisterTool(&builtin.Edit{})
 	eng.RegisterTool(&builtin.Write{})
@@ -165,6 +169,7 @@ func New(cfg Config) *Core {
 	return &Core{
 		Store:         st,
 		Engine:        eng,
+		Sandbox:       sb,
 		Config:        appCfg,
 		Loader:        loader,
 		Sessions:      sessions,

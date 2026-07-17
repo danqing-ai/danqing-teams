@@ -56,6 +56,10 @@ const searchForm = ref({
 
 const runtimeForm = ref({
   autoApprove: false,
+  sandboxEnabled: true,
+  sandboxMode: 'workspace-write' as 'read-only' | 'workspace-write' | 'danger-full-access',
+  sandboxNetwork: 'deny' as 'deny' | 'allow' | 'allowlist',
+  sandboxBackend: '',
   doomLoopThreshold: 3,
   maxStepsDefault: 20,
   maxDelegationDepth: 3,
@@ -68,6 +72,13 @@ const runtimeForm = ref({
   compactionTurnInterval: 6,
   compactionSubInterval: 4,
   compactionToolTruncate: 2000,
+})
+
+const sandboxStatusText = computed(() => {
+  const st = runtimeConfig.sandboxStatus
+  if (!st) return ''
+  const caps = st.capabilities?.length ? ` (${st.capabilities.join(', ')})` : ''
+  return `${st.backend}${caps}`
 })
 
 const modelConfigForm = ref<ModelConfig[]>([])
@@ -547,6 +558,43 @@ const hasFooterActions = computed(() => {
           <div class="settings-form-group">
             <h3 class="settings-form-group__title">{{ $t('settings.runtimeAutoApprove') }}</h3>
             <p class="settings-form-group__desc">{{ $t('settings.runtimeAutoApproveDesc') }}</p>
+            <label class="settings-field settings-field--switch">
+              <span class="settings-field__label">{{ $t('settings.sandboxEnabled') }}</span>
+              <DqSwitch
+                :model-value="runtimeForm.sandboxEnabled"
+                size="small"
+                @update:model-value="(v: boolean) => runtimeForm.sandboxEnabled = v"
+              />
+            </label>
+            <template v-if="runtimeForm.sandboxEnabled">
+              <div class="settings-form-row">
+                <div class="settings-field settings-field--half">
+                  <span class="settings-field__label">{{ $t('settings.sandboxMode') }}</span>
+                  <DqSelect v-model="runtimeForm.sandboxMode">
+                    <DqOption value="read-only" :label="$t('settings.sandboxModeReadOnly')" />
+                    <DqOption value="workspace-write" :label="$t('settings.sandboxModeWorkspaceWrite')" />
+                    <DqOption value="danger-full-access" :label="$t('settings.sandboxModeDanger')" />
+                  </DqSelect>
+                </div>
+                <div class="settings-field settings-field--half">
+                  <span class="settings-field__label">{{ $t('settings.sandboxNetwork') }}</span>
+                  <DqSelect v-model="runtimeForm.sandboxNetwork">
+                    <DqOption value="deny" :label="$t('settings.sandboxNetworkDeny')" />
+                    <DqOption value="allow" :label="$t('settings.sandboxNetworkAllow')" />
+                  </DqSelect>
+                </div>
+              </div>
+              <div v-if="sandboxStatusText" class="settings-sandbox-status">
+                <span class="settings-field__label">{{ $t('settings.sandboxStatus') }}</span>
+                <code class="settings-sandbox-status__value">{{ sandboxStatusText }}</code>
+                <p
+                  v-if="runtimeConfig.sandboxStatus?.degraded && runtimeConfig.sandboxStatus.degradedReason"
+                  class="settings-sandbox-status__degraded"
+                >
+                  {{ $t('settings.sandboxDegraded') }}: {{ runtimeConfig.sandboxStatus.degradedReason }}
+                </p>
+              </div>
+            </template>
             <label class="settings-field settings-field--switch">
               <span class="settings-field__label">{{ $t('settings.autoApprove') }}</span>
               <DqSwitch
@@ -1198,6 +1246,27 @@ const hasFooterActions = computed(() => {
   line-height: 1.5;
 }
 
+.settings-sandbox-status {
+  margin: 12px 0 16px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--dq-fill-quaternary, rgba(127, 127, 127, 0.08));
+}
+
+.settings-sandbox-status__value {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: var(--dq-font-size-footnote);
+  color: var(--dq-label-secondary);
+}
+
+.settings-sandbox-status__degraded {
+  margin: 8px 0 0;
+  font-size: var(--dq-font-size-footnote);
+  color: var(--dq-label-tertiary);
+  line-height: 1.4;
+}
+
 .settings-form-row {
   display: flex;
   gap: 16px;
@@ -1208,6 +1277,14 @@ const hasFooterActions = computed(() => {
 }
 
 .settings-field--switch + .settings-form-row {
+  margin-top: 12px;
+}
+
+.settings-field--switch + .settings-field--switch {
+  margin-top: 12px;
+}
+
+.settings-form-row + .settings-field--switch {
   margin-top: 12px;
 }
 

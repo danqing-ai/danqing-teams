@@ -1,0 +1,102 @@
+package permission
+
+import (
+	"testing"
+
+	"danqing-teams/core/domain"
+)
+
+func strongSB(net domain.SandboxNetwork) domain.SandboxStatus {
+	return domain.SandboxStatus{
+		Enabled: true,
+		Mode:    domain.SandboxModeWorkspaceWrite,
+		Network: net,
+		Backend: domain.SandboxBackendSeatbelt,
+	}
+}
+
+func TestGateSandboxedGitStatusAllow(t *testing.T) {
+	g := NewGate(nil)
+	r := g.CheckRequest(Request{
+		ToolName: "exec_shell",
+		Risk:     domain.RiskHigh,
+		Command:  "git status",
+		Sandbox:  strongSB(domain.SandboxNetworkDeny),
+	})
+	if r.Decision != DecisionAllow {
+		t.Fatalf("got %+v", r)
+	}
+}
+
+func TestGateDangerousAsk(t *testing.T) {
+	g := NewGate(nil)
+	r := g.CheckRequest(Request{
+		ToolName: "exec_shell",
+		Risk:     domain.RiskHigh,
+		Command:  "rm -rf /tmp/foo",
+		Sandbox:  strongSB(domain.SandboxNetworkDeny),
+	})
+	if r.Decision != DecisionAsk || r.Reason != ReasonDangerousCommand {
+		t.Fatalf("got %+v", r)
+	}
+}
+
+func TestGateNetworkAskAndSessionAllow(t *testing.T) {
+	g := NewGate(nil)
+	r := g.CheckRequest(Request{
+		ToolName: "exec_shell",
+		Risk:     domain.RiskHigh,
+		Command:  "npm install lodash",
+		Sandbox:  strongSB(domain.SandboxNetworkDeny),
+	})
+	if r.Decision != DecisionAsk || r.Reason != ReasonNetwork {
+		t.Fatalf("got %+v", r)
+	}
+	r2 := g.CheckRequest(Request{
+		ToolName:            "exec_shell",
+		Risk:                domain.RiskHigh,
+		Command:             "npm install lodash",
+		Sandbox:             strongSB(domain.SandboxNetworkDeny),
+		SessionAllowNetwork: true,
+	})
+	if r2.Decision != DecisionAllow {
+		t.Fatalf("got %+v", r2)
+	}
+}
+
+func TestGateHostWeakAsk(t *testing.T) {
+	g := NewGate(nil)
+	r := g.CheckRequest(Request{
+		ToolName: "exec_shell",
+		Risk:     domain.RiskHigh,
+		Command:  "ls",
+		Sandbox: domain.SandboxStatus{
+			Enabled: true,
+			Mode:    domain.SandboxModeWorkspaceWrite,
+			Backend: domain.SandboxBackendHostWeak,
+		},
+	})
+	if r.Decision != DecisionAsk || r.Reason != ReasonUnsandboxed {
+		t.Fatalf("got %+v", r)
+	}
+}
+
+func TestGateMediumAllow(t *testing.T) {
+	g := NewGate(nil)
+	r := g.CheckRequest(Request{ToolName: "write", Risk: domain.RiskMedium})
+	if r.Decision != DecisionAllow {
+		t.Fatalf("got %+v", r)
+	}
+}
+
+func TestHeuristics(t *testing.T) {
+	if !LooksDangerous("sudo apt install x") {
+		t.Fatal("sudo")
+	}
+	if !LooksLikeNetwork("curl https://example.com") {
+		t.Fatal("curl")
+	}
+	if LooksLikeNetwork("git status") {
+		t.Fatal("git status should not need net")
+	}
+}

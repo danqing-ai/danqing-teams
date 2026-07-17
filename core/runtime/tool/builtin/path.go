@@ -35,6 +35,21 @@ func workDirFromInput(input map[string]any) string {
 	return s
 }
 
+func boolFromInput(input map[string]any, key string) bool {
+	v, ok := input[key]
+	if !ok {
+		return false
+	}
+	switch t := v.(type) {
+	case bool:
+		return t
+	case string:
+		return t == "1" || strings.EqualFold(t, "true")
+	default:
+		return false
+	}
+}
+
 func fileTrackerFromInput(input map[string]any) *tool.FileTracker {
 	t, _ := input["__file_tracker"].(*tool.FileTracker)
 	return t

@@ -184,6 +184,12 @@ export interface ConfigFile {
   }
   runtime: {
     autoApprove: boolean
+    sandbox?: {
+      enabled: boolean
+      mode: 'read-only' | 'workspace-write' | 'danger-full-access'
+      network: 'deny' | 'allow' | 'allowlist'
+      backend?: string
+    }
     turn: {
       doomLoopThreshold: number
       maxStepsDefault: number
@@ -215,6 +221,17 @@ export interface ConfigFile {
   }
 }
 
+export interface SandboxStatus {
+  enabled: boolean
+  mode: string
+  network: string
+  backend: string
+  degraded: boolean
+  degradedReason?: string
+  platform: string
+  capabilities?: string[]
+}
+
 export interface UpdateConfigFileRequest {
   data?: ConfigFile['data']
   server?: ConfigFile['server']
@@ -225,6 +242,10 @@ export interface UpdateConfigFileRequest {
 
 export interface RuntimeConfigForm {
   autoApprove: boolean
+  sandboxEnabled: boolean
+  sandboxMode: 'read-only' | 'workspace-write' | 'danger-full-access'
+  sandboxNetwork: 'deny' | 'allow' | 'allowlist'
+  sandboxBackend?: string
   doomLoopThreshold: number
   maxStepsDefault: number
   maxDelegationDepth: number

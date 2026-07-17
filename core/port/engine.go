@@ -15,6 +15,6 @@ type Engine interface {
 	StreamEvents(sessionID string, since int64) []domain.StreamEvent
 	Subscribe(sessionID string) chan domain.StreamEvent
 	Unsubscribe(sessionID string, ch chan domain.StreamEvent)
-	ResolveApproval(id string, approved bool)
+	ResolveApproval(id string, approved bool, scope string)
 	ResolveAskUser(askID, answer string)
 }

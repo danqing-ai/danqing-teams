@@ -32,6 +32,7 @@ type Handler struct {
 	SkillHandler *SkillHandler
 	TurnLogs     *service.TurnLogManager
 	MCPServers   *service.MCPManager
+	Sandbox      port.Sandbox
 	Store        port.Repository
 }
 
@@ -100,6 +101,7 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.POST("/asks/:id/resolve", resolveAskUser(h))
 	api.GET("/config", getConfig(h))
 	api.PUT("/config", updateConfig(h))
+	api.GET("/sandbox/status", getSandboxStatus(h))
 	api.GET("/model-configs", getModelConfigs(h))
 	api.PUT("/model-configs", updateModelConfigs(h))
 	api.GET("/search/config", getSearchConfig(h))
@@ -256,13 +258,17 @@ func streamEvents(h *Handler) gin.HandlerFunc {
 func decideApproval(h *Handler) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
-			Approved bool `json:"approved"`
+			Approved bool   `json:"approved"`
+			Scope    string `json:"scope"` // once | session
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		if err := h.Sessions.DecideApproval(c, c.Param("id"), req.Approved); err != nil {
+		if req.Scope == "" {
+			req.Scope = "once"
+		}
+		if err := h.Sessions.DecideApproval(c, c.Param("id"), req.Approved, req.Scope); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -677,7 +683,31 @@ func updateConfig(h *Handler) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		if h.Sandbox != nil && req.Runtime != nil {
+			h.Sandbox.Configure(cfg.Runtime.Sandbox)
+		}
 		c.JSON(http.StatusOK, cfg)
+	}
+}
+
+func getSandboxStatus(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if h.Sandbox == nil {
+			c.JSON(http.StatusOK, domain.SandboxStatus{
+				Enabled:        false,
+				Backend:        domain.SandboxBackendDisabled,
+				Degraded:       true,
+				DegradedReason: "sandbox not initialized",
+			})
+			return
+		}
+		// Refresh policy from persisted config so Status matches disk.
+		if h.Config != nil {
+			if cfg, err := h.Config.Get(c); err == nil {
+				h.Sandbox.Configure(cfg.Runtime.Sandbox)
+			}
+		}
+		c.JSON(http.StatusOK, h.Sandbox.Status())
 	}
 }
 
