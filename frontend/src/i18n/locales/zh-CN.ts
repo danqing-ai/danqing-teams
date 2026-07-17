@@ -396,6 +396,7 @@ export default {
   },
   sessions: {
     noAgent: '请先创建至少一个 Agent',
+    selectAgent: '选择专家',
     expertsTab: '专家',
     noExperts: '暂无委派专家',
     noExpertsHint: '主专家在需要时会自动委派子专家',

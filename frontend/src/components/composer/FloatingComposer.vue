@@ -61,9 +61,18 @@ watch(() => sessions.selectedEffort, (effort) => {
   }
 })
 
-const primaryAgents = computed(() =>
-  sessions.agents.filter((a) => a.mode !== 'subagent' && a.id !== 'default'),
-)
+const primaryAgents = computed(() => {
+  const list = sessions.agents.filter((a) => a.mode !== 'subagent')
+  const order = ['default', 'team', 'planner']
+  return [...list].sort((a, b) => {
+    const ai = order.indexOf(a.id)
+    const bi = order.indexOf(b.id)
+    const ao = ai === -1 ? order.length : ai
+    const bo = bi === -1 ? order.length : bi
+    if (ao !== bo) return ao - bo
+    return a.name.localeCompare(b.name, 'zh-CN')
+  })
+})
 
 const placeholder = computed(() =>
   sessions.composingNew ? '输入会话目标…' : '继续输入…',
@@ -305,15 +314,13 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
           <span class="composer-chip__label composer-chip__label--accent">请先配置 LLM 提供商</span>
         </label>
 
-        <!-- Agent selector -->
+        <!-- Agent selector: all primary agents (Default / Team / Planner / custom) -->
         <DqSelect
           v-if="(sessions.composingNew || sessions.currentSessionId) && primaryAgents.length"
           v-model="sessions.selectedAgentId"
           size="small"
           class="composer-chip-select"
           aria-label="选择 Agent"
-          placeholder="Default"
-          clearable
         >
           <DqOption v-for="a in primaryAgents" :key="a.id" :value="a.id" :label="a.name" />
         </DqSelect>

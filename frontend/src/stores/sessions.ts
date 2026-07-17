@@ -118,6 +118,10 @@ export const useSessionsStore = defineStore('sessions', () => {
     } catch {
       skills.value = []
     }
+    // New compose (or empty selection) defaults to Team.
+    if (!selectedAgentId.value || !agents.value.some((a) => a.id === selectedAgentId.value)) {
+      selectedAgentId.value = defaultAgentId() || null
+    }
   }
 
   function defaultAgentId(): string {
@@ -399,7 +403,7 @@ export const useSessionsStore = defineStore('sessions', () => {
     composingNew.value = true
     currentSessionId.value = null
     selectedProjectId.value = projectId ?? null
-    selectedAgentId.value = null
+    selectedAgentId.value = defaultAgentId() || 'team'
     streamEvents.value = []
     turns.value = []
     eventSource?.close()

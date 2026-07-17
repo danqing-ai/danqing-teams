@@ -396,6 +396,7 @@ export default {
   },
   sessions: {
     noAgent: 'Please create at least one Agent first',
+    selectAgent: 'Select agent',
     expertsTab: 'Experts',
     noExperts: 'No delegated experts',
     noExpertsHint: 'The lead expert delegates sub-experts automatically when needed',
