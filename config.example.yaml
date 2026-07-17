@@ -119,9 +119,9 @@ llm:
     - id: moonshot
       name: Moonshot (Kimi)
       provider: openai
-      base_url: "https://api.moonshot.cn/v1"
+      base_url: "https://api.kimi.com/coding/v1"
       icon: "\U0001F319"
-      description: "Kimi K3\u3001K2.7 Code\u3001K2.6"
+      description: "Kimi Code\uFF1Ak3\u3001kimi-for-coding"
     - id: minimax
       name: MiniMax
       provider: openai
@@ -394,15 +394,36 @@ llm:
       max_output: 16384
       available_efforts: ["off", "high"]
 
-    # ── Moonshot Kimi ──────────────────────────────────────────────────
-    # Kimi K3 — 1M，reasoning_effort 仅支持 max
+    # ── Moonshot / Kimi ────────────────────────────────────────────────
+    # Kimi Code API (api.kimi.com/coding/v1) — IDs match /v1/models
+    #   k3                        → Kimi K3（reasoning_effort: low/high/max）
+    #   kimi-for-coding           → Kimi K2.7 Code
+    #   kimi-for-coding-highspeed → Kimi K2.7 Code HighSpeed
+    - model: k3
+      context_window: 1000000
+      max_output: 128000
+      temperature: 1.0
+      available_efforts: ["off", "low", "high", "max"]
+
+    - model: kimi-for-coding
+      context_window: 256000
+      max_output: 32768
+      temperature: 1.0
+      available_efforts: ["off", "high"]
+
+    - model: kimi-for-coding-highspeed
+      context_window: 256000
+      max_output: 32768
+      temperature: 1.0
+      available_efforts: ["off", "high"]
+
+    # Moonshot Open Platform aliases (api.moonshot.cn / api.moonshot.ai)
     - model: kimi-k3
       context_window: 1000000
       max_output: 128000
       temperature: 1.0
       available_efforts: ["off", "max"]
 
-    # Kimi K2.7 Code — 256K，thinking 常开
     - model: kimi-k2.7-code
       context_window: 256000
       max_output: 32768
@@ -415,13 +436,7 @@ llm:
       temperature: 1.0
       available_efforts: ["off", "high"]
 
-    # Kimi K2.6 / K2.5 — 256K，thinking enabled/disabled
     - model: kimi-k2.6
-      context_window: 256000
-      max_output: 32768
-      available_efforts: ["off", "high"]
-
-    - model: kimi-k2.5
       context_window: 256000
       max_output: 32768
       available_efforts: ["off", "high"]

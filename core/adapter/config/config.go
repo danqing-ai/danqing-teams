@@ -155,7 +155,7 @@ func defaultLLMPresets() []domain.LLMProviderPreset {
 		{ID: "google", Name: "Google Gemini", Provider: "openai", BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai", Icon: "🔷", Description: "Gemini Pro、Flash"},
 		{ID: "zhipu", Name: "智谱 (Zhipu)", Provider: "openai", BaseURL: "https://open.bigmodel.cn/api/paas/v4", Icon: "🟣", Description: "GLM-5.1、GLM-5、GLM-4.7"},
 		{ID: "qwen", Name: "通义千问 (Qwen)", Provider: "openai", BaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", Icon: "🟡", Description: "Qwen3.7 Max、Plus、Flash、Coder"},
-		{ID: "moonshot", Name: "Moonshot (Kimi)", Provider: "openai", BaseURL: "https://api.moonshot.cn/v1", Icon: "🌙", Description: "Kimi K3、K2.7 Code、K2.6"},
+		{ID: "moonshot", Name: "Moonshot (Kimi)", Provider: "openai", BaseURL: "https://api.kimi.com/coding/v1", Icon: "🌙", Description: "Kimi Code：k3、kimi-for-coding"},
 		{ID: "minimax", Name: "MiniMax", Provider: "openai", BaseURL: "https://api.minimaxi.com/v1", Icon: "🎭", Description: "MiniMax M3、M2.7"},
 		{ID: "ollama", Name: "Ollama (Local)", Provider: "openai", BaseURL: "http://localhost:11434/v1", Icon: "🦙", Description: "本地模型，通过 Ollama 运行"},
 		{ID: "siliconflow", Name: "SiliconFlow", Provider: "openai", BaseURL: "https://api.siliconflow.cn/v1", Icon: "🌊", Description: "SiliconFlow 云模型平台"},
