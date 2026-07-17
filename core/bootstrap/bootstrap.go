@@ -11,6 +11,7 @@ import (
 	"danqing-teams/core/paths"
 	"danqing-teams/core/port"
 	dqruntime "danqing-teams/core/runtime"
+	dqbrowser "danqing-teams/core/runtime/browser"
 	"danqing-teams/core/runtime/prompt"
 	"danqing-teams/core/runtime/sandbox"
 	"danqing-teams/core/runtime/tool/builtin"
@@ -20,21 +21,22 @@ import (
 )
 
 type Config struct {
-	ConfigPath string
-	AutoApprove bool
-	DataDir string
-	LLM port.LLMProvider
-	CompactionEnabled bool
+	ConfigPath             string
+	AutoApprove            bool
+	DataDir                string
+	LLM                    port.LLMProvider
+	CompactionEnabled      bool
 	CompactionTurnInterval int
-	CompactionSubInterval int
-	CompactionMaxTokens int
-	CompactionCutTokens int
+	CompactionSubInterval  int
+	CompactionMaxTokens    int
+	CompactionCutTokens    int
 }
 
 type Core struct {
 	Store         port.Repository
 	Engine        port.Engine
 	Sandbox       port.Sandbox
+	Browser       port.Browser
 	Config        *domain.ConfigFile
 	Loader        *config.Loader
 	Sessions      *service.SessionManager
@@ -148,6 +150,7 @@ func New(cfg Config) *Core {
 
 	sb := sandbox.New(appCfg.Runtime.Sandbox)
 	eng.SetSandbox(sb)
+	br := dqbrowser.New(appCfg.Runtime.Browser)
 	eng.RegisterTool(&builtin.ExecShell{Sandbox: sb})
 	eng.RegisterTool(&builtin.ReadFile{})
 	eng.RegisterTool(&builtin.Edit{})
@@ -159,7 +162,7 @@ func New(cfg Config) *Core {
 	searchCfgFn := func(ctx context.Context) (domain.SearchConfig, error) {
 		return searchConfig.Get(ctx)
 	}
-	eng.RegisterTool(&builtin.WebFetch{ConfigFunc: searchCfgFn})
+	eng.RegisterTool(&builtin.WebFetch{ConfigFunc: searchCfgFn, Browser: br})
 	eng.RegisterTool(&builtin.WebSearch{ConfigFunc: searchCfgFn})
 	eng.RegisterTool(&builtin.AskUser{})
 	eng.RegisterTool(&builtin.Sleep{})
@@ -170,6 +173,7 @@ func New(cfg Config) *Core {
 		Store:         st,
 		Engine:        eng,
 		Sandbox:       sb,
+		Browser:       br,
 		Config:        appCfg,
 		Loader:        loader,
 		Sessions:      sessions,
@@ -182,6 +186,14 @@ func New(cfg Config) *Core {
 		TurnLogs:      turnLogManager,
 		MCPServers:    mcpManager,
 	}
+}
+
+// Close releases runtime resources (headless browser sessions).
+func (c *Core) Close() error {
+	if c == nil || c.Browser == nil {
+		return nil
+	}
+	return c.Browser.Close(context.Background())
 }
 
 func ensureDefaultProject(pm *service.ProjectManager) {

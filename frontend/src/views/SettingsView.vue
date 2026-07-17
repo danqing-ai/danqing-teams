@@ -60,6 +60,9 @@ const runtimeForm = ref({
   sandboxMode: 'workspace-write' as 'read-only' | 'workspace-write' | 'danger-full-access',
   sandboxNetwork: 'deny' as 'deny' | 'allow' | 'allowlist',
   sandboxBackend: '',
+  browserEnabled: true,
+  browserExecutablePath: '',
+  browserCdpUrl: '',
   doomLoopThreshold: 3,
   maxStepsDefault: 20,
   maxDelegationDepth: 3,
@@ -79,6 +82,16 @@ const sandboxStatusText = computed(() => {
   if (!st) return ''
   const caps = st.capabilities?.length ? ` (${st.capabilities.join(', ')})` : ''
   return `${st.backend}${caps}`
+})
+
+const browserStatusText = computed(() => {
+  const st = runtimeConfig.browserStatus
+  if (!st) return ''
+  if (!st.available) {
+    return st.degradedReason || 'unavailable'
+  }
+  const path = st.path ? ` @ ${st.path}` : ''
+  return `${st.engine} (${st.mode})${path}`
 })
 
 const modelConfigForm = ref<ModelConfig[]>([])
@@ -592,6 +605,43 @@ const hasFooterActions = computed(() => {
                   class="settings-sandbox-status__degraded"
                 >
                   {{ $t('settings.sandboxDegraded') }}: {{ runtimeConfig.sandboxStatus.degradedReason }}
+                </p>
+              </div>
+            </template>
+            <p class="settings-form-group__desc">{{ $t('settings.browserEnabledDesc') }}</p>
+            <label class="settings-field settings-field--switch">
+              <span class="settings-field__label">{{ $t('settings.browserEnabled') }}</span>
+              <DqSwitch
+                :model-value="runtimeForm.browserEnabled"
+                size="small"
+                @update:model-value="(v: boolean) => runtimeForm.browserEnabled = v"
+              />
+            </label>
+            <template v-if="runtimeForm.browserEnabled">
+              <div class="settings-form-row">
+                <div class="settings-field settings-field--half">
+                  <span class="settings-field__label">{{ $t('settings.browserExecutablePath') }}</span>
+                  <DqInput
+                    v-model="runtimeForm.browserExecutablePath"
+                    :placeholder="$t('settings.browserExecutablePathPlaceholder')"
+                  />
+                </div>
+                <div class="settings-field settings-field--half">
+                  <span class="settings-field__label">{{ $t('settings.browserCdpUrl') }}</span>
+                  <DqInput
+                    v-model="runtimeForm.browserCdpUrl"
+                    :placeholder="$t('settings.browserCdpUrlPlaceholder')"
+                  />
+                </div>
+              </div>
+              <div v-if="browserStatusText" class="settings-sandbox-status">
+                <span class="settings-field__label">{{ $t('settings.browserStatus') }}</span>
+                <code class="settings-sandbox-status__value">{{ browserStatusText }}</code>
+                <p
+                  v-if="!runtimeConfig.browserStatus?.available && runtimeConfig.browserStatus?.degradedReason"
+                  class="settings-sandbox-status__degraded"
+                >
+                  {{ $t('settings.browserUnavailable') }}: {{ runtimeConfig.browserStatus.degradedReason }}
                 </p>
               </div>
             </template>

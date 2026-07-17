@@ -190,6 +190,11 @@ export interface ConfigFile {
       network: 'deny' | 'allow' | 'allowlist'
       backend?: string
     }
+    browser?: {
+      enabled: boolean
+      executablePath?: string
+      cdpUrl?: string
+    }
     turn: {
       doomLoopThreshold: number
       maxStepsDefault: number
@@ -232,6 +237,15 @@ export interface SandboxStatus {
   capabilities?: string[]
 }
 
+export interface BrowserStatus {
+  available: boolean
+  enabled: boolean
+  engine: string
+  path?: string
+  mode: string
+  degradedReason?: string
+}
+
 export interface UpdateConfigFileRequest {
   data?: ConfigFile['data']
   server?: ConfigFile['server']
@@ -246,6 +260,9 @@ export interface RuntimeConfigForm {
   sandboxMode: 'read-only' | 'workspace-write' | 'danger-full-access'
   sandboxNetwork: 'deny' | 'allow' | 'allowlist'
   sandboxBackend?: string
+  browserEnabled?: boolean
+  browserExecutablePath?: string
+  browserCdpUrl?: string
   doomLoopThreshold: number
   maxStepsDefault: number
   maxDelegationDepth: number

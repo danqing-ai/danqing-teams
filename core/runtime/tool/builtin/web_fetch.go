@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"danqing-teams/core/domain"
+	"danqing-teams/core/port"
 
 	readability "github.com/go-shiori/go-readability"
 )
@@ -16,6 +17,7 @@ import (
 // WebFetch fetches a URL and returns readable text or JSON.
 type WebFetch struct {
 	ConfigFunc func(context.Context) (domain.SearchConfig, error)
+	Browser    port.Browser
 }
 
 func (h *WebFetch) Name() string                { return "web_fetch" }
@@ -34,17 +36,23 @@ func (h *WebFetch) Schema() domain.ToolSchema {
 			"- url: must be a valid HTTP/HTTPS URL (required).\n" +
 			"- max_chars: limits returned content length (default 8000, min 100).\n" +
 			"- timeout_ms: timeout in milliseconds (default 15000, max 60000).\n" +
+			"- render: auto (default) | always | never. auto uses a headless browser when the HTTP response looks like a JS SPA shell; always requires a browser; never is HTTP-only.\n" +
 			"- HTML pages are extracted via readability (with a simple HTML fallback); JSON is returned as-is.\n" +
 			"- Use after web_search to get full content from interesting results.\n" +
 			"- HTTP URLs on port 80 are automatically upgraded to HTTPS.\n" +
 			"- Private/local addresses are blocked (SSRF protection).\n" +
-			"- JavaScript-rendered SPAs may return little content; this tool does not execute JavaScript.",
+			"- JavaScript rendering requires a local Chrome/Edge/Chromium or runtime.browser.cdp_url.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"url":        map[string]any{"type": "string", "description": "URL to fetch"},
 				"max_chars":  map[string]any{"type": "integer", "description": "Maximum characters to return (default 8000)"},
 				"timeout_ms": map[string]any{"type": "integer", "description": "Timeout in milliseconds (default 15000)"},
+				"render": map[string]any{
+					"type":        "string",
+					"description": "auto | always | never (default auto)",
+					"enum":        []string{"auto", "always", "never"},
+				},
 			},
 			"required": []string{"url"},
 		},
@@ -87,9 +95,22 @@ func (h *WebFetch) Execute(ctx context.Context, input map[string]any) (domain.To
 		timeoutMs = maxTimeoutMs
 	}
 
-	cfg := h.currentConfig(ctx)
-	opts := clientOpts(cfg.Proxy, cfg.UserAgent, time.Duration(timeoutMs)*time.Millisecond, false)
+	renderMode := "auto"
+	if r, ok := input["render"].(string); ok {
+		switch strings.ToLower(strings.TrimSpace(r)) {
+		case "always", "never", "auto":
+			renderMode = strings.ToLower(strings.TrimSpace(r))
+		}
+	}
 
+	cfg := h.currentConfig(ctx)
+	timeout := time.Duration(timeoutMs) * time.Millisecond
+
+	if renderMode == "always" {
+		return h.fetchViaBrowser(ctx, urlStr, maxChars, timeout, cfg, 0, "")
+	}
+
+	opts := clientOpts(cfg.Proxy, cfg.UserAgent, timeout, false)
 	resp, err := fetchWithOpts(ctx, urlStr, opts)
 	if err != nil {
 		return domain.ToolResult{}, err
@@ -104,10 +125,13 @@ func (h *WebFetch) Execute(ctx context.Context, input map[string]any) (domain.To
 	}
 	content := string(body)
 	finalURL := resp.Request.URL.String()
+	statusCode := resp.StatusCode
 
 	extractor := "raw"
 	title := ""
 	message := ""
+	rendered := false
+
 	if strings.Contains(contentType, "application/json") {
 		extractor = "json"
 	} else if strings.Contains(contentType, "text/html") || looksLikeHTML(content) {
@@ -115,25 +139,99 @@ func (h *WebFetch) Execute(ctx context.Context, input map[string]any) (domain.To
 		content = extracted
 		extractor = ext
 		title = pageTitle
-		if spaHint {
-			message = "Page content looks like a JavaScript-rendered shell; little readable text was extracted. This tool does not execute JavaScript."
+		if spaHint && renderMode == "auto" && h.browserAvailable() {
+			br, err := h.fetchViaBrowser(ctx, urlStr, maxChars, timeout, cfg, statusCode, finalURL)
+			if err == nil {
+				return br, nil
+			}
+			message = "Page content looks like a JavaScript-rendered shell; browser render failed: " + err.Error()
+		} else if spaHint {
+			if renderMode == "never" || h.Browser == nil || !h.browserAvailable() {
+				message = "Page content looks like a JavaScript-rendered shell; little readable text was extracted. Pass render=always when a headless browser is available."
+			}
 		}
 	}
 
+	return packFetchResult(urlStr, finalURL, statusCode, extractor, title, message, content, maxChars, rendered)
+}
+
+func (h *WebFetch) browserAvailable() bool {
+	if h.Browser == nil {
+		return false
+	}
+	return h.Browser.Status().Available
+}
+
+func (h *WebFetch) fetchViaBrowser(
+	ctx context.Context,
+	urlStr string,
+	maxChars int,
+	timeout time.Duration,
+	cfg domain.SearchConfig,
+	httpStatus int,
+	hintFinal string,
+) (domain.ToolResult, error) {
+	if err := assertPublicURL(urlStr); err != nil {
+		return domain.ToolResult{}, err
+	}
+	if h.Browser == nil || !h.Browser.Status().Available {
+		st := domain.BrowserStatus{}
+		if h.Browser != nil {
+			st = h.Browser.Status()
+		}
+		reason := st.DegradedReason
+		if reason == "" {
+			reason = "install Chrome/Edge/Chromium or set runtime.browser.cdp_url"
+		}
+		return domain.ToolResult{}, fmt.Errorf("browser render required but unavailable: %s", reason)
+	}
+
+	html, finalURL, err := h.Browser.RenderHTML(ctx, port.BrowserRenderOptions{
+		URL:       urlStr,
+		Timeout:   timeout,
+		WaitUntil: "networkidle",
+		Proxy:     cfg.Proxy,
+		UserAgent: cfg.UserAgent,
+	})
+	if err != nil {
+		return domain.ToolResult{}, err
+	}
+	if finalURL == "" {
+		finalURL = hintFinal
+	}
+	if finalURL == "" {
+		finalURL = urlStr
+	}
+
+	content, extractor, title, _ := extractPageContent(html, finalURL)
+	status := httpStatus
+	if status == 0 {
+		status = 200
+	}
+	return packFetchResult(urlStr, finalURL, status, extractor+"+browser", title, "", content, maxChars, true)
+}
+
+func packFetchResult(
+	urlStr, finalURL string,
+	status int,
+	extractor, title, message, content string,
+	maxChars int,
+	rendered bool,
+) (domain.ToolResult, error) {
 	truncated := false
 	if len(content) > maxChars {
 		content = content[:maxChars]
 		truncated = true
 	}
-
 	result := map[string]any{
 		"url":       urlStr,
 		"finalUrl":  finalURL,
-		"status":    resp.StatusCode,
+		"status":    status,
 		"extractor": extractor,
 		"truncated": truncated,
 		"length":    len(content),
 		"content":   content,
+		"rendered":  rendered,
 	}
 	if title != "" {
 		result["title"] = title

@@ -24,11 +24,17 @@ runtime:
   # Modes: read-only | workspace-write | danger-full-access
   # Network: deny | allow | allowlist (allowlist treated as allow in v1)
   # Backend: empty = auto-probe; or seatbelt | landlock | bwrap | win-token | wsl2 | host-weak
-  sandbox:
+	sandbox:
     enabled: true
     mode: "workspace-write"
     network: "deny"
     backend: ""
+  # Headless browser for web_fetch JS rendering (chromedp + system Chrome/Edge).
+  # Does not ship a browser binary. Leave cdp_url empty to auto-launch a local browser.
+  browser:
+    enabled: true
+    executable_path: ""   # optional absolute path to chrome/chromium/edge
+    cdp_url: ""           # optional attach URL, e.g. http://127.0.0.1:9222
   turn:
     doom_loop_threshold: 3   # fail after N consecutive identical tool calls (resets when tool/args change)
     max_steps_default: 20    # fallback step limit when agent.steps is 0

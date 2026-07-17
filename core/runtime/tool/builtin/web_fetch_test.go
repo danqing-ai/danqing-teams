@@ -7,6 +7,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"danqing-teams/core/domain"
+	"danqing-teams/core/port"
 )
 
 func TestExtractPageContent_Readability(t *testing.T) {
@@ -87,6 +90,113 @@ func TestWebFetch_BlocksLocalhost(t *testing.T) {
 		t.Fatal("expected SSRF error")
 	}
 	if !strings.Contains(err.Error(), "blocked") && !strings.Contains(err.Error(), "private") && !strings.Contains(err.Error(), "local") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+type stubBrowser struct {
+	available bool
+	html      string
+	finalURL  string
+	err       error
+	calls     int
+}
+
+func (s *stubBrowser) Status() domain.BrowserStatus {
+	return domain.BrowserStatus{Available: s.available, Enabled: true, Engine: "stub", Mode: "launch"}
+}
+func (s *stubBrowser) Configure(domain.ConfigBrowserSection) {}
+func (s *stubBrowser) Close(context.Context) error           { return nil }
+func (s *stubBrowser) RenderHTML(ctx context.Context, opts port.BrowserRenderOptions) (string, string, error) {
+	s.calls++
+	if s.err != nil {
+		return "", "", s.err
+	}
+	return s.html, s.finalURL, nil
+}
+
+func TestWebFetch_RenderNever_NoBrowser(t *testing.T) {
+	testSkipSSRF = true
+	defer func() { testSkipSSRF = false }()
+
+	spaHTML := `<html><body><div id="root"></div><script></script><script></script><script></script></body></html>`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(spaHTML))
+	}))
+	defer srv.Close()
+
+	br := &stubBrowser{available: true, html: "<html><body><p>Rendered content from browser with enough text to pass.</p></body></html>"}
+	h := &WebFetch{Browser: br}
+	res, err := h.Execute(context.Background(), map[string]any{
+		"url":    srv.URL,
+		"render": "never",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if br.calls != 0 {
+		t.Fatalf("browser should not be called with render=never, calls=%d", br.calls)
+	}
+	var parsed map[string]any
+	_ = json.Unmarshal([]byte(res.Content), &parsed)
+	msg, _ := parsed["message"].(string)
+	if !strings.Contains(msg, "JavaScript-rendered") {
+		t.Fatalf("expected SPA message, got %q", msg)
+	}
+}
+
+func TestWebFetch_RenderAuto_UsesBrowserOnSPA(t *testing.T) {
+	testSkipSSRF = true
+	defer func() { testSkipSSRF = false }()
+
+	spaHTML := `<html><body><div id="root"></div><script></script><script></script><script></script></body></html>`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(spaHTML))
+	}))
+	defer srv.Close()
+
+	br := &stubBrowser{
+		available: true,
+		html:      `<!DOCTYPE html><html><body><article><h1>App</h1><p>This is enough readable text from a headless browser render for testing the auto path thoroughly.</p><p>Second paragraph keeps readability happy with additional sentences about the topic.</p></article></body></html>`,
+		finalURL:  srv.URL + "/app",
+	}
+	h := &WebFetch{Browser: br}
+	res, err := h.Execute(context.Background(), map[string]any{
+		"url":    srv.URL,
+		"render": "auto",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if br.calls != 1 {
+		t.Fatalf("expected 1 browser call, got %d", br.calls)
+	}
+	var parsed map[string]any
+	_ = json.Unmarshal([]byte(res.Content), &parsed)
+	if parsed["rendered"] != true {
+		t.Fatalf("expected rendered=true: %v", parsed)
+	}
+	ext, _ := parsed["extractor"].(string)
+	if !strings.Contains(ext, "browser") {
+		t.Fatalf("extractor = %q", ext)
+	}
+}
+
+func TestWebFetch_RenderAlways_Unavailable(t *testing.T) {
+	testSkipSSRF = true
+	defer func() { testSkipSSRF = false }()
+
+	h := &WebFetch{Browser: &stubBrowser{available: false}}
+	_, err := h.Execute(context.Background(), map[string]any{
+		"url":    "https://example.com/",
+		"render": "always",
+	})
+	if err == nil {
+		t.Fatal("expected error when browser unavailable")
+	}
+	if !strings.Contains(err.Error(), "unavailable") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

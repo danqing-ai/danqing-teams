@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { fetchJSON } from '@/api/client'
 import { toast } from '@/utils/feedback'
-import type { ConfigFile, UpdateConfigFileRequest, SandboxStatus } from '@/types/mission'
+import type { ConfigFile, UpdateConfigFileRequest, SandboxStatus, BrowserStatus } from '@/types/mission'
 
 export interface RuntimeForm {
   autoApprove: boolean
@@ -10,6 +10,9 @@ export interface RuntimeForm {
   sandboxMode: 'read-only' | 'workspace-write' | 'danger-full-access'
   sandboxNetwork: 'deny' | 'allow' | 'allowlist'
   sandboxBackend: string
+  browserEnabled: boolean
+  browserExecutablePath: string
+  browserCdpUrl: string
   doomLoopThreshold: number
   maxStepsDefault: number
   maxDelegationDepth: number
@@ -26,12 +29,16 @@ export interface RuntimeForm {
 
 function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
   const sb = rt.sandbox
+  const br = rt.browser
   return {
     autoApprove: rt.autoApprove,
     sandboxEnabled: sb?.enabled ?? true,
     sandboxMode: sb?.mode ?? 'workspace-write',
     sandboxNetwork: sb?.network ?? 'deny',
     sandboxBackend: sb?.backend ?? '',
+    browserEnabled: br?.enabled ?? true,
+    browserExecutablePath: br?.executablePath ?? '',
+    browserCdpUrl: br?.cdpUrl ?? '',
     doomLoopThreshold: rt.turn.doomLoopThreshold,
     maxStepsDefault: rt.turn.maxStepsDefault,
     maxDelegationDepth: rt.team.maxDelegationDepth,
@@ -50,6 +57,7 @@ function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
 export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
   const config = ref<RuntimeForm | null>(null)
   const sandboxStatus = ref<SandboxStatus | null>(null)
+  const browserStatus = ref<BrowserStatus | null>(null)
   const loading = ref(false)
   const saving = ref(false)
 
@@ -61,12 +69,20 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
     }
   }
 
+  async function loadBrowserStatus() {
+    try {
+      browserStatus.value = await fetchJSON<BrowserStatus>('/browser/status')
+    } catch {
+      browserStatus.value = null
+    }
+  }
+
   async function loadConfig() {
     loading.value = true
     try {
       const cfg = await fetchJSON<ConfigFile>('/config')
       config.value = formFromRuntime(cfg.runtime)
-      await loadSandboxStatus()
+      await Promise.all([loadSandboxStatus(), loadBrowserStatus()])
     } catch {
       config.value = null
     } finally {
@@ -84,6 +100,11 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
           mode: form.sandboxMode,
           network: form.sandboxNetwork,
           backend: form.sandboxBackend || undefined,
+        },
+        browser: {
+          enabled: form.browserEnabled,
+          executablePath: form.browserExecutablePath || undefined,
+          cdpUrl: form.browserCdpUrl || undefined,
         },
         turn: {
           doomLoopThreshold: form.doomLoopThreshold,
@@ -115,7 +136,7 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
         body: JSON.stringify(req),
       })
       config.value = formFromRuntime(cfg.runtime)
-      await loadSandboxStatus()
+      await Promise.all([loadSandboxStatus(), loadBrowserStatus()])
       toast.success('运行时配置已保存')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '保存失败')
@@ -128,10 +149,12 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
   return {
     config,
     sandboxStatus,
+    browserStatus,
     loading,
     saving,
     loadConfig,
     loadSandboxStatus,
+    loadBrowserStatus,
     saveConfig,
   }
 })

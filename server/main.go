@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"danqing-teams/core/bootstrap"
 	"danqing-teams/core/runtime/sandbox"
@@ -14,6 +17,8 @@ func main() {
 		return
 	}
 	core := bootstrap.New(bootstrap.Config{ConfigPath: os.Getenv("TEAMS_CONFIG")})
+	defer core.Close()
+
 	h := &apiv1.Handler{
 		Sessions:     core.Sessions,
 		Projects:     core.Projects,
@@ -29,7 +34,23 @@ func main() {
 		TurnLogs:   core.TurnLogs,
 		MCPServers: core.MCPServers,
 		Sandbox:    core.Sandbox,
+		Browser:    core.Browser,
 		Store:      core.Store,
 	}
-	apiv1.NewRouter(h, apiv1.RouterConfig{}).Run(core.Config.Server.ListenAddr)
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- apiv1.NewRouter(h, apiv1.RouterConfig{}).Run(core.Config.Server.ListenAddr)
+	}()
+
+	select {
+	case <-ctx.Done():
+	case err := <-errCh:
+		if err != nil {
+			os.Exit(1)
+		}
+	}
 }

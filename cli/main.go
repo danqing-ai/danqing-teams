@@ -17,6 +17,7 @@ func main() {
 		return
 	}
 	core := bootstrap.New(bootstrap.Config{ConfigPath: os.Getenv("TEAMS_CONFIG")})
+	defer core.Close()
 	scanner := bufio.NewScanner(os.Stdin)
 	fmt.Println("DanQing Teams CLI. Type 'exit' to quit.")
 	for {

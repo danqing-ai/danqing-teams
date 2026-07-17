@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"strings"
 
-	"danqing-teams/core/service"
 	"danqing-teams/core/domain"
 	"danqing-teams/core/port"
+	"danqing-teams/core/service"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -33,6 +33,7 @@ type Handler struct {
 	TurnLogs     *service.TurnLogManager
 	MCPServers   *service.MCPManager
 	Sandbox      port.Sandbox
+	Browser      port.Browser
 	Store        port.Repository
 }
 
@@ -102,6 +103,7 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.GET("/config", getConfig(h))
 	api.PUT("/config", updateConfig(h))
 	api.GET("/sandbox/status", getSandboxStatus(h))
+	api.GET("/browser/status", getBrowserStatus(h))
 	api.GET("/model-configs", getModelConfigs(h))
 	api.PUT("/model-configs", updateModelConfigs(h))
 	api.GET("/search/config", getSearchConfig(h))
@@ -686,6 +688,9 @@ func updateConfig(h *Handler) gin.HandlerFunc {
 		if h.Sandbox != nil && req.Runtime != nil {
 			h.Sandbox.Configure(cfg.Runtime.Sandbox)
 		}
+		if h.Browser != nil && req.Runtime != nil {
+			h.Browser.Configure(cfg.Runtime.Browser)
+		}
 		c.JSON(http.StatusOK, cfg)
 	}
 }
@@ -708,6 +713,27 @@ func getSandboxStatus(h *Handler) gin.HandlerFunc {
 			}
 		}
 		c.JSON(http.StatusOK, h.Sandbox.Status())
+	}
+}
+
+func getBrowserStatus(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if h.Browser == nil {
+			c.JSON(http.StatusOK, domain.BrowserStatus{
+				Available:      false,
+				Enabled:        false,
+				Engine:         "none",
+				Mode:           "none",
+				DegradedReason: "browser not initialized",
+			})
+			return
+		}
+		if h.Config != nil {
+			if cfg, err := h.Config.Get(c); err == nil {
+				h.Browser.Configure(cfg.Runtime.Browser)
+			}
+		}
+		c.JSON(http.StatusOK, h.Browser.Status())
 	}
 }
 

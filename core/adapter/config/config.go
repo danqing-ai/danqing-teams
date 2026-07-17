@@ -58,6 +58,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("runtime.sandbox.mode", "workspace-write")
 	v.SetDefault("runtime.sandbox.network", "deny")
 	v.SetDefault("runtime.sandbox.backend", "")
+	v.SetDefault("runtime.browser.enabled", true)
+	v.SetDefault("runtime.browser.executable_path", "")
+	v.SetDefault("runtime.browser.cdp_url", "")
 	v.SetDefault("runtime.turn.doom_loop_threshold", 5)
 	v.SetDefault("runtime.turn.max_steps_default", 20)
 	v.SetDefault("runtime.team.max_delegation_depth", 3)
@@ -91,6 +94,9 @@ func bindEnv(v *viper.Viper) {
 	_ = v.BindEnv("runtime.sandbox.mode", "TEAMS_SANDBOX_MODE")
 	_ = v.BindEnv("runtime.sandbox.network", "TEAMS_SANDBOX_NETWORK")
 	_ = v.BindEnv("runtime.sandbox.backend", "TEAMS_SANDBOX_BACKEND")
+	_ = v.BindEnv("runtime.browser.enabled", "TEAMS_BROWSER_ENABLED")
+	_ = v.BindEnv("runtime.browser.executable_path", "TEAMS_BROWSER_EXECUTABLE")
+	_ = v.BindEnv("runtime.browser.cdp_url", "TEAMS_BROWSER_CDP_URL")
 	_ = v.BindEnv("instance.id", "TEAMS_INSTANCE_ID")
 }
 
