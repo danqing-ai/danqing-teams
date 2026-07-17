@@ -316,6 +316,14 @@ export const useSessionsStore = defineStore('sessions', () => {
     if (parsed.seq <= lastSeq) return
     lastSeq = parsed.seq
     streamEvents.value.push(parsed)
+    if (
+      parsed.type === 'permission.decided' ||
+      parsed.type === 'tool.running' ||
+      parsed.type === 'tool.completed' ||
+      parsed.type === 'tool.error'
+    ) {
+      hydrateDecidedApprovals(streamEvents.value)
+    }
     // Keep turn list in sync so runningTurnId stays accurate during approvals.
     if (parsed.type === 'turn.started' || parsed.type === 'turn.ended' || parsed.type === 'turn.failed') {
       const sid = currentSessionId.value
@@ -324,6 +332,62 @@ export const useSessionsStore = defineStore('sessions', () => {
   }
 
   const decidedApprovalIds = reactive(new Set<string>())
+
+  /** Resolve approval IDs that are no longer actionable from the event stream.
+   *  Covers: permission.decided events, and historical asks whose tool call already
+   *  reached running/completed/error (before decided events existed). */
+  function collectDecidedApprovalIds(events: StreamEvent[]): Set<string> {
+    const decided = new Set<string>()
+    const askByCallId = new Map<string, string>()
+    let lastPending: { callId: string; name: string; description: string } | null = null
+
+    for (const e of events) {
+      const p = e.payload as Record<string, unknown> | null
+      if (e.type === 'tool.pending') {
+        const callId = String(p?.callId ?? '')
+        if (callId) {
+          lastPending = {
+            callId,
+            name: String(p?.name ?? ''),
+            description: String(p?.description ?? ''),
+          }
+        }
+        continue
+      }
+      if (e.type === 'permission.ask') {
+        const approvalId = String(p?.approvalId ?? p?.id ?? '')
+        if (!approvalId) continue
+        const callId = String(p?.callId ?? '')
+        if (callId) {
+          askByCallId.set(callId, approvalId)
+        } else if (
+          lastPending &&
+          lastPending.name === String(p?.tool ?? p?.name ?? '') &&
+          lastPending.description === String(p?.description ?? '')
+        ) {
+          askByCallId.set(lastPending.callId, approvalId)
+        }
+        continue
+      }
+      if (e.type === 'permission.decided') {
+        const approvalId = String(p?.approvalId ?? p?.id ?? '')
+        if (approvalId) decided.add(approvalId)
+        continue
+      }
+      if (e.type === 'tool.running' || e.type === 'tool.completed' || e.type === 'tool.error') {
+        const callId = String(p?.callId ?? '')
+        const approvalId = callId ? askByCallId.get(callId) : undefined
+        if (approvalId) decided.add(approvalId)
+      }
+    }
+    return decided
+  }
+
+  function hydrateDecidedApprovals(events: StreamEvent[]) {
+    for (const id of collectDecidedApprovalIds(events)) {
+      decidedApprovalIds.add(id)
+    }
+  }
 
   async function decideApproval(approvalId: string, approved: boolean, scope: 'once' | 'session' = 'once') {
     await fetchJSON(`/approvals/${approvalId}/decide`, {
@@ -390,6 +454,7 @@ export const useSessionsStore = defineStore('sessions', () => {
           if (ev.seq > lastSeq) lastSeq = ev.seq
           streamEvents.value.push(ev)
         }
+        hydrateDecidedApprovals(streamEvents.value)
       }
     } catch (e) {
       console.error('[selectSession] failed to load events for', id, e)

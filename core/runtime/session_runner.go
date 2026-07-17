@@ -817,6 +817,19 @@ func (e *Engine) ResolveApproval(id string, approved bool, scope string) {
 		}
 	}
 }
+
+// PublishPermissionDecided records a durable stream event so reloads hide approval actions.
+func (e *Engine) PublishPermissionDecided(sessionID, turnID, approvalID string, approved bool, scope string) {
+	if sessionID == "" || approvalID == "" {
+		return
+	}
+	if scope == "" {
+		scope = "once"
+	}
+	e.stream.Publish(context.Background(), sessionID, turnID, domain.EventPermissionDecided, domain.PermissionDecidedPayload{
+		ApprovalID: approvalID, Approved: approved, Scope: scope,
+	})
+}
 func (e *Engine) WaitApproval(ctx context.Context, id string) (ApprovalOutcome, error) {
 	if e.isAutoApprove() {
 		return ApprovalOutcome{Approved: true, Scope: "once"}, nil

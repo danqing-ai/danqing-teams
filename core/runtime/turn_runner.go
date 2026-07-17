@@ -338,7 +338,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 					scopeOpts = append(scopeOpts, "session")
 				}
 				p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventPermissionAsk, domain.PermissionAskPayload{
-					ApprovalID: approvalID, Tool: call.Name, Description: description,
+					ApprovalID: approvalID, CallID: call.ID, Tool: call.Name, Description: description,
 					Reason: permResult.Reason, ScopeOptions: scopeOpts,
 				})
 				outcome, err := p.Approval.WaitApproval(ctx, approvalID)

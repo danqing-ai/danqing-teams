@@ -151,6 +151,13 @@ func (m *SessionManager) DecideApproval(ctx context.Context, id string, approved
 	if err != nil {
 		return err
 	}
+	if a.Status != "" && a.Status != "pending" {
+		// Already decided — ignore repeat clicks from stale UI after reload.
+		return nil
+	}
+	if scope == "" {
+		scope = "once"
+	}
 	if approved {
 		a.Status = "approved"
 	} else {
@@ -160,6 +167,7 @@ func (m *SessionManager) DecideApproval(ctx context.Context, id string, approved
 		return err
 	}
 	m.engine.ResolveApproval(id, approved, scope)
+	m.engine.PublishPermissionDecided(a.SessionID, a.TurnID, id, approved, scope)
 	return nil
 }
 

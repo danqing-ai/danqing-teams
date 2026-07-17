@@ -30,11 +30,18 @@ type StepPayload struct {
 }
 
 type PermissionAskPayload struct {
-	ApprovalID    string   `json:"approvalId"`
-	Tool          string   `json:"tool"`
-	Description   string   `json:"description"`
-	Reason        string   `json:"reason,omitempty"`
-	ScopeOptions  []string `json:"scopeOptions,omitempty"` // e.g. ["once","session"]
+	ApprovalID   string   `json:"approvalId"`
+	CallID       string   `json:"callId,omitempty"`
+	Tool         string   `json:"tool"`
+	Description  string   `json:"description"`
+	Reason       string   `json:"reason,omitempty"`
+	ScopeOptions []string `json:"scopeOptions,omitempty"` // e.g. ["once","session"]
+}
+
+type PermissionDecidedPayload struct {
+	ApprovalID string `json:"approvalId"`
+	Approved   bool   `json:"approved"`
+	Scope      string `json:"scope,omitempty"` // once | session
 }
 
 type ErrorPayload struct {

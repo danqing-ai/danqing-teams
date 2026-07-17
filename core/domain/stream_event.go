@@ -17,6 +17,7 @@ const (
 	EventToolError         = "tool.error"
 	EventCapabilityActive  = "capability.activated"
 	EventPermissionAsk     = "permission.ask"
+	EventPermissionDecided = "permission.decided"
 	EventContextCompacted  = "context.compacted"
 	EventDelegateStarted   = "delegate.started"
 	EventDelegateCompleted = "delegate.completed"
