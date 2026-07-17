@@ -618,6 +618,45 @@ function delegateChildTurnId(seq: number): string | null {
   return delegateLinkMap.value.get(seq) ?? null
 }
 
+/** Child turn has undecided permission.ask (same session stream, child turnId). */
+function childTurnNeedsApproval(childTurnId: string | null): boolean {
+  if (!childTurnId) return false
+  return sessions.pendingApprovals.some((e) => e.turnId === childTurnId)
+}
+
+/** Child turn has unresolved ask_user.pending. */
+function childTurnNeedsAsk(childTurnId: string | null): boolean {
+  if (!childTurnId) return false
+  return sessions.pendingAsks.some((e) => {
+    if (e.turnId !== childTurnId) return false
+    const p = asRecord(e.payload)
+    const callId = String(p?.callId ?? '')
+    return callId ? !sessions.resolvedAskCallIds.has(callId) : true
+  })
+}
+
+function childTurnNeedsAttention(childTurnId: string | null): boolean {
+  return childTurnNeedsApproval(childTurnId) || childTurnNeedsAsk(childTurnId)
+}
+
+function delegateCardAwaiting(seq: number): boolean {
+  return childTurnNeedsAttention(delegateChildTurnId(seq))
+}
+
+function delegateCardAwaitingLabel(seq: number): string {
+  const childId = delegateChildTurnId(seq)
+  if (childTurnNeedsApproval(childId)) return '待审批'
+  if (childTurnNeedsAsk(childId)) return '待回答'
+  return ''
+}
+
+function delegateCardLinkLabel(seq: number): string {
+  const childId = delegateChildTurnId(seq)
+  if (childTurnNeedsApproval(childId)) return '去审批 →'
+  if (childTurnNeedsAsk(childId)) return '去回答 →'
+  return '查看 →'
+}
+
 function drillIntoChildTurnBySeq(seq: number) {
   const childId = delegateChildTurnId(seq)
   if (childId) {
@@ -630,6 +669,81 @@ function drillIntoChildTurn(ev: StreamEvent) {
   if (childId) {
     currentTurnId.value = childId
   }
+}
+
+type ApprovalAnchor = {
+  key: string
+  seq: number
+  turnId: string
+  kind: 'permission' | 'ask'
+  pending: boolean
+  label: string
+  topPercent: number
+}
+
+/** Right-rail anchors for pending permission.ask / ask_user in the session stream. */
+const approvalAnchors = computed((): ApprovalAnchor[] => {
+  const events = sessions.streamEvents
+  if (!events.length) return []
+  const maxSeq = Math.max(1, events[events.length - 1]?.seq ?? 1)
+  const out: ApprovalAnchor[] = []
+  for (const e of events) {
+    if (e.type === 'permission.ask') {
+      const id = approvalId(e.payload)
+      const pending = !!id && !sessions.decidedApprovalIds.has(id)
+      if (!pending) continue
+      const tool = approvalTool(e.payload)
+      out.push({
+        key: `perm-${id || e.seq}`,
+        seq: e.seq,
+        turnId: e.turnId || '',
+        kind: 'permission',
+        pending: true,
+        label: tool ? `待审批 · ${tool}` : '待审批',
+        topPercent: Math.min(92, Math.max(6, (e.seq / maxSeq) * 100)),
+      })
+    } else if (e.type === 'ask_user.pending') {
+      const callId = askUserCallId(e.payload)
+      const pending = callId ? !sessions.resolvedAskCallIds.has(callId) : true
+      if (!pending) continue
+      const q = askUserQuestion(e.payload)
+      out.push({
+        key: `ask-${askUserId(e.payload) || e.seq}`,
+        seq: e.seq,
+        turnId: e.turnId || '',
+        kind: 'ask',
+        pending: true,
+        label: q ? `待回答 · ${q.slice(0, 36)}` : '待回答',
+        topPercent: Math.min(92, Math.max(6, (e.seq / maxSeq) * 100)),
+      })
+    }
+  }
+  // Spread overlapping tops slightly so stacked asks stay clickable
+  for (let i = 1; i < out.length; i++) {
+    if (out[i].topPercent - out[i - 1].topPercent < 4) {
+      out[i].topPercent = Math.min(94, out[i - 1].topPercent + 4)
+    }
+  }
+  return out
+})
+
+async function jumpToApprovalAnchor(a: ApprovalAnchor) {
+  if (a.turnId) {
+    const turn = turnMap.value[a.turnId]
+    if (turn?.parentTurnId) {
+      currentTurnId.value = a.turnId
+    } else if (currentTurnId.value && currentTurnId.value !== a.turnId) {
+      currentTurnId.value = null
+    }
+  }
+  userScrolledUp.value = true
+  await nextTick()
+  const root = scrollAreaRef.value
+  const el = root?.querySelector(`[data-event-anchor="${a.seq}"]`) as HTMLElement | null
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  el.classList.add('is-anchor-flash')
+  window.setTimeout(() => el.classList.remove('is-anchor-flash'), 1200)
 }
 
 const statusLabel = computed(() => {
@@ -1220,7 +1334,13 @@ function onTitleKeydown(e: KeyboardEvent) {
     </header>
 
     <div ref="bodyRef" class="session-workspace__body" :style="{ gridTemplateColumns: `${splitPercent}% 8px 1fr` }">
-      <div ref="scrollAreaRef" class="session-workspace__scroll" @scroll="onScrollAreaScroll">
+      <div class="session-workspace__stream">
+      <div
+        ref="scrollAreaRef"
+        class="session-workspace__scroll"
+        :class="{ 'has-approval-rail': approvalAnchors.length > 0 }"
+        @scroll="onScrollAreaScroll"
+      >
         <div v-if="sessions.composingNew && !sessions.currentSession" class="session-workspace__empty">
           <DqEmpty description="新建会话">
             <p class="session-workspace__hint">在下方 Composer 输入目标，选择项目并发送。没有项目时点击项目下拉可新建。</p>
@@ -1317,7 +1437,8 @@ function onTitleKeydown(e: KeyboardEvent) {
                         class="tool-card"
                         :class="{
                           'is-expanded': isToolCardExpanded(ev.seq),
-                          'is-running': (ev.payload as ToolCard).status === 'running',
+                          'is-running': (ev.payload as ToolCard).status === 'running' && !((ev.payload as ToolCard).name === 'delegate_agent' && delegateCardAwaiting(ev.seq)),
+                          'is-awaiting-approval': (ev.payload as ToolCard).name === 'delegate_agent' && delegateCardAwaiting(ev.seq),
                           'is-completed': (ev.payload as ToolCard).status === 'completed',
                           'is-error': (ev.payload as ToolCard).status === 'error',
                         }"
@@ -1329,7 +1450,14 @@ function onTitleKeydown(e: KeyboardEvent) {
                             <span v-if="(ev.payload as ToolCard).description" class="tool-card__desc">{{ (ev.payload as ToolCard).description }}</span>
                           </div>
                           <div class="tool-card__actions">
-                            <span v-if="(ev.payload as ToolCard).status === 'running'" class="tool-card__status-badge is-running">
+                            <span
+                              v-if="(ev.payload as ToolCard).name === 'delegate_agent' && delegateCardAwaiting(ev.seq)"
+                              class="tool-card__status-badge is-awaiting"
+                            >
+                              <span class="tool-card__spinner" />
+                              <span>{{ delegateCardAwaitingLabel(ev.seq) }}</span>
+                            </span>
+                            <span v-else-if="(ev.payload as ToolCard).status === 'running'" class="tool-card__status-badge is-running">
                               <span class="tool-card__spinner" />
                               <span>执行中</span>
                             </span>
@@ -1337,8 +1465,9 @@ function onTitleKeydown(e: KeyboardEvent) {
                             <span
                               v-if="(ev.payload as ToolCard).name === 'delegate_agent' && delegateChildTurnId(ev.seq)"
                               class="tool-card__link"
+                              :class="{ 'is-awaiting': delegateCardAwaiting(ev.seq) }"
                               @click.stop="drillIntoChildTurnBySeq(ev.seq)"
-                            >查看 →</span>
+                            >{{ delegateCardLinkLabel(ev.seq) }}</span>
                             <svg class="tool-card__chevron" :class="{ 'is-open': isToolCardExpanded(ev.seq) }" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                           </div>
                         </div>
@@ -1392,7 +1521,7 @@ function onTitleKeydown(e: KeyboardEvent) {
                     </template>
 
                     <template v-else-if="ev.type === 'permission.ask'">
-                      <div class="turn__permission">
+                      <div class="turn__permission" :data-event-anchor="ev.seq">
                         <svg class="turn__permission-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                         <span>
                           <strong>{{ approvalReasonLabel(ev.payload) }}</strong>：
@@ -1417,7 +1546,7 @@ function onTitleKeydown(e: KeyboardEvent) {
                     </template>
 
                     <template v-else-if="ev.type === 'ask_user.pending'">
-                      <div class="turn__ask-user">
+                      <div class="turn__ask-user" :data-event-anchor="ev.seq">
                         <div class="turn__ask-user-header">
                           <svg class="turn__ask-user-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                           <span class="turn__ask-user-question">{{ askUserQuestion(ev.payload) }}</span>
@@ -1530,6 +1659,32 @@ function onTitleKeydown(e: KeyboardEvent) {
             </div>
           </section>
         </div>
+      </div>
+
+      <aside
+        v-if="approvalAnchors.length"
+        class="approval-rail"
+        aria-label="审批事件锚点"
+      >
+        <div class="approval-rail__track" />
+        <button
+          v-for="a in approvalAnchors"
+          :key="a.key"
+          type="button"
+          class="approval-rail__anchor"
+          :class="{
+            'is-permission': a.kind === 'permission',
+            'is-ask': a.kind === 'ask',
+            'is-pending': a.pending,
+          }"
+          :style="{ top: `${a.topPercent}%` }"
+          :title="a.label"
+          @click="jumpToApprovalAnchor(a)"
+        >
+          <span class="approval-rail__dot" />
+          <span class="approval-rail__tip">{{ a.kind === 'permission' ? '审批' : '提问' }}</span>
+        </button>
+      </aside>
       </div>
 
       <div class="session-workspace__split" @pointerdown="onSplitResizePointerDown" />
@@ -1782,11 +1937,119 @@ function onTitleKeydown(e: KeyboardEvent) {
   overflow: hidden;
 }
 
+.session-workspace__stream {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
 .session-workspace__scroll {
+  flex: 1;
   min-width: 0;
   min-height: 0;
   overflow: auto;
   padding: 20px 24px 160px;
+}
+
+.session-workspace__scroll.has-approval-rail {
+  padding-right: 64px;
+}
+
+/* Right-side anchors for pending approval / ask_user events */
+.approval-rail {
+  position: absolute;
+  top: 16px;
+  right: 6px;
+  bottom: 140px;
+  width: 28px;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.approval-rail__track {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
+}
+
+.approval-rail__anchor {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+  color: var(--dq-warning, #d97706);
+}
+
+.approval-rail__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
+  flex-shrink: 0;
+}
+
+.approval-rail__anchor.is-pending .approval-rail__dot {
+  animation: approval-rail-pulse 1.6s ease-in-out infinite;
+}
+
+.approval-rail__tip {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  color: var(--dq-warning, #d97706);
+  background: color-mix(in srgb, var(--dq-bg-base, #fff) 88%, var(--dq-warning, #d97706));
+  border: 1px solid color-mix(in srgb, var(--dq-warning, #d97706) 35%, transparent);
+  opacity: 0.95;
+  pointer-events: none;
+}
+
+.approval-rail__anchor.is-ask {
+  color: var(--dq-accent);
+}
+
+.approval-rail__anchor.is-ask .approval-rail__tip {
+  color: var(--dq-accent);
+  background: color-mix(in srgb, var(--dq-bg-base, #fff) 88%, var(--dq-accent));
+  border-color: color-mix(in srgb, var(--dq-accent) 30%, transparent);
+}
+
+.approval-rail__anchor:hover .approval-rail__dot {
+  transform: scale(1.15);
+}
+
+@keyframes approval-rail-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent); }
+  50% { box-shadow: 0 0 0 6px color-mix(in srgb, currentColor 10%, transparent); }
+}
+
+.turn__permission.is-anchor-flash,
+.turn__ask-user.is-anchor-flash {
+  outline: 2px solid color-mix(in srgb, var(--dq-warning, #d97706) 70%, transparent);
+  outline-offset: 2px;
+  border-radius: 8px;
+  transition: outline-color 0.3s ease;
 }
 
 .session-workspace__empty {
@@ -2271,6 +2534,11 @@ function onTitleKeydown(e: KeyboardEvent) {
   background: color-mix(in srgb, var(--dq-accent) 7%, transparent);
 }
 
+.tool-card.is-awaiting-approval {
+  border-color: color-mix(in srgb, var(--dq-warning, #d97706) 55%, transparent);
+  background: color-mix(in srgb, var(--dq-warning, #d97706) 9%, transparent);
+}
+
 .tool-card.is-error {
   border-color: color-mix(in srgb, var(--dq-danger) 35%, transparent);
   background: color-mix(in srgb, var(--dq-danger) 5%, transparent);
@@ -2360,6 +2628,11 @@ function onTitleKeydown(e: KeyboardEvent) {
   background: color-mix(in srgb, var(--dq-accent) 10%, transparent);
 }
 
+.tool-card__status-badge.is-awaiting {
+  color: var(--dq-warning, #d97706);
+  background: color-mix(in srgb, var(--dq-warning, #d97706) 12%, transparent);
+}
+
 .tool-card__status-badge.is-error {
   color: var(--dq-danger);
   background: color-mix(in srgb, var(--dq-danger) 10%, transparent);
@@ -2395,6 +2668,11 @@ function onTitleKeydown(e: KeyboardEvent) {
   cursor: pointer;
   white-space: nowrap;
   transition: opacity 0.12s ease;
+}
+
+.tool-card__link.is-awaiting {
+  color: var(--dq-warning, #d97706);
+  font-weight: 600;
 }
 
 .tool-card__link:hover {
