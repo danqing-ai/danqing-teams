@@ -62,7 +62,8 @@ if [[ -n "${GITHUB_ENV:-}" ]]; then
   {
     echo "HAS_TAURI_SIGNING_KEY=true"
     echo "TAURI_SIGNING_PRIVATE_KEY_PATH=$KEY_PATH"
-    # Prefer path over inline env (avoids multiline / padding issues in the build step)
-    echo "TAURI_SIGNING_PRIVATE_KEY="
   } >> "$GITHUB_ENV"
 fi
+# Important: do NOT set TAURI_SIGNING_PRIVATE_KEY to an empty string.
+# Tauri treats an empty KEY as present and fails with:
+#   incorrect updater private key password: Missing comment in secret key

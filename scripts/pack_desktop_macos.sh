@@ -36,6 +36,11 @@ has_tauri_signing_key() {
   [[ -n "${TAURI_SIGNING_PRIVATE_KEY_PATH:-}" && -f "${TAURI_SIGNING_PRIVATE_KEY_PATH}" ]]
 }
 
+# Empty KEY env shadows PATH and breaks signing ("Missing comment in secret key").
+if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+  unset TAURI_SIGNING_PRIVATE_KEY
+fi
+
 # Build Go backend as Tauri sidecar binary
 echo "==> Building backend sidecar..."
 "$SCRIPT_DIR/build_sidecar.sh"
