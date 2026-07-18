@@ -37,6 +37,12 @@ export interface InspectElementPayload {
   text?: string
   outerHTML?: string
   html?: string
+  /** Parent + selected + sibling summaries for layout context. */
+  neighborhoodHTML?: string
+  /** Design-relevant computed CSS (property → value). */
+  computedStyles?: Record<string, string>
+  /** Cropped element screenshot as data URL (jpeg/png). */
+  screenshot?: string
   id?: string
   classes?: string[]
   role?: string
@@ -61,6 +67,11 @@ export interface ElementAttachment {
   tag: string
   text: string
   outerHTML: string
+  neighborhoodHTML: string
+  computedStyles: Record<string, string>
+  /** Present when inspect captured a crop; also mirrored as a composer image. */
+  screenshotDataUrl?: string
+  screenshotName?: string
   elementId: string
   classes: string[]
   role: string
@@ -114,7 +125,18 @@ export function chipTooltip(att: ElementAttachment): string {
     const loc = att.component.file ? ` @ ${att.component.file}` : ''
     lines.push(`Component: ${att.component.name}${loc}`)
   }
+  const styleKeys = Object.keys(att.computedStyles || {})
+  if (styleKeys.length) {
+    lines.push(`Styles: ${styleKeys.slice(0, 8).join(', ')}${styleKeys.length > 8 ? '…' : ''}`)
+  }
+  if (att.screenshotDataUrl) lines.push('Screenshot: attached')
   return lines.join('\n')
+}
+
+function screenshotFileName(tag: string, id: string): string {
+  const safeTag = (tag || 'el').replace(/[^a-z0-9_-]/gi, '') || 'el'
+  const short = id.replace(/^el_/, '').slice(0, 10)
+  return `ui-element-${safeTag}-${short}.jpg`
 }
 
 export function fromInspectPayload(
@@ -124,10 +146,17 @@ export function fromInspectPayload(
   const pageUrl = opts.pageUrl || raw.page?.url || ''
   const pageTitle = raw.page?.title || ''
   const sourceFile = opts.sourceFile || raw.page?.sourceFile
-  const html = (raw.outerHTML || raw.html || '').slice(0, 1500)
+  const html = (raw.outerHTML || raw.html || '').slice(0, 1800)
+  const neighborhood = (raw.neighborhoodHTML || '').slice(0, 2800)
+  const styles = raw.computedStyles && typeof raw.computedStyles === 'object' ? raw.computedStyles : {}
+  const id = createElementAttachmentId()
+  const screenshot =
+    typeof raw.screenshot === 'string' && raw.screenshot.startsWith('data:image/')
+      ? raw.screenshot
+      : undefined
 
   return {
-    id: createElementAttachmentId(),
+    id,
     kind: 'dom-element',
     annotation: (opts.annotation || '').trim(),
     page: {
@@ -138,6 +167,11 @@ export function fromInspectPayload(
     tag: (raw.tag || 'unknown').toLowerCase(),
     text: (raw.text || '').trim(),
     outerHTML: html,
+    neighborhoodHTML: neighborhood,
+    computedStyles: styles,
+    ...(screenshot
+      ? { screenshotDataUrl: screenshot, screenshotName: screenshotFileName(raw.tag || 'el', id) }
+      : {}),
     elementId: raw.id || '',
     classes: Array.isArray(raw.classes) ? raw.classes : [],
     role: raw.role || '',
@@ -157,8 +191,22 @@ export function fromInspectPayload(
   }
 }
 
+function formatComputedStyles(styles: Record<string, string>, limit = 28): string[] {
+  const keys = Object.keys(styles)
+  if (!keys.length) return []
+  const lines: string[] = ['- Computed styles:']
+  for (const k of keys.slice(0, limit)) {
+    lines.push(`  - ${k}: ${styles[k]}`)
+  }
+  if (keys.length > limit) lines.push(`  - … +${keys.length - limit} more`)
+  return lines
+}
+
 export function serializeElementAttachment(att: ElementAttachment): string {
   const lines: string[] = ['### Attached UI Element']
+  lines.push(
+    '- Intent: The user selected this UI element in the Browser tab. Treat it as the primary target of their request.',
+  )
   if (att.annotation) lines.push(`- Annotation: ${att.annotation}`)
   if (att.page.url) lines.push(`- Page: ${att.page.url}`)
   if (att.page.title) lines.push(`- Title: ${att.page.title}`)
@@ -194,6 +242,12 @@ export function serializeElementAttachment(att: ElementAttachment): string {
     lines.push(`- Component: ${att.component.name}${loc}${fw}`)
   }
 
+  if (att.screenshotName) {
+    lines.push(
+      `- Screenshot: attached as image "${att.screenshotName}" (visual crop of the selected element)`,
+    )
+  }
+
   const attrKeys = Object.keys(att.attributes || {})
   if (attrKeys.length) {
     const attrs = attrKeys
@@ -203,7 +257,14 @@ export function serializeElementAttachment(att: ElementAttachment): string {
     lines.push(`- Attrs: ${attrs}`)
   }
 
-  if (att.outerHTML) {
+  lines.push(...formatComputedStyles(att.computedStyles))
+
+  if (att.neighborhoodHTML) {
+    lines.push('- Neighborhood HTML (parent + siblings; selected marked):')
+    lines.push('```html')
+    lines.push(att.neighborhoodHTML)
+    lines.push('```')
+  } else if (att.outerHTML) {
     lines.push('- HTML:')
     lines.push('```html')
     lines.push(att.outerHTML)

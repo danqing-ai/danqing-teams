@@ -40,7 +40,13 @@ func (m *StreamEventManager) Publish(ctx context.Context, sessionID, turnID, typ
 	}
 
 	if m.store != nil {
-		_ = m.store.Save(ctx, ev)
+		// Persist even when the turn ctx is already cancelled — otherwise
+		// tool.error / similar events can vanish from history (seq gap, stuck "running").
+		saveCtx := ctx
+		if ctx == nil || ctx.Err() != nil {
+			saveCtx = context.Background()
+		}
+		_ = m.store.Save(saveCtx, ev)
 	}
 
 	m.mu.RLock()

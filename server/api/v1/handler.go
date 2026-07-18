@@ -296,7 +296,10 @@ func resolveAskUser(h *Handler) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "answer required"})
 			return
 		}
-		h.Sessions.ResolveAskUser(c.Param("id"), req.Answer)
+		if err := h.Sessions.ResolveAskUser(c.Param("id"), req.Answer); err != nil {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	}
 }

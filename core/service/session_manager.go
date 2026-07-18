@@ -198,6 +198,6 @@ func (m *SessionManager) Unsubscribe(sessionID string, ch chan domain.StreamEven
 	m.engine.Unsubscribe(sessionID, ch)
 }
 
-func (m *SessionManager) ResolveAskUser(askID, answer string) {
-	m.engine.ResolveAskUser(askID, answer)
+func (m *SessionManager) ResolveAskUser(askID, answer string) error {
+	return m.engine.ResolveAskUser(askID, answer)
 }

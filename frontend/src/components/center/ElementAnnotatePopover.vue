@@ -77,6 +77,9 @@ function shortSummary(): string {
           <div class="el-annotate__summary">{{ shortSummary() }}</div>
         </div>
       </div>
+      <div v-if="payload?.screenshot" class="el-annotate__preview">
+        <img :src="payload.screenshot" alt="选中元素预览" class="el-annotate__preview-img" />
+      </div>
       <label class="el-annotate__label" for="el-annotate-input">批注（可选）</label>
       <textarea
         id="el-annotate-input"
@@ -160,6 +163,25 @@ function shortSummary(): string {
   color: var(--dq-label-tertiary);
   word-break: break-all;
   line-height: 1.4;
+}
+
+.el-annotate__preview {
+  margin: 0 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--dq-glass-border-strong);
+  background: color-mix(in srgb, var(--dq-bg-base) 40%, transparent);
+  overflow: hidden;
+  max-height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.el-annotate__preview-img {
+  display: block;
+  max-width: 100%;
+  max-height: 140px;
+  object-fit: contain;
 }
 
 .el-annotate__label {

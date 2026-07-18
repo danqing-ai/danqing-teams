@@ -75,6 +75,7 @@ const fields = computed(() => toolInputFields(props.card.inputStr))
       'is-awaiting-approval': awaitingApproval,
       'is-completed': card.status === 'completed',
       'is-error': card.status === 'error',
+      'is-cancelled': card.status === 'cancelled',
     }"
   >
     <div class="tool-card__header" @click="emit('toggle')">
@@ -90,6 +91,9 @@ const fields = computed(() => toolInputFields(props.card.inputStr))
         <span v-else-if="card.status === 'running'" class="tool-card__status-badge is-running">
           <span class="tool-card__spinner" />
           <span>{{ t('sessions.running') }}</span>
+        </span>
+        <span v-else-if="card.status === 'cancelled'" class="tool-card__status-badge is-cancelled">
+          {{ t('sessions.cancelled') }}
         </span>
         <span v-else-if="card.status === 'error'" class="tool-card__status-badge is-error">
           {{ t('sessions.failed') }}
@@ -125,7 +129,7 @@ const fields = computed(() => toolInputFields(props.card.inputStr))
     </div>
 
     <div v-show="expanded" class="tool-card__body">
-      <div v-if="card.inputStr && card.name !== 'ask_user'" class="tool-card__section">
+      <div v-if="card.inputStr" class="tool-card__section">
         <span class="tool-card__section-label">{{ t('sessions.toolInput') }}</span>
         <div v-if="fields" class="tool-card__fields">
           <div v-for="field in fields" :key="field.key" class="tool-card__field">
@@ -162,6 +166,11 @@ const fields = computed(() => toolInputFields(props.card.inputStr))
 
 .tool-card.is-error {
   border-color: color-mix(in srgb, var(--dq-danger) 35%, transparent);
+}
+
+.tool-card.is-cancelled {
+  border-color: color-mix(in srgb, var(--dq-label-primary) 12%, transparent);
+  opacity: 0.85;
 }
 
 .tool-card__header {
@@ -224,6 +233,11 @@ const fields = computed(() => toolInputFields(props.card.inputStr))
 .tool-card__status-badge.is-error {
   background: color-mix(in srgb, var(--dq-danger) 12%, transparent);
   color: var(--dq-danger);
+}
+
+.tool-card__status-badge.is-cancelled {
+  background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+  color: var(--dq-label-secondary);
 }
 
 .tool-card__status-badge.is-done {

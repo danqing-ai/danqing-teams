@@ -157,6 +157,15 @@ function appendContent(text: string) {
 }
 
 function addElementAttachment(att: ElementAttachment) {
+  if (att.screenshotDataUrl) {
+    const comma = att.screenshotDataUrl.indexOf(',')
+    const b64 = comma >= 0 ? att.screenshotDataUrl.slice(comma + 1) : ''
+    const size = Math.floor((b64.length * 3) / 4)
+    if (size > MAX_IMAGE_ATTACHMENT_BYTES) {
+      toast.warning(t('composer.attachImageTooLarge', { max: '10 MB' }))
+      att = { ...att, screenshotDataUrl: undefined, screenshotName: undefined }
+    }
+  }
   const wrapped: ElementComposerAttachment = {
     id: att.id,
     kind: 'element',
@@ -328,13 +337,23 @@ function onPaste(e: ClipboardEvent) {
   toast.success(t('composer.pasteImageAdded'))
 }
 
+function onDragOver() {
+  if (hasPendingApproval.value) return
+  dragOver.value = true
+}
+
 function onDrop(e: DragEvent) {
   e.preventDefault()
   dragOver.value = false
+  if (hasPendingApproval.value) return
   const files = Array.from(e.dataTransfer?.files ?? [])
   if (!files.length) return
   for (const f of files) addLocalFile(f)
 }
+
+const emit = defineEmits<{
+  'jump-pending': []
+}>()
 
 defineExpose({ focusInput, appendContent, addElementAttachment })
 </script>
@@ -349,18 +368,30 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
     }"
     role="form"
     aria-label="Session composer"
-    @dragover.prevent="dragOver = true"
+    @dragover.prevent="onDragOver"
     @dragleave.prevent="dragOver = false"
     @drop="onDrop"
   >
+    <!-- Compact bar while ask_user / permission cards need attention -->
+    <div v-if="hasPendingApproval" class="composer-float__card composer-float__card--blocked">
+      <div class="composer-float__banner composer-float__banner--warn">
+        <span class="composer-float__banner-text">{{ t('sessions.pendingApprovalHint') }}</span>
+        <button
+          type="button"
+          class="composer-float__jump"
+          @click="emit('jump-pending')"
+        >
+          {{ t('sessions.jumpToPending') }}
+        </button>
+      </div>
+    </div>
+
+    <template v-else>
     <!-- Upper card: input + model/effort/send -->
     <div class="composer-float__card">
       <div v-if="dragOver" class="composer-float__drop">{{ t('composer.dropHint') }}</div>
 
-      <div v-if="hasPendingApproval" class="composer-float__banner composer-float__banner--warn">
-        {{ t('sessions.pendingApprovalHint') }}
-      </div>
-      <div v-else-if="isTurnRunning" class="composer-float__banner composer-float__banner--run">
+      <div v-if="isTurnRunning" class="composer-float__banner composer-float__banner--run">
         <span class="composer-float__run-dot" />
         {{ t('composer.running') }}
       </div>
@@ -529,6 +560,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
         </div>
       </div>
     </div>
+    </template>
   </div>
 </template>
 
@@ -540,17 +572,46 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
   gap: 8px;
 }
 
-.composer-float.is-blocked {
-  opacity: 0.94;
-}
-
 .composer-float.is-dragover .composer-float__card {
   border-color: var(--dq-accent);
   background: color-mix(in srgb, var(--dq-accent) 6%, var(--dq-glass-popover-bg));
 }
 
+.composer-float.is-blocked {
+  pointer-events: none;
+}
+
 .composer-float__card {
   position: relative;
+}
+
+.composer-float__card--blocked {
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.composer-float__banner-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.composer-float__jump {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 1px solid color-mix(in srgb, var(--dq-system-orange) 35%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--dq-system-orange) 12%, transparent);
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.composer-float__jump:hover {
+  background: color-mix(in srgb, var(--dq-system-orange) 20%, transparent);
+  border-color: color-mix(in srgb, var(--dq-system-orange) 55%, transparent);
 }
 
 .composer-float__drop {
@@ -575,6 +636,10 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
   font-size: var(--dq-font-size-caption);
   font-weight: 600;
   border-bottom: 1px solid var(--dq-separator-light);
+}
+
+.composer-float__card--blocked .composer-float__banner {
+  border-bottom: none;
 }
 
 .composer-float__banner--warn {

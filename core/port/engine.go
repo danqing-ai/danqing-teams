@@ -17,5 +17,5 @@ type Engine interface {
 	Unsubscribe(sessionID string, ch chan domain.StreamEvent)
 	ResolveApproval(id string, approved bool, scope string)
 	PublishPermissionDecided(sessionID, turnID, approvalID string, approved bool, scope string)
-	ResolveAskUser(askID, answer string)
+	ResolveAskUser(askID, answer string) error
 }

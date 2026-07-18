@@ -78,12 +78,33 @@ export function buildComposerUserInput(
 }
 
 export function toApiImageAttachments(atts: ComposerAttachment[]): ApiUserAttachment[] {
-  return atts
-    .filter((a): a is ImageComposerAttachment => a.kind === 'image' && Boolean(a.dataUrl))
-    .map((img) => ({
-      type: 'image' as const,
-      name: img.name,
-      mimeType: img.mime || 'image/png',
-      data: img.dataUrl,
-    }))
+  const images: ApiUserAttachment[] = []
+
+  for (const a of atts) {
+    if (a.kind === 'image' && a.dataUrl) {
+      images.push({
+        type: 'image',
+        name: a.name,
+        mimeType: a.mime || 'image/png',
+        data: a.dataUrl,
+      })
+      continue
+    }
+    if (a.kind === 'element' && a.data.screenshotDataUrl) {
+      const dataUrl = a.data.screenshotDataUrl
+      const mime = dataUrl.startsWith('data:image/png')
+        ? 'image/png'
+        : dataUrl.startsWith('data:image/webp')
+          ? 'image/webp'
+          : 'image/jpeg'
+      images.push({
+        type: 'image',
+        name: a.data.screenshotName || `ui-element-${a.data.tag || 'el'}.jpg`,
+        mimeType: mime,
+        data: dataUrl,
+      })
+    }
+  }
+
+  return images
 }

@@ -260,6 +260,8 @@ function onScrollAreaScroll() {
 }
 function autoScrollToBottom(force = false) {
   if (!force && userScrolledUp.value) return
+  // Prefer keeping ask_user / permission cards clear of the floating composer.
+  if (!force && workspaceUi.pendingApprovals > 0) return
   void nextTick(() => {
     const el = scrollAreaRef.value
     if (el) {
@@ -278,7 +280,11 @@ watch(
 )
 
 const scrollAreaRef = ref<HTMLElement | null>(null)
+const composerWrapRef = ref<HTMLElement | null>(null)
 const composerStyle = ref<Record<string, string>>({})
+/** Floating composer overlay height — keeps stream content above it. */
+const composerOverlayPx = ref(160)
+let composerResizeObs: ResizeObserver | null = null
 
 function updateComposerPosition() {
   const el = scrollAreaRef.value
@@ -291,9 +297,40 @@ function updateComposerPosition() {
   }
 }
 
-watch(splitPercent, () => { nextTick(updateComposerPosition) })
-onMounted(() => { nextTick(updateComposerPosition); window.addEventListener('resize', updateComposerPosition); window.addEventListener('message', handleInspectMessage) })
-onUnmounted(() => { window.removeEventListener('resize', updateComposerPosition); window.removeEventListener('message', handleInspectMessage) })
+function updateComposerOverlayHeight() {
+  const wrap = composerWrapRef.value
+  if (!wrap) return
+  const h = Math.ceil(wrap.getBoundingClientRect().height)
+  if (h > 0) composerOverlayPx.value = h
+}
+
+function syncComposerLayout() {
+  updateComposerPosition()
+  updateComposerOverlayHeight()
+}
+
+watch(splitPercent, () => { nextTick(syncComposerLayout) })
+watch(
+  () => workspaceUi.pendingApprovals,
+  () => { nextTick(syncComposerLayout) },
+)
+onMounted(() => {
+  nextTick(() => {
+    syncComposerLayout()
+    if (typeof ResizeObserver !== 'undefined' && composerWrapRef.value) {
+      composerResizeObs = new ResizeObserver(() => updateComposerOverlayHeight())
+      composerResizeObs.observe(composerWrapRef.value)
+    }
+  })
+  window.addEventListener('resize', syncComposerLayout)
+  window.addEventListener('message', handleInspectMessage)
+})
+onUnmounted(() => {
+  composerResizeObs?.disconnect()
+  composerResizeObs = null
+  window.removeEventListener('resize', syncComposerLayout)
+  window.removeEventListener('message', handleInspectMessage)
+})
 
 interface ToolCard {
   callId: string
@@ -392,8 +429,9 @@ function mergeToolCard(toolCards: Record<string, ToolCard>, ev: StreamEvent) {
       existing.status = 'completed'
       existing.output = String(p?.output ?? '')
     } else if (ev.type === 'tool.error') {
-      existing.status = 'error'
-      existing.error = String(p?.error ?? '')
+      const errMsg = String(p?.error ?? '')
+      existing.status = errMsg === 'cancelled' || /context canceled/i.test(errMsg) ? 'cancelled' : 'error'
+      existing.error = errMsg
     }
     return
   }
@@ -401,7 +439,10 @@ function mergeToolCard(toolCards: Record<string, ToolCard>, ev: StreamEvent) {
   let status = 'pending'
   if (ev.type === 'tool.running') status = 'running'
   else if (ev.type === 'tool.completed') status = 'completed'
-  else if (ev.type === 'tool.error') status = 'error'
+  else if (ev.type === 'tool.error') {
+    const errMsg = String(p?.error ?? '')
+    status = errMsg === 'cancelled' || /context canceled/i.test(errMsg) ? 'cancelled' : 'error'
+  }
 
   toolCards[callId] = {
     callId,
@@ -512,6 +553,18 @@ const turnMap = computed(() => {
     if (ev.type === 'turn.ended' || ev.type === 'turn.failed') {
       const payload = asRecord(ev.payload)
       map[turnId].status = String(payload?.status ?? '')
+      // Historical gap: cancel could drop tool.error from DB; close open cards.
+      const openCards = turnToolCards[turnId]
+      if (openCards) {
+        const failed = ev.type === 'turn.failed'
+        const kind = String(payload?.kind ?? '')
+        for (const card of Object.values(openCards)) {
+          if (card.status === 'running' || card.status === 'pending') {
+            card.status = failed || kind === 'cancelled' ? 'cancelled' : 'error'
+            if (!card.error) card.error = failed ? String(payload?.message ?? 'cancelled') : 'interrupted'
+          }
+        }
+      }
       activeTurnId = null
     }
   }
@@ -652,12 +705,7 @@ function childTurnNeedsApproval(childTurnId: string | null): boolean {
 /** Child turn has unresolved ask_user.pending. */
 function childTurnNeedsAsk(childTurnId: string | null): boolean {
   if (!childTurnId) return false
-  return sessions.pendingAsks.some((e) => {
-    if (e.turnId !== childTurnId) return false
-    const p = asRecord(e.payload)
-    const callId = String(p?.callId ?? '')
-    return callId ? !sessions.resolvedAskCallIds.has(callId) : true
-  })
+  return sessions.pendingAsks.some((e) => e.turnId === childTurnId && isAskActionable(e))
 }
 
 function childTurnNeedsAttention(childTurnId: string | null): boolean {
@@ -728,9 +776,7 @@ const approvalAnchors = computed((): ApprovalAnchor[] => {
         topPercent: Math.min(92, Math.max(6, (e.seq / maxSeq) * 100)),
       })
     } else if (e.type === 'ask_user.pending') {
-      const callId = askUserCallId(e.payload)
-      const pending = callId ? !sessions.resolvedAskCallIds.has(callId) : true
-      if (!pending) continue
+      if (!isAskActionable(e)) continue
       const q = askUserQuestion(e.payload)
       out.push({
         key: `ask-${askUserId(e.payload) || e.seq}`,
@@ -770,6 +816,23 @@ async function jumpToApprovalAnchor(a: ApprovalAnchor) {
   el.classList.add('is-anchor-flash')
   window.setTimeout(() => el.classList.remove('is-anchor-flash'), 1200)
 }
+
+function jumpToFirstPendingApproval() {
+  const first = approvalAnchors.value.find((a) => a.pending)
+  if (first) void jumpToApprovalAnchor(first)
+}
+
+/** When a new ask_user / permission card appears, bring it into the clear area above the composer. */
+watch(
+  () => approvalAnchors.value.filter((a) => a.pending).map((a) => a.key).join('|'),
+  async (keys, prev) => {
+    if (!keys || keys === prev) return
+    await nextTick()
+    await nextTick()
+    syncComposerLayout()
+    jumpToFirstPendingApproval()
+  },
+)
 
 const statusLabel = computed(() => {
   const s = sessions.currentSession?.status
@@ -869,6 +932,7 @@ function toolCardStatusLabel(status: string): string {
   if (status === 'running') return '执行中'
   if (status === 'completed') return '完成'
   if (status === 'error') return '错误'
+  if (status === 'cancelled') return '已取消'
   return status
 }
 
@@ -876,6 +940,7 @@ function toolCardStatusType(status: string): 'info' | 'success' | 'danger' | 'wa
   if (status === 'running') return 'info'
   if (status === 'completed') return 'success'
   if (status === 'error') return 'danger'
+  if (status === 'cancelled') return 'warning'
   return 'info'
 }
 
@@ -1047,6 +1112,9 @@ function shouldShowApprovalActions(payload: unknown): boolean {
 const askUserText = ref<Record<string, string>>({})
 const askUserFormValues = ref<Record<string, Record<string, unknown>>>({})
 const askUserSelectedOption = ref<Record<string, string>>({})
+/** Local answers before tool.completed arrives (or when stream never emits it). */
+const answeredAskIds = ref(new Set<string>())
+const answeringAskIds = ref(new Set<string>())
 
 function askUserPayload(ev: { payload: unknown }): Record<string, unknown> | null {
   return asRecord(ev.payload)
@@ -1054,12 +1122,12 @@ function askUserPayload(ev: { payload: unknown }): Record<string, unknown> | nul
 
 function askUserId(payload: unknown): string {
   const p = asRecord(payload)
-  return String(p?.askId ?? '')
+  return String(p?.askId ?? p?.callId ?? '')
 }
 
 function askUserCallId(payload: unknown): string {
   const p = asRecord(payload)
-  return String(p?.callId ?? '')
+  return String(p?.callId ?? p?.askId ?? '')
 }
 
 function askUserQuestion(payload: unknown): string {
@@ -1134,6 +1202,7 @@ function initSelectedOption(askId: string, options: string[], defaultOpt: string
 async function answerAskWithForm(ev: { payload: unknown }) {
   const askId = askUserId(ev.payload)
   if (!askId) return
+  if (answeringAskIds.value.has(askId) || !isAskActionable(ev)) return
   const fields = askUserFormFields(ev.payload)
   const vals = askUserFormValues.value[askId] ?? {}
   // Validate required fields
@@ -1149,21 +1218,72 @@ async function answerAskWithForm(ev: { payload: unknown }) {
     const display = f.type === 'boolean' ? (v ? '是' : '否') : String(v ?? '')
     return `${f.label}: ${display}`
   })
-  await sessions.resolveAskUser(askId, lines.join('\n'))
+  await submitAskAnswer(askId, lines.join('\n'))
   delete askUserFormValues.value[askId]
 }
 
 async function answerAsk(ev: { payload: unknown }, answer: string) {
-  if (!answer) return
+  const trimmed = answer.trim()
+  if (!trimmed) return
   const askId = askUserId(ev.payload)
-  if (!askId) return
-  await sessions.resolveAskUser(askId, answer)
+  if (!askId) {
+    toast.warning(t('sessions.askMissingId'))
+    return
+  }
+  if (answeringAskIds.value.has(askId) || !isAskActionable(ev)) return
+  askUserSelectedOption.value[askId] = trimmed
+  await submitAskAnswer(askId, trimmed)
   delete askUserText.value[askId]
-  delete askUserSelectedOption.value[askId]
+}
+
+async function submitAskAnswer(askId: string, answer: string) {
+  answeringAskIds.value = new Set(answeringAskIds.value).add(askId)
+  try {
+    await sessions.resolveAskUser(askId, answer)
+    answeredAskIds.value = new Set(answeredAskIds.value).add(askId)
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('sessions.askResolveFailed'))
+    // Stale ask after cancel/reload — stop showing interactive controls.
+    if (String(e instanceof Error ? e.message : e).includes('not found') ||
+        String(e instanceof Error ? e.message : e).includes('no longer waiting')) {
+      answeredAskIds.value = new Set(answeredAskIds.value).add(askId)
+    }
+  } finally {
+    const next = new Set(answeringAskIds.value)
+    next.delete(askId)
+    answeringAskIds.value = next
+  }
 }
 
 function isAskResolved(callId: string): boolean {
-  return sessions.resolvedAskCallIds.has(callId)
+  if (!callId) return false
+  if (answeredAskIds.value.has(callId)) return true
+  if (sessions.resolvedAskCallIds.has(callId)) return true
+  return false
+}
+
+/** Turn already finished without completing this ask_user — buttons would no-op. */
+function isAskExpired(ev: { seq: number; turnId?: string; payload: unknown }): boolean {
+  const callId = askUserCallId(ev.payload)
+  if (!callId || isAskResolved(callId)) return false
+  const turnId = ev.turnId || ''
+  for (const e of sessions.streamEvents) {
+    if (e.seq <= ev.seq) continue
+    if (turnId && e.turnId && e.turnId !== turnId) continue
+    const p = asRecord(e.payload)
+    if ((e.type === 'tool.completed' || e.type === 'tool.error') && String(p?.callId ?? '') === callId) {
+      return e.type === 'tool.error'
+    }
+    if (e.type === 'turn.failed' || e.type === 'turn.ended') return true
+  }
+  return false
+}
+
+function isAskActionable(ev: { seq: number; turnId?: string; payload: unknown }): boolean {
+  const callId = askUserCallId(ev.payload)
+  if (!callId || isAskResolved(callId)) return false
+  if (isAskExpired(ev)) return false
+  return true
 }
 
 function askUserAnswer(payload: unknown): string {
@@ -1177,7 +1297,8 @@ function askUserAnswer(payload: unknown): string {
       return String(tp?.output ?? '')
     }
   }
-  return ''
+  // Optimistic local answer (option click) before tool.completed
+  return askUserSelectedOption.value[cid] || askUserText.value[cid] || ''
 }
 
 function turnStatusLabel(status: TurnLog['status']) {
@@ -1445,6 +1566,7 @@ function onTitleKeydown(e: KeyboardEvent) {
         ref="scrollAreaRef"
         class="session-workspace__scroll"
         :class="{ 'has-approval-rail': approvalAnchors.length > 0 }"
+        :style="{ paddingBottom: `${composerOverlayPx + 16}px` }"
         @scroll="onScrollAreaScroll"
       >
         <div v-if="sessions.composingNew && !sessions.currentSession" class="session-workspace__empty">
@@ -1620,8 +1742,12 @@ function onTitleKeydown(e: KeyboardEvent) {
                       <template v-if="isAskResolved(askUserCallId(ev.payload))">
                         <div class="turn__ask-user-answer">
                           <span class="turn__ask-user-answer-label">你的回复</span>
-                          <p class="turn__ask-user-answer-text">{{ askUserAnswer(ev.payload) }}</p>
+                          <p class="turn__ask-user-answer-text">{{ askUserAnswer(ev.payload) || '已回复' }}</p>
                         </div>
+                      </template>
+
+                      <template v-else-if="isAskExpired(ev)">
+                        <span class="turn__ask-user-expired">{{ t('sessions.askExpired') }}</span>
                       </template>
 
                       <template v-else>
@@ -1658,7 +1784,12 @@ function onTitleKeydown(e: KeyboardEvent) {
                               />
                             </label>
                           </template>
-                          <DqButton type="primary" size="small" @click="answerAskWithForm(ev)">提交</DqButton>
+                          <DqButton
+                            type="primary"
+                            size="small"
+                            :disabled="answeringAskIds.has(askUserId(ev.payload))"
+                            @click="answerAskWithForm(ev)"
+                          >提交</DqButton>
                         </div>
 
                         <!-- Choice mode with options -->
@@ -1667,18 +1798,25 @@ function onTitleKeydown(e: KeyboardEvent) {
                             <DqButton
                               v-for="opt in askUserOptions(ev.payload)"
                               :key="opt"
-                              @click="answerAsk(ev, opt)"
                               size="small"
+                              :disabled="answeringAskIds.has(askUserId(ev.payload))"
                               :type="(initSelectedOption(askUserId(ev.payload), askUserOptions(ev.payload), askUserDefaultOption(ev.payload)), askUserSelectedOption[askUserId(ev.payload)] === opt) ? 'primary' : 'default'"
+                              @click="answerAsk(ev, opt)"
                             >{{ opt }}</DqButton>
                           </div>
                           <div class="turn__ask-user-input">
                             <input
                               v-model="askUserText[askUserId(ev.payload)]"
                               placeholder="或输入自定义回答..."
+                              :disabled="answeringAskIds.has(askUserId(ev.payload))"
                               @keydown.enter="answerAsk(ev, askUserText[askUserId(ev.payload)] ?? '')"
                             />
-                            <DqButton type="primary" size="small" @click="answerAsk(ev, askUserText[askUserId(ev.payload)] ?? '')">回复</DqButton>
+                            <DqButton
+                              type="primary"
+                              size="small"
+                              :disabled="answeringAskIds.has(askUserId(ev.payload))"
+                              @click="answerAsk(ev, askUserText[askUserId(ev.payload)] ?? '')"
+                            >回复</DqButton>
                           </div>
                         </template>
 
@@ -1688,9 +1826,15 @@ function onTitleKeydown(e: KeyboardEvent) {
                             <input
                               v-model="askUserText[askUserId(ev.payload)]"
                               placeholder="输入你的回答..."
+                              :disabled="answeringAskIds.has(askUserId(ev.payload))"
                               @keydown.enter="answerAsk(ev, askUserText[askUserId(ev.payload)] ?? '')"
                             />
-                            <DqButton type="primary" size="small" @click="answerAsk(ev, askUserText[askUserId(ev.payload)] ?? '')">回复</DqButton>
+                            <DqButton
+                              type="primary"
+                              size="small"
+                              :disabled="answeringAskIds.has(askUserId(ev.payload))"
+                              @click="answerAsk(ev, askUserText[askUserId(ev.payload)] ?? '')"
+                            >回复</DqButton>
                           </div>
                         </template>
                       </template>
@@ -1797,8 +1941,8 @@ function onTitleKeydown(e: KeyboardEvent) {
       </div>
     </div>
 
-    <div class="session-workspace__composer" :style="composerStyle">
-      <FloatingComposer ref="composerRef" />
+    <div ref="composerWrapRef" class="session-workspace__composer" :style="composerStyle">
+      <FloatingComposer ref="composerRef" @jump-pending="jumpToFirstPendingApproval" />
     </div>
   </div>
 </template>
@@ -1905,7 +2049,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  padding: 20px 24px 160px;
+  padding: 20px 24px 160px; /* padding-bottom overridden inline from composer height */
 }
 
 .session-workspace__scroll.has-approval-rail {
@@ -2473,6 +2617,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   background: color-mix(in srgb, var(--dq-warning) 8%, transparent);
   color: var(--dq-label-primary);
   font-size: var(--dq-font-size-body);
+  scroll-margin-bottom: 96px;
 }
 
 .turn__permission-icon {
@@ -3074,6 +3219,12 @@ function onTitleKeydown(e: KeyboardEvent) {
   background: color-mix(in srgb, var(--dq-accent) 5%, transparent);
   color: var(--dq-label-primary);
   font-size: var(--dq-font-size-body);
+  scroll-margin-bottom: 96px;
+}
+
+.turn__ask-user-expired {
+  font-size: var(--dq-font-size-footnote);
+  color: var(--dq-label-tertiary);
 }
 
 .turn__ask-user-header {

@@ -61,7 +61,13 @@ const { t } = useI18n()
 
         <!-- DOM element -->
         <template v-else>
-          <div class="att-card__icon att-card__icon--el" aria-hidden="true">
+          <div
+            v-if="att.data.screenshotDataUrl"
+            class="att-card__thumb"
+            :style="{ backgroundImage: `url(${att.data.screenshotDataUrl})` }"
+            aria-hidden="true"
+          />
+          <div v-else class="att-card__icon att-card__icon--el" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10" />
               <line x1="22" y1="12" x2="18" y2="12" />

@@ -310,6 +310,7 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) {
 		messages = append(messages, prevMsgs...)
 
 		messages = append(messages, Message{Role: RoleUser, Content: goal})
+		userIdx := len(messages) - 1
 
 		for _, entry := range replayEntries {
 			typ, _ := entry["type"].(string)
@@ -348,9 +349,7 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) {
 		})
 
 		e.mu.Lock()
-		if err == nil {
-			e.turnMessages[sessionID] = append(e.turnMessages[sessionID], turnMsgs...)
-		}
+		e.commitTurnMessages(sessionID, prevMsgs, turnMsgs, userIdx, err)
 		allMsgs := e.turnMessages[sessionID]
 		e.mu.Unlock()
 
@@ -535,6 +534,7 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 	messages = append(messages, prevMsgs...)
 
 	messages = append(messages, userMessageFromAttachments(goal, attachments))
+	userIdx := len(messages) - 1
 
 	workDir := e.resolveWorkDir(ctx, projectID)
 
@@ -549,16 +549,30 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 	})
 
 	e.mu.Lock()
-	// Do not persist partial messages from cancelled/failed turns — they may
-	// contain unpaired assistant tool_calls that break subsequent turns/resume.
-	if err == nil {
-		e.turnMessages[sessionID] = append(e.turnMessages[sessionID], turnMsgs...)
-	}
+	e.commitTurnMessages(sessionID, prevMsgs, turnMsgs, userIdx, err)
 	allMsgs := e.turnMessages[sessionID]
 	e.mu.Unlock()
 
 	e.afterTurn(sessionID, turnID, agent.ID, rep, err, allMsgs, modelID)
 	return rep, err
+}
+
+// commitTurnMessages stores this turn's contribution into session history.
+// On success, persists user + completed steps. On cancel/fail, keeps only
+// complete tool pairs so the next turn does not lose finished work and does
+// not carry unpaired assistant tool_calls.
+func (e *Engine) commitTurnMessages(sessionID string, prev []Message, turnMsgs []Message, userIdx int, runErr error) {
+	if userIdx < 0 {
+		userIdx = 0
+	}
+	if userIdx > len(turnMsgs) {
+		userIdx = len(turnMsgs)
+	}
+	delta := turnMsgs[userIdx:]
+	if runErr != nil {
+		delta = salvagePairedTurnDelta(delta)
+	}
+	e.turnMessages[sessionID] = append(append([]Message(nil), prev...), delta...)
 }
 
 func (e *Engine) resolveWorkDir(ctx context.Context, projectID string) string {
@@ -736,21 +750,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 		&builtin.SearchKB{Knowledge: e.knowledge, KBIDs: agent.KnowledgeIDs},
 		&builtin.AskUser{
 			Stream: e.stream,
-			OnAsk: func(ctx context.Context, sessionID, turnID, callID, question string, options []string, defaultOpt string, formFields []domain.AskUserFormField) (string, error) {
-				ch := make(chan string, 1)
-				e.mu.Lock()
-				e.askUserWait[callID] = ch
-				e.mu.Unlock()
-				e.stream.Publish(ctx, sessionID, turnID, domain.EventAskUserPending, domain.AskUserPayload{
-					AskID: callID, CallID: callID, Question: question, Options: options, DefaultOpt: defaultOpt, FormFields: formFields,
-				})
-				select {
-				case answer := <-ch:
-					return answer, nil
-				case <-ctx.Done():
-					return "", ctx.Err()
-				}
-			},
+			OnAsk:  e.waitAskUser,
 		},
 		delegator,
 	)
@@ -765,27 +765,36 @@ func (e *Engine) buildWorkerRegistry(agent domain.Agent) *tool.Registry {
 		&builtin.SearchKB{Knowledge: e.knowledge, KBIDs: agent.KnowledgeIDs},
 		&builtin.AskUser{
 			Stream: e.stream,
-			OnAsk: func(ctx context.Context, sessionID, turnID, callID, question string, options []string, defaultOpt string, formFields []domain.AskUserFormField) (string, error) {
-				ch := make(chan string, 1)
-				e.mu.Lock()
-				e.askUserWait[callID] = ch
-				e.mu.Unlock()
-				e.stream.Publish(ctx, sessionID, turnID, domain.EventAskUserPending, domain.AskUserPayload{
-					AskID: callID, CallID: callID, Question: question, Options: options, DefaultOpt: defaultOpt, FormFields: formFields,
-				})
-				select {
-				case answer := <-ch:
-					return answer, nil
-				case <-ctx.Done():
-					return "", ctx.Err()
-				}
-			},
+			OnAsk:  e.waitAskUser,
 		},
 	)
 	reg.CopyMCPServersFrom(e.toolCatalog)
 	e.mountBuiltinTools(reg, agent.Tools)
 	reg.MountFromBindings(agent.Tools)
 	return reg
+}
+
+func (e *Engine) waitAskUser(ctx context.Context, sessionID, turnID, callID, question string, options []string, defaultOpt string, formFields []domain.AskUserFormField) (string, error) {
+	ch := make(chan string, 1)
+	e.mu.Lock()
+	e.askUserWait[callID] = ch
+	e.mu.Unlock()
+	defer func() {
+		e.mu.Lock()
+		if e.askUserWait[callID] == ch {
+			delete(e.askUserWait, callID)
+		}
+		e.mu.Unlock()
+	}()
+	e.stream.Publish(ctx, sessionID, turnID, domain.EventAskUserPending, domain.AskUserPayload{
+		AskID: callID, CallID: callID, Question: question, Options: options, DefaultOpt: defaultOpt, FormFields: formFields,
+	})
+	select {
+	case answer := <-ch:
+		return answer, nil
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
 }
 
 func (e *Engine) StreamEvents(sessionID string, since int64) []domain.StreamEvent {
@@ -863,16 +872,19 @@ func (e *Engine) CreateApproval(sessionID, toolName, description, reason string)
 	return id
 }
 
-func (e *Engine) ResolveAskUser(askID, answer string) {
+func (e *Engine) ResolveAskUser(askID, answer string) error {
 	e.mu.Lock()
 	ch := e.askUserWait[askID]
 	delete(e.askUserWait, askID)
 	e.mu.Unlock()
-	if ch != nil {
-		select {
-		case ch <- answer:
-		default:
-		}
+	if ch == nil {
+		return fmt.Errorf("ask_user not found or already resolved: %s", askID)
+	}
+	select {
+	case ch <- answer:
+		return nil
+	default:
+		return fmt.Errorf("ask_user no longer waiting: %s", askID)
 	}
 }
 

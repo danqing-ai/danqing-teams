@@ -16,8 +16,6 @@ import (
 
 const (
 	turnToolTextMaxChars     = 2000
-	turnFileContentMaxChars  = 4000
-	turnDelegateMaxChars     = 2000
 	turnHugeResultThreshold  = 60000
 	turnTokenEstimateDivisor = 4
 	doomPatternWindow        = 8
@@ -326,6 +324,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		for _, call := range resp.ToolCalls {
 			select {
 			case <-ctx.Done():
+				messages = p.closeUnfinishedToolCalls(tctx, messages, assistantToolCalls)
 				return domain.Report{}, messages, ctx.Err()
 			default:
 			}
@@ -403,6 +402,14 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 				if err != nil {
 					// Turn cancel during approval is a hard stop (not a soft deny).
 					if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+						p.Stream.Publish(context.Background(), tctx.SessionID, tctx.TurnID, domain.EventToolError, domain.ToolPart{
+							CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: "cancelled",
+						})
+						messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: "cancelled"})
+						if p.Log != nil {
+							p.Log("tool_result", map[string]any{"call_id": call.ID, "name": call.Name, "output": "cancelled"})
+						}
+						messages = p.closeUnfinishedToolCalls(tctx, messages, assistantToolCalls)
 						return domain.Report{}, messages, ctx.Err()
 					}
 					msg := "approval wait failed: " + err.Error() + toolErrorHint
@@ -457,8 +464,14 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		result, err := handler.Execute(ctx, args)
 		if err != nil {
 			errContent := err.Error() + toolErrorHint
-			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolError, domain.ToolPart{
-				CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: err.Error(),
+			errLabel := err.Error()
+			if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+				errLabel = "cancelled"
+				errContent = "cancelled" + toolErrorHint
+			}
+			// Use Background so tool.error survives a cancelled turn ctx.
+			p.Stream.Publish(context.Background(), tctx.SessionID, tctx.TurnID, domain.EventToolError, domain.ToolPart{
+				CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: errLabel,
 			})
 			messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: errContent})
 			processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
@@ -467,6 +480,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 				p.Log("tool_result", map[string]any{"call_id": call.ID, "name": call.Name, "output": errContent})
 			}
 			if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+				messages = p.closeUnfinishedToolCalls(tctx, messages, assistantToolCalls)
 				return domain.Report{}, messages, ctx.Err()
 			}
 			continue
@@ -507,6 +521,36 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		TurnID: tctx.TurnID, Status: string(finalReport.Status), Summary: finalReport.Summary,
 	})
 	return finalReport, messages, nil
+}
+
+// closeUnfinishedToolCalls appends cancelled tool results for any call in the
+// batch that still lacks a tool message. All tools are treated the same.
+func (p *TurnRunner) closeUnfinishedToolCalls(tctx TurnContext, messages []Message, calls []ToolCall) []Message {
+	haveResult := make(map[string]bool)
+	for _, m := range messages {
+		if m.Role == RoleTool && m.ToolCallID != "" {
+			haveResult[m.ToolCallID] = true
+		}
+	}
+	for _, call := range calls {
+		if haveResult[call.ID] {
+			continue
+		}
+		describe := call.Name
+		if p.Registry != nil {
+			if h, ok := p.Registry.Get(call.Name); ok {
+				describe = h.Describe(call.Arguments)
+			}
+		}
+		p.Stream.Publish(context.Background(), tctx.SessionID, tctx.TurnID, domain.EventToolError, domain.ToolPart{
+			CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: "cancelled",
+		})
+		messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: "cancelled"})
+		if p.Log != nil {
+			p.Log("tool_result", map[string]any{"call_id": call.ID, "name": call.Name, "output": "cancelled"})
+		}
+	}
+	return messages
 }
 
 func (p *TurnRunner) trackDoom(turnID, tool, describe string, threshold int) int {
@@ -633,23 +677,14 @@ func (p *TurnRunner) truncateToolResults(messages []Message) []Message {
 		}
 		content := result[i].Content
 		limit := turnToolTextMaxChars
-
-		if isFileContentTool(result[i].Name) {
-			limit = turnFileContentMaxChars
-		}
 		if isHugeResult(content) {
 			limit = turnHugeResultThreshold
 		}
-
 		if len(content) > limit {
 			result[i].Content = content[:limit] + fmt.Sprintf("\n...[truncated, %d total chars]", len(content))
 		}
 	}
 	return result
-}
-
-func isFileContentTool(name string) bool {
-	return name == "read_file" || name == "get_kb_doc" || name == "web_fetch"
 }
 
 func isHugeResult(content string) bool {
@@ -676,6 +711,56 @@ func (p *TurnRunner) enforceToolPairing(messages []Message) []Message {
 		out = append(out, m)
 	}
 	return out
+}
+
+// salvagePairedTurnDelta keeps this-turn messages that form complete tool pairs.
+// Used when a turn is cancelled/failed so the next turn still sees finished work
+// (e.g. read_file/glob results) without unpaired assistant tool_calls.
+func salvagePairedTurnDelta(delta []Message) []Message {
+	if len(delta) == 0 {
+		return delta
+	}
+	haveResult := make(map[string]bool)
+	for _, m := range delta {
+		if m.Role == RoleTool && m.ToolCallID != "" {
+			haveResult[m.ToolCallID] = true
+		}
+	}
+	out := make([]Message, 0, len(delta))
+	for _, m := range delta {
+		if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
+			kept := make([]ToolCall, 0, len(m.ToolCalls))
+			for _, tc := range m.ToolCalls {
+				if haveResult[tc.ID] {
+					kept = append(kept, tc)
+				}
+			}
+			if len(kept) == 0 {
+				continue
+			}
+			cp := m
+			cp.ToolCalls = kept
+			out = append(out, cp)
+			continue
+		}
+		out = append(out, m)
+	}
+	callIDs := make(map[string]bool)
+	for _, m := range out {
+		if m.Role == RoleAssistant {
+			for _, tc := range m.ToolCalls {
+				callIDs[tc.ID] = true
+			}
+		}
+	}
+	final := make([]Message, 0, len(out))
+	for _, m := range out {
+		if m.Role == RoleTool && m.ToolCallID != "" && !callIDs[m.ToolCallID] {
+			continue
+		}
+		final = append(final, m)
+	}
+	return final
 }
 
 func (p *TurnRunner) snipHead(messages []Message, budget int) []Message {
