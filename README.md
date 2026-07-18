@@ -4,6 +4,18 @@
 
 AI agent collaboration platform. A general-purpose **Work Agent** with AI coding capabilities. The engine is built for **multi-agent collaboration** on long-horizon, complex tasks.
 
+## Product UI
+
+Three-pane workspace: project sidebar · agent execution log · live browser preview. Describe a goal, watch tool calls stream in, and open the result in the built-in browser.
+
+| Research & report | Interactive demo | Mini-game |
+|-------------------|------------------|-----------|
+| ![Market report](docs/screenshots/ui-market-report.jpg) | ![Cooking demo](docs/screenshots/ui-cooking-demo.jpg) | ![Snake game](docs/screenshots/ui-snake-game.jpg) |
+
+- **Research & report** — web fetch, structured writing, live HTML preview
+- **Interactive demo** — step-by-step culinary demo with playback controls
+- **Mini-game** — generate a playable Snake game and iterate via UI annotations
+
 ## Design philosophy
 
 ### Everything is a Tool

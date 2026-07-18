@@ -4,6 +4,18 @@
 
 AI Agent 协作平台。通用型 **Work Agent**，兼具 AI Coding 能力。引擎核心是**多 Agent 协作**，完成长程复杂任务。
 
+## 产品 UI
+
+三栏工作台：项目侧栏 · Agent 执行日志 · 内置浏览器预览。描述目标，实时查看 Tool 调用，结果可在右侧浏览器直接打开。
+
+| 调研报告 | 交互演示 | 网页小游戏 |
+|---------|---------|-----------|
+| ![市场报告](docs/screenshots/ui-market-report.jpg) | ![烹饪演示](docs/screenshots/ui-cooking-demo.jpg) | ![贪吃蛇](docs/screenshots/ui-snake-game.jpg) |
+
+- **调研报告** — 网页抓取、结构化写作、HTML 实时预览
+- **交互演示** — 分步烹饪演示，含播放控制与计时
+- **网页小游戏** — 生成可玩的贪吃蛇，并通过 UI 标注继续迭代
+
 ## 设计哲学
 
 ### 一切皆工具（Everything is a Tool）
