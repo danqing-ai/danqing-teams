@@ -1901,8 +1901,8 @@ body.teams-is-resizing {
 }
 
 .markdown-body {
-  font-size: var(--dq-font-size-body);
-  line-height: 1.6;
+  font-size: var(--dq-font-size-secondary); /* 14px */
+  line-height: 1.65;
   color: var(--dq-label-primary);
   word-break: break-word;
 }
@@ -1921,18 +1921,26 @@ body.teams-is-resizing {
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
-  margin: 1em 0 0.5em;
-  font-weight: 600;
-  line-height: 1.3;
+  margin: 1.15em 0 0.45em;
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
   color: var(--dq-label-primary);
 }
 
-.markdown-body h1 { font-size: 1.35em; }
-.markdown-body h2 { font-size: 1.2em; }
-.markdown-body h3 { font-size: 1.08em; }
+.markdown-body h1 { font-size: var(--dq-font-size-display); } /* 20 */
+.markdown-body h2 { font-size: var(--dq-font-size-heading); } /* 18 */
+.markdown-body h3 { font-size: var(--dq-font-size-title); } /* 16 */
+.markdown-body h4 { font-size: var(--dq-font-size-callout); font-weight: 600; } /* 15 */
+.markdown-body h5,
+.markdown-body h6 {
+  font-size: var(--dq-font-size-secondary);
+  font-weight: 600;
+}
 
 .markdown-body p {
   margin: 0.65em 0;
+  font-size: inherit;
   color: var(--dq-label-secondary);
 }
 
@@ -1940,6 +1948,7 @@ body.teams-is-resizing {
 .markdown-body ol {
   margin: 0.5em 0;
   padding-left: 1.4em;
+  font-size: inherit;
   color: var(--dq-label-secondary);
 }
 
@@ -1952,6 +1961,7 @@ body.teams-is-resizing {
   padding: 0.35em 0 0.35em 12px;
   border-left: 3px solid var(--dq-accent);
   color: var(--dq-label-tertiary);
+  font-size: inherit;
 }
 
 .markdown-body code {
@@ -1973,8 +1983,8 @@ body.teams-is-resizing {
 .markdown-body pre code {
   padding: 0;
   background: transparent;
-  font-size: var(--dq-font-size-footnote);
-  line-height: 1.5;
+  font-size: var(--dq-font-size-body); /* 13 */
+  line-height: 1.55;
   color: var(--dq-label-primary);
 }
 
@@ -2001,7 +2011,7 @@ body.teams-is-resizing {
   width: 100%;
   border-collapse: collapse;
   margin: 0.75em 0;
-  font-size: var(--dq-font-size-footnote);
+  font-size: var(--dq-font-size-body);
   border: 1px solid color-mix(in srgb, var(--dq-label-primary) 12%, transparent);
   border-radius: 8px;
   overflow: hidden;

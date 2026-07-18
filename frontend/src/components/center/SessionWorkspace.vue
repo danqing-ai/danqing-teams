@@ -2285,9 +2285,17 @@ function onTitleKeydown(e: KeyboardEvent) {
   /* removed: replaced by .tool-card */
 }
 
+.turn__report {
+  font-size: var(--dq-font-size-secondary); /* 14px reading body */
+  line-height: 1.65;
+  color: var(--dq-label-primary);
+}
+
 .turn__report :deep(p) {
   margin: 0 0 10px;
   line-height: 1.65;
+  font-size: inherit;
+  color: var(--dq-label-secondary);
 }
 
 .turn__report :deep(p:last-child) {
@@ -2300,17 +2308,21 @@ function onTitleKeydown(e: KeyboardEvent) {
 .turn__report :deep(h4),
 .turn__report :deep(h5),
 .turn__report :deep(h6) {
-  margin: 18px 0 8px;
-  font-weight: 600;
+  margin: 1.15em 0 0.45em;
+  font-weight: 650;
   color: var(--dq-label-primary);
-  line-height: 1.3;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
 }
-.turn__report :deep(h1) { font-size: 1.35em; }
-.turn__report :deep(h2) { font-size: 1.15em; }
-.turn__report :deep(h3) { font-size: 1.05em; }
-.turn__report :deep(h4),
+.turn__report :deep(h1) { font-size: var(--dq-font-size-display); } /* 20 */
+.turn__report :deep(h2) { font-size: var(--dq-font-size-heading); } /* 18 */
+.turn__report :deep(h3) { font-size: var(--dq-font-size-title); } /* 16 */
+.turn__report :deep(h4) { font-size: var(--dq-font-size-callout); font-weight: 600; } /* 15 */
 .turn__report :deep(h5),
-.turn__report :deep(h6) { font-size: 1em; }
+.turn__report :deep(h6) {
+  font-size: var(--dq-font-size-secondary);
+  font-weight: 600;
+}
 .turn__report :deep(h1:first-child),
 .turn__report :deep(h2:first-child),
 .turn__report :deep(h3:first-child) { margin-top: 0; }
@@ -2319,11 +2331,14 @@ function onTitleKeydown(e: KeyboardEvent) {
 .turn__report :deep(ol) {
   margin: 6px 0;
   padding-left: 1.5em;
+  font-size: inherit;
+  color: var(--dq-label-secondary);
 }
 
 .turn__report :deep(li) {
   margin: 3px 0;
   line-height: 1.6;
+  font-size: inherit;
 }
 
 .turn__report :deep(li > ul),
@@ -2338,6 +2353,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
   border-radius: 0 6px 6px 0;
   color: var(--dq-label-secondary);
+  font-size: inherit;
 }
 
 .turn__report :deep(blockquote p) {
@@ -2358,13 +2374,14 @@ function onTitleKeydown(e: KeyboardEvent) {
   background: none;
   border: none;
   border-radius: 0;
-  font-size: var(--dq-font-size-caption);
+  font-size: var(--dq-font-size-body); /* 13 — readable, not caption */
+  line-height: 1.55;
   color: var(--dq-label-secondary);
 }
 
 .turn__report :deep(code) {
   font-family: var(--dq-font-mono);
-  font-size: 0.88em;
+  font-size: 0.92em;
   padding: 2px 5px;
   border-radius: 4px;
   background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
@@ -2375,7 +2392,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   width: 100%;
   border-collapse: collapse;
   margin: 12px 0;
-  font-size: var(--dq-font-size-footnote);
+  font-size: var(--dq-font-size-body); /* match body, not footnote */
   border: 1px solid color-mix(in srgb, var(--dq-label-primary) 12%, transparent);
   border-radius: 8px;
   overflow: hidden;
@@ -2785,7 +2802,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   width: 100%;
   border-collapse: collapse;
   margin: 8px 0;
-  font-size: var(--dq-font-size-footnote);
+  font-size: var(--dq-font-size-body);
   border: 1px solid color-mix(in srgb, var(--dq-label-primary) 12%, transparent);
   border-radius: 8px;
   overflow: hidden;
@@ -2825,9 +2842,14 @@ function onTitleKeydown(e: KeyboardEvent) {
 .turn__report-meta-summary :deep(h3),
 .turn__report-meta-summary :deep(h4) {
   margin: 14px 0 6px;
-  font-weight: 600;
+  font-weight: 650;
   color: var(--dq-label-primary);
+  line-height: 1.35;
 }
+.turn__report-meta-summary :deep(h1) { font-size: var(--dq-font-size-heading); }
+.turn__report-meta-summary :deep(h2) { font-size: var(--dq-font-size-title); }
+.turn__report-meta-summary :deep(h3),
+.turn__report-meta-summary :deep(h4) { font-size: var(--dq-font-size-callout); font-weight: 600; }
 .turn__report-meta-summary :deep(h1:first-child),
 .turn__report-meta-summary :deep(h2:first-child),
 .turn__report-meta-summary :deep(h3:first-child) {
