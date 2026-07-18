@@ -24,11 +24,17 @@ fi
 export VITE_API_BASE_URL="http://127.0.0.1:${DQ_BACKEND_PORT:-7801}"
 
 # Prefer local updater key when CI secrets are not set
-if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" && -f "$DQ_ROOT/desktop/src-tauri/keys/updater.key" ]]; then
-  export TAURI_SIGNING_PRIVATE_KEY
-  TAURI_SIGNING_PRIVATE_KEY="$(cat "$DQ_ROOT/desktop/src-tauri/keys/updater.key")"
+if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" && -z "${TAURI_SIGNING_PRIVATE_KEY_PATH:-}" && -f "$DQ_ROOT/desktop/src-tauri/keys/updater.key" ]]; then
+  export TAURI_SIGNING_PRIVATE_KEY_PATH="$DQ_ROOT/desktop/src-tauri/keys/updater.key"
   export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
 fi
+
+has_tauri_signing_key() {
+  if [[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+    return 0
+  fi
+  [[ -n "${TAURI_SIGNING_PRIVATE_KEY_PATH:-}" && -f "${TAURI_SIGNING_PRIVATE_KEY_PATH}" ]]
+}
 
 # Build Go backend as Tauri sidecar binary
 echo "==> Building backend sidecar..."
@@ -36,10 +42,10 @@ echo "==> Building backend sidecar..."
 
 echo "==> Tauri build ($APP_NAME) -> $CARGO_TARGET_DIR"
 # Build .app (+ updater artifacts when signing key is present)
-if [[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+if has_tauri_signing_key; then
   npm run tauri build -- -b app
 else
-  echo "WARNING: TAURI_SIGNING_PRIVATE_KEY unset — building without updater artifacts"
+  echo "WARNING: no Tauri signing key — building without updater artifacts"
   npm run tauri build -- -b app --config '{"bundle":{"createUpdaterArtifacts":false}}'
 fi
 
@@ -85,7 +91,7 @@ if [[ -n "$APP_BUNDLE" ]]; then
 fi
 
 # Rebuild updater artifact after sidecar injection so updates include the backend
-if [[ -n "$APP_BUNDLE" && -d "$APP_BUNDLE" && -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+if [[ -n "$APP_BUNDLE" && -d "$APP_BUNDLE" ]] && has_tauri_signing_key; then
   UPDATER_DIR="$DQ_DESKTOP_BUNDLE/macos"
   mkdir -p "$UPDATER_DIR"
   APP_BASENAME="$(basename "$APP_BUNDLE")"
@@ -110,8 +116,8 @@ if [[ -n "$APP_BUNDLE" && -d "$APP_BUNDLE" && -n "${TAURI_SIGNING_PRIVATE_KEY:-}
   find "$UPDATER_DIR" -maxdepth 1 -name '*.app.tar.gz' ! -name "$TAR_NAME" -delete 2>/dev/null || true
   find "$UPDATER_DIR" -maxdepth 1 -name '*.app.tar.gz.sig' ! -name "${TAR_NAME}.sig" -delete 2>/dev/null || true
   echo "==> Updater artifacts: $TAR_PATH (+ .sig)"
-elif [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
-  echo "WARNING: TAURI_SIGNING_PRIVATE_KEY unset — skipping updater archive resign"
+elif ! has_tauri_signing_key; then
+  echo "WARNING: no Tauri signing key — skipping updater archive resign"
 fi
 
 # Create helper files for DMG

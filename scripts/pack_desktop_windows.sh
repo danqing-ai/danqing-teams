@@ -26,11 +26,17 @@ fi
 # Desktop app needs to know the backend API URL
 export VITE_API_BASE_URL="http://127.0.0.1:${DQ_BACKEND_PORT:-7801}"
 
-if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" && -f "$DQ_ROOT/desktop/src-tauri/keys/updater.key" ]]; then
-  export TAURI_SIGNING_PRIVATE_KEY
-  TAURI_SIGNING_PRIVATE_KEY="$(cat "$DQ_ROOT/desktop/src-tauri/keys/updater.key")"
+if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" && -z "${TAURI_SIGNING_PRIVATE_KEY_PATH:-}" && -f "$DQ_ROOT/desktop/src-tauri/keys/updater.key" ]]; then
+  export TAURI_SIGNING_PRIVATE_KEY_PATH="$DQ_ROOT/desktop/src-tauri/keys/updater.key"
   export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
 fi
+
+has_tauri_signing_key() {
+  if [[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+    return 0
+  fi
+  [[ -n "${TAURI_SIGNING_PRIVATE_KEY_PATH:-}" && -f "${TAURI_SIGNING_PRIVATE_KEY_PATH}" ]]
+}
 
 # Build Go backend as Tauri sidecar binary (with -w to strip DWARF while keeping Go symbols)
 echo "==> Building backend sidecar..."
@@ -42,10 +48,10 @@ rm -f "$BIN_DIR"/danqing-teams-backend.exe
 rm -f "$BIN_DIR"/danqing-teams-backend
 
 echo "==> Tauri build ($APP_NAME) -> $CARGO_TARGET_DIR"
-if [[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+if has_tauri_signing_key; then
   npm run tauri build -- -b nsis
 else
-  echo "WARNING: TAURI_SIGNING_PRIVATE_KEY unset — building without updater artifacts"
+  echo "WARNING: no Tauri signing key — building without updater artifacts"
   npm run tauri build -- -b nsis --config '{"bundle":{"createUpdaterArtifacts":false}}'
 fi
 
