@@ -31,17 +31,16 @@ if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" && -z "${TAURI_SIGNING_PRIVATE_KEY_PAT
   export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
 fi
 
-has_tauri_signing_key() {
-  if [[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
-    return 0
-  fi
-  [[ -n "${TAURI_SIGNING_PRIVATE_KEY_PATH:-}" && -f "${TAURI_SIGNING_PRIVATE_KEY_PATH}" ]]
-}
-
-# Empty KEY env shadows PATH and breaks signing ("Missing comment in secret key").
-if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
-  unset TAURI_SIGNING_PRIVATE_KEY
+# tauri build bundler only reads TAURI_SIGNING_PRIVATE_KEY (not PATH).
+if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" && -n "${TAURI_SIGNING_PRIVATE_KEY_PATH:-}" && -f "${TAURI_SIGNING_PRIVATE_KEY_PATH}" ]]; then
+  TAURI_SIGNING_PRIVATE_KEY="$(tr -d '\r\n' < "$TAURI_SIGNING_PRIVATE_KEY_PATH")"
+  export TAURI_SIGNING_PRIVATE_KEY
 fi
+unset TAURI_SIGNING_PRIVATE_KEY_PATH
+
+has_tauri_signing_key() {
+  [[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]
+}
 
 # Build Go backend as Tauri sidecar binary (with -w to strip DWARF while keeping Go symbols)
 echo "==> Building backend sidecar..."

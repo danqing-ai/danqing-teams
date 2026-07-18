@@ -61,9 +61,7 @@ echo "Tauri signing key OK ($(wc -c < "$KEY_PATH" | tr -d ' ') bytes) → $KEY_P
 if [[ -n "${GITHUB_ENV:-}" ]]; then
   {
     echo "HAS_TAURI_SIGNING_KEY=true"
+    # Pack scripts load KEY from this path (tauri build requires KEY content).
     echo "TAURI_SIGNING_PRIVATE_KEY_PATH=$KEY_PATH"
   } >> "$GITHUB_ENV"
 fi
-# Important: do NOT set TAURI_SIGNING_PRIVATE_KEY to an empty string.
-# Tauri treats an empty KEY as present and fails with:
-#   incorrect updater private key password: Missing comment in secret key
