@@ -32,3 +32,7 @@
 node_modules/
 /desktop/src-tauri/bin/
 /evals/dq_harbor/compare_results/
+
+# Python
+__pycache__/
+*.py[cod]
