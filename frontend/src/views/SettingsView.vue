@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Setting, Cpu, Search, Brush } from '@danqing/dq-shell'
+import { Setting, Cpu, Search, Brush, Monitor } from '@danqing/dq-shell'
 import { useLLMStore } from '@/stores/llm'
 import { useSearchConfigStore } from '@/stores/searchConfig'
 import { useRuntimeConfigStore } from '@/stores/runtimeConfig'
@@ -10,9 +10,11 @@ import { useThemeStore, THEME_OPTIONS } from '@/stores/theme'
 import type { ThemeId } from '@/stores/theme'
 import { toast } from '@/utils/feedback'
 import Skeleton from '@/components/common/Skeleton.vue'
+import { useAppUpdater } from '@/composables/useAppUpdater'
+import { isTauriRuntime } from '@/utils/desktop'
 import type { LLMProviderType, LLMProviderConfig, LLMModelRef, LLMProviderPreset, SearchProvider, ModelConfig } from '@/types/mission'
 
-type SettingsTab = 'runtime' | 'models' | 'modelConfig' | 'search' | 'appearance'
+type SettingsTab = 'runtime' | 'models' | 'modelConfig' | 'search' | 'appearance' | 'about'
 
 const { t } = useI18n()
 const activeTab = ref<SettingsTab>('models')
@@ -21,6 +23,49 @@ const searchConfig = useSearchConfigStore()
 const runtimeConfig = useRuntimeConfigStore()
 const modelConfig = useModelConfigStore()
 const themeStore = useThemeStore()
+const {
+  appVersion,
+  status: updaterStatus,
+  availableVersion,
+  updateNotes,
+  errorMessage: updaterError,
+  downloadPercent,
+  hasUpdate,
+  isBusy: updaterBusy,
+  initAppVersion,
+  checkForUpdates,
+  downloadAndInstallUpdate,
+} = useAppUpdater()
+const isDesktop = isTauriRuntime()
+
+async function handleCheckUpdate() {
+  if (!isDesktop) {
+    toast.info(t('updater.desktopOnly'))
+    return
+  }
+  try {
+    const found = await checkForUpdates()
+    if (found) {
+      toast.info(t('updater.availableToast', { version: availableVersion.value }))
+    } else if (updaterStatus.value === 'upToDate') {
+      toast.success(t('updater.upToDate'))
+    } else if (updaterStatus.value === 'error') {
+      toast.error(updaterError.value || t('updater.failed'))
+    }
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('updater.failed'))
+  }
+}
+
+async function handleInstallUpdate() {
+  if (!isDesktop) return
+  try {
+    toast.info(t('updater.downloading'))
+    await downloadAndInstallUpdate()
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('updater.failed'))
+  }
+}
 
 const providerOptions = computed<{ value: LLMProviderType; label: string }[]>(() => [
   { value: 'openai', label: 'OpenAI' },
@@ -126,6 +171,7 @@ function formatEffortBudgetTokens(map: Record<string, number> | undefined): stri
 }
 
 onMounted(async () => {
+  void initAppVersion()
   await Promise.all([
     llm.loadConfigs(),
     llm.loadModels(),
@@ -426,6 +472,7 @@ const menuItems = computed(() => [
   { id: 'models' as SettingsTab, label: t('settings.models'), icon: Cpu },
   { id: 'modelConfig' as SettingsTab, label: t('settings.modelConfig'), icon: Setting },
   { id: 'search' as SettingsTab, label: t('settings.search'), icon: Search },
+  { id: 'about' as SettingsTab, label: t('settings.about'), icon: Monitor },
 ])
 
 const footerHint = computed(() => {
@@ -434,7 +481,29 @@ const footerHint = computed(() => {
     case 'search': return t('common.saveShortcut')
     case 'models': return t('settings.modelsHint')
     case 'modelConfig': return t('settings.modelConfigHint')
+    case 'about': return t('settings.aboutHint')
     default: return ''
+  }
+})
+
+const updaterStatusText = computed(() => {
+  switch (updaterStatus.value) {
+    case 'checking':
+      return t('updater.checking')
+    case 'upToDate':
+      return t('updater.upToDate')
+    case 'available':
+      return t('updater.availableToast', { version: availableVersion.value })
+    case 'downloading':
+      return downloadPercent.value != null
+        ? t('updater.downloadingProgress', { percent: downloadPercent.value })
+        : t('updater.downloading')
+    case 'installing':
+      return t('updater.installing')
+    case 'error':
+      return updaterError.value || t('updater.failed')
+    default:
+      return isDesktop ? t('updater.checkHint') : t('updater.desktopOnly')
   }
 })
 
@@ -914,6 +983,47 @@ const hasFooterActions = computed(() => {
 
       </div>
 
+      <div v-else-if="activeTab === 'about'" class="settings-section">
+        <header class="settings-section__head">
+          <h2>{{ $t('settings.about') }}</h2>
+          <p>{{ $t('settings.aboutDesc') }}</p>
+        </header>
+
+        <div class="settings-form">
+          <div class="settings-form-group">
+            <h3 class="settings-form-group__title">{{ $t('settings.version') }}</h3>
+            <p class="settings-form-group__desc">{{ $t('settings.versionDesc') }}</p>
+            <div class="about-version-row">
+              <span class="about-version">v{{ appVersion || '…' }}</span>
+              <span
+                v-if="hasUpdate"
+                class="about-update-badge"
+              >{{ $t('updater.updateAvailableBadge') }}</span>
+            </div>
+            <p class="settings-form-group__desc">{{ updaterStatusText }}</p>
+            <p v-if="updateNotes && hasUpdate" class="about-notes">
+              {{ updateNotes }}
+            </p>
+            <div class="settings-actions about-actions">
+              <DqButton
+                :disabled="!isDesktop || updaterBusy"
+                @click="handleCheckUpdate"
+              >
+                {{ updaterStatus === 'checking' ? $t('updater.checking') : $t('updater.check') }}
+              </DqButton>
+              <DqButton
+                v-if="updaterStatus === 'available'"
+                type="primary"
+                :disabled="updaterBusy"
+                @click="handleInstallUpdate"
+              >
+                {{ $t('updater.install') }}
+              </DqButton>
+            </div>
+          </div>
+        </div>
+      </div>
+
       </div>
 
       <footer v-if="hasFooterActions" class="settings-panel__footer">
@@ -1246,6 +1356,45 @@ const hasFooterActions = computed(() => {
 
 .settings-section--wide {
   max-width: 720px;
+}
+
+.about-version-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 4px;
+}
+
+.about-version {
+  font-size: var(--dq-font-size-title);
+  font-weight: 600;
+  color: var(--dq-label-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.about-update-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--dq-font-size-caption);
+  font-weight: 600;
+  color: var(--dq-accent);
+  background: color-mix(in srgb, var(--dq-accent) 14%, transparent);
+}
+
+.about-notes {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  color: var(--dq-label-secondary);
+  font-size: var(--dq-font-size-body);
+}
+
+.about-actions {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .settings-section__head {

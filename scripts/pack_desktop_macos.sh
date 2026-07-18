@@ -23,13 +23,25 @@ fi
 # Desktop app needs to know the backend API URL
 export VITE_API_BASE_URL="http://127.0.0.1:${DQ_BACKEND_PORT:-7801}"
 
+# Prefer local updater key when CI secrets are not set
+if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" && -f "$DQ_ROOT/desktop/src-tauri/keys/updater.key" ]]; then
+  export TAURI_SIGNING_PRIVATE_KEY
+  TAURI_SIGNING_PRIVATE_KEY="$(cat "$DQ_ROOT/desktop/src-tauri/keys/updater.key")"
+  export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
+fi
+
 # Build Go backend as Tauri sidecar binary
 echo "==> Building backend sidecar..."
 "$SCRIPT_DIR/build_sidecar.sh"
 
 echo "==> Tauri build ($APP_NAME) -> $CARGO_TARGET_DIR"
-# Build .app only first; DMG will be created after sidecar injection + re-sign
-npm run tauri build -- -b app
+# Build .app (+ updater artifacts when signing key is present)
+if [[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+  npm run tauri build -- -b app
+else
+  echo "WARNING: TAURI_SIGNING_PRIVATE_KEY unset — building without updater artifacts"
+  npm run tauri build -- -b app --config '{"bundle":{"createUpdaterArtifacts":false}}'
+fi
 
 BUNDLE_SRC=""
 for candidate in \
@@ -70,6 +82,36 @@ if [[ -n "$APP_BUNDLE" ]]; then
   else
     echo "WARNING: sidecar binary not found at $SIDECAR_BIN"
   fi
+fi
+
+# Rebuild updater artifact after sidecar injection so updates include the backend
+if [[ -n "$APP_BUNDLE" && -d "$APP_BUNDLE" && -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+  UPDATER_DIR="$DQ_DESKTOP_BUNDLE/macos"
+  mkdir -p "$UPDATER_DIR"
+  APP_BASENAME="$(basename "$APP_BUNDLE")"
+  APP_VERSION=$(plutil -extract CFBundleShortVersionString raw "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || echo "0.0.0")
+  ARCH=$(uname -m)
+  case "$ARCH" in
+    arm64) ARCH_LABEL="aarch64" ;;
+    x86_64) ARCH_LABEL="x86_64" ;;
+    *) ARCH_LABEL="$ARCH" ;;
+  esac
+  # Prefer space-free names for GitHub Releases / latest.json
+  TAR_NAME="DanQing.Teams_${APP_VERSION}_${ARCH_LABEL}.app.tar.gz"
+  TAR_PATH="$UPDATER_DIR/$TAR_NAME"
+  echo "==> Creating updater archive: $TAR_NAME"
+  (
+    cd "$(dirname "$APP_BUNDLE")"
+    tar -czf "$TAR_PATH" "$APP_BASENAME"
+  )
+  echo "==> Signing updater archive..."
+  npx tauri signer sign "$TAR_PATH" -p "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
+  # Drop any stale updater tarballs produced before sidecar injection
+  find "$UPDATER_DIR" -maxdepth 1 -name '*.app.tar.gz' ! -name "$TAR_NAME" -delete 2>/dev/null || true
+  find "$UPDATER_DIR" -maxdepth 1 -name '*.app.tar.gz.sig' ! -name "${TAR_NAME}.sig" -delete 2>/dev/null || true
+  echo "==> Updater artifacts: $TAR_PATH (+ .sig)"
+elif [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+  echo "WARNING: TAURI_SIGNING_PRIVATE_KEY unset — skipping updater archive resign"
 fi
 
 # Create helper files for DMG

@@ -84,6 +84,9 @@ jobs:
 
       - name: Build macOS desktop
         working-directory: ${{ env.REPO_DIR }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           chmod +x scripts/*.sh
           make pack-macos-desktop RELEASE_VERSION="$RELEASE_VERSION"
@@ -94,6 +97,8 @@ jobs:
           name: danqing-teams-desktop-macos
           path: |
             ${{ env.REPO_DIR }}/out/desktop/bundle/**/*.dmg
+            ${{ env.REPO_DIR }}/out/desktop/bundle/**/*.app.tar.gz
+            ${{ env.REPO_DIR }}/out/desktop/bundle/**/*.app.tar.gz.sig
           if-no-files-found: error
 
   linux-server:
@@ -243,6 +248,9 @@ jobs:
 
       - name: Build Windows desktop
         working-directory: ${{ env.REPO_DIR }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           chmod +x scripts/*.sh
           make pack-windows-desktop RELEASE_VERSION="$RELEASE_VERSION"
@@ -253,6 +261,9 @@ jobs:
           name: danqing-teams-desktop-windows
           path: |
             ${{ env.REPO_DIR }}/out/desktop/bundle/**/*.exe
+            ${{ env.REPO_DIR }}/out/desktop/bundle/**/*.nsis.zip
+            ${{ env.REPO_DIR }}/out/desktop/bundle/**/*.nsis.zip.sig
+            ${{ env.REPO_DIR }}/out/desktop/bundle/**/*.sig
           if-no-files-found: error
 
   publish-release:
@@ -261,6 +272,11 @@ jobs:
     needs: [macos-desktop, linux-server, windows-desktop]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: ${{ env.REPO_DIR }}
+
       - name: Download macOS artifact
         uses: actions/download-artifact@v4
         with:
@@ -279,11 +295,51 @@ jobs:
           name: danqing-teams-desktop-windows
           path: release-assets/windows
 
+      - name: Set release version
+        run: echo "RELEASE_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Generate GitHub latest.json
+        id: updater_manifest
+        run: |
+          chmod +x ${{ env.REPO_DIR }}/scripts/*.sh
+          if find release-assets \( -name '*.app.tar.gz' -o -name '*.nsis.zip' \) | grep -q .; then
+            ${{ env.REPO_DIR }}/scripts/generate_updater_latest_json.sh \
+              --version "$RELEASE_VERSION" \
+              --base-url "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}" \
+              --asset-dir release-assets \
+              --out release-assets/latest.json \
+              --notes "DanQing Teams $RELEASE_VERSION"
+            echo "has_manifest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No updater artifacts found — skip latest.json (set TAURI_SIGNING_PRIVATE_KEY secret)"
+            echo "has_manifest=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sync China mirror (optional)
+        if: steps.updater_manifest.outputs.has_manifest == 'true'
+        env:
+          UPDATE_MIRROR_BASE_URL: ${{ secrets.UPDATE_MIRROR_BASE_URL }}
+          UPDATE_MIRROR_S3_URI: ${{ secrets.UPDATE_MIRROR_S3_URI }}
+          UPDATE_MIRROR_RCLONE_REMOTE: ${{ secrets.UPDATE_MIRROR_RCLONE_REMOTE }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.UPDATE_MIRROR_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.UPDATE_MIRROR_AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.UPDATE_MIRROR_AWS_REGION }}
+          AWS_ENDPOINT_URL: ${{ secrets.UPDATE_MIRROR_AWS_ENDPOINT_URL }}
+        run: |
+          ${{ env.REPO_DIR }}/scripts/sync_updater_mirror.sh \
+            --asset-dir release-assets \
+            --version "$RELEASE_VERSION"
+
       - name: Attach assets to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             release-assets/macos/**/*.dmg
+            release-assets/macos/**/*.app.tar.gz
+            release-assets/macos/**/*.app.tar.gz.sig
             release-assets/linux/**/*.tar.gz
             release-assets/windows/**/*.exe
-          fail_on_unmatched_files: true
+            release-assets/windows/**/*.nsis.zip
+            release-assets/windows/**/*.sig
+            release-assets/latest.json
+          fail_on_unmatched_files: false

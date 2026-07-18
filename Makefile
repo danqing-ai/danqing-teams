@@ -110,7 +110,7 @@ pack-prereqs:
 
 pack-macos-desktop: pack-prereqs frontend-build
 	@chmod +x scripts/*.sh
-	@./scripts/pack_desktop_macos.sh
+	@RELEASE_VERSION=$(RELEASE_VERSION) ./scripts/pack_desktop_macos.sh
 
 pack-linux-server: frontend-build build-go
 	@chmod +x scripts/*.sh
@@ -118,4 +118,4 @@ pack-linux-server: frontend-build build-go
 
 pack-windows-desktop: pack-prereqs frontend-build
 	@chmod +x scripts/*.sh
-	@./scripts/pack_desktop_windows.sh
+	@RELEASE_VERSION=$(RELEASE_VERSION) ./scripts/pack_desktop_windows.sh

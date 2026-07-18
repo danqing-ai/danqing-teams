@@ -5,6 +5,7 @@ import LeftRail from '@/components/left/LeftRail.vue'
 import { useSessionsStore } from '@/stores/sessions'
 import { useProjectsStore } from '@/stores/projects'
 import { useLLMStore } from '@/stores/llm'
+import { initAppVersion, startSilentUpdateCheck } from '@/composables/useAppUpdater'
 import type { AppModule } from '@/types/app-module'
 
 const router = useRouter()
@@ -36,6 +37,8 @@ function onSelectSession(id: string) {
 }
 
 onMounted(async () => {
+  void initAppVersion()
+  startSilentUpdateCheck()
   await sessions.loadCatalog()
   await Promise.all([projects.loadProjects(), llm.loadConfigs(), llm.loadModels()])
   if (projects.sortedProjects.length) {

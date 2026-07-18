@@ -21,6 +21,7 @@
 
 # Tauri
 /desktop/src-tauri/target/
+/desktop/src-tauri/keys/
 
 # SQLite data
 /data/

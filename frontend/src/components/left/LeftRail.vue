@@ -14,8 +14,8 @@ import { useSessionsStore } from '@/stores/sessions'
 import { useProjectsStore } from '@/stores/projects'
 import { confirm, toast } from '@/utils/feedback'
 import { formatRelativeTime } from '@/utils/time'
-import { fetchJSON } from '@/api/client'
 import { isTauriRuntime } from '@/utils/desktop'
+import { useAppUpdater } from '@/composables/useAppUpdater'
 import type { AppModule } from '@/types/app-module'
 import type { Project } from '@/types'
 import type { Session } from '@/types/mission'
@@ -240,16 +240,52 @@ const userLabel = computed(() => 'nil luo')
 const userInitial = computed(() => userLabel.value.slice(0, 1).toUpperCase())
 const userPlan = computed(() => 'DanQing')
 
-const appVersion = ref('dev')
+const {
+  appVersion,
+  hasUpdate,
+  availableVersion,
+  isBusy,
+  initAppVersion,
+  checkForUpdates,
+  downloadAndInstallUpdate,
+} = useAppUpdater()
 
-onMounted(async () => {
-  try {
-    const data = await fetchJSON<{ version: string }>('/version')
-    appVersion.value = data.version
-  } catch {
-    // keep default 'dev'
-  }
+onMounted(() => {
+  void initAppVersion()
 })
+
+async function onVersionClick() {
+  if (!isTauriRuntime()) return
+  if (isBusy.value) return
+  if (hasUpdate.value) {
+    try {
+      await confirm(
+        t('updater.availableMessage', { version: availableVersion.value }),
+        t('updater.availableTitle'),
+        { confirmButtonText: t('updater.install'), type: 'info' },
+      )
+    } catch {
+      return
+    }
+    try {
+      toast.info(t('updater.downloading'))
+      await downloadAndInstallUpdate()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t('updater.failed'))
+    }
+    return
+  }
+  try {
+    const found = await checkForUpdates()
+    if (found) {
+      toast.info(t('updater.availableToast', { version: availableVersion.value }))
+    } else {
+      toast.success(t('updater.upToDate'))
+    }
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('updater.failed'))
+  }
+}
 
 const defaultDirectoryHint = computed(() => {
   const name = newProjectName.value.trim()
@@ -482,7 +518,17 @@ watch(() => projects.projects.length, (len) => {
               <span class="module-sidebar__plan">{{ userPlan }}</span>
             </span>
           </div>
-          <span class="module-sidebar__version">v{{ appVersion }}</span>
+          <button
+            type="button"
+            class="module-sidebar__version"
+            :class="{ 'has-update': hasUpdate }"
+            :aria-label="hasUpdate ? $t('updater.availableAria', { version: availableVersion }) : $t('updater.versionAria', { version: appVersion })"
+            :title="hasUpdate ? $t('updater.availableToast', { version: availableVersion }) : $t('updater.checkHint')"
+            @click="onVersionClick"
+          >
+            <span>v{{ appVersion || '…' }}</span>
+            <span v-if="hasUpdate" class="module-sidebar__update-dot" aria-hidden="true" />
+          </button>
           <DqIconButton class="module-sidebar__settings" :aria-label="$t('navigation.settings')" @click="navigate('settings')">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="3" />
@@ -1011,11 +1057,38 @@ watch(() => projects.projects.length, (len) => {
 }
 
 .module-sidebar__version {
+  position: relative;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
   font-size: var(--dq-font-size-caption);
   color: var(--dq-label-tertiary);
   white-space: nowrap;
-  padding: 0 4px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.module-sidebar__version:hover {
+  color: var(--dq-label-primary);
+  background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
+}
+
+.module-sidebar__version.has-update {
+  color: var(--dq-accent);
+}
+
+.module-sidebar__update-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dq-accent);
+  flex-shrink: 0;
 }
 
 .module-sidebar__info {

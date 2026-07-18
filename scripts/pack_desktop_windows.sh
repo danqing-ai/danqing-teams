@@ -26,6 +26,12 @@ fi
 # Desktop app needs to know the backend API URL
 export VITE_API_BASE_URL="http://127.0.0.1:${DQ_BACKEND_PORT:-7801}"
 
+if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" && -f "$DQ_ROOT/desktop/src-tauri/keys/updater.key" ]]; then
+  export TAURI_SIGNING_PRIVATE_KEY
+  TAURI_SIGNING_PRIVATE_KEY="$(cat "$DQ_ROOT/desktop/src-tauri/keys/updater.key")"
+  export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
+fi
+
 # Build Go backend as Tauri sidecar binary (with -w to strip DWARF while keeping Go symbols)
 echo "==> Building backend sidecar..."
 "$SCRIPT_DIR/build_sidecar.sh"
@@ -36,7 +42,12 @@ rm -f "$BIN_DIR"/danqing-teams-backend.exe
 rm -f "$BIN_DIR"/danqing-teams-backend
 
 echo "==> Tauri build ($APP_NAME) -> $CARGO_TARGET_DIR"
-npm run tauri build -- -b nsis
+if [[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+  npm run tauri build -- -b nsis
+else
+  echo "WARNING: TAURI_SIGNING_PRIVATE_KEY unset — building without updater artifacts"
+  npm run tauri build -- -b nsis --config '{"bundle":{"createUpdaterArtifacts":false}}'
+fi
 
 BUNDLE_SRC=""
 for candidate in \
