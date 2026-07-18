@@ -83,6 +83,56 @@ body {
   font-size: var(--dq-font-size-footnote);
 }
 
+/* Composer borderless Selectors (model / effort / project tray) */
+.composer-float .composer-select--model .dq-select__trigger,
+.composer-float .composer-select--effort .dq-select__trigger,
+.composer-float .composer-select--project .dq-select__trigger,
+.composer-float .composer-select--agent .dq-select__trigger,
+.composer-float .composer-select--model .dq-select__trigger:hover:not([data-disabled]),
+.composer-float .composer-select--effort .dq-select__trigger:hover:not([data-disabled]),
+.composer-float .composer-select--project .dq-select__trigger:hover:not([data-disabled]),
+.composer-float .composer-select--agent .dq-select__trigger:hover:not([data-disabled]),
+.composer-float .composer-select--model .dq-select__trigger:focus-visible,
+.composer-float .composer-select--effort .dq-select__trigger:focus-visible,
+.composer-float .composer-select--project .dq-select__trigger:focus-visible,
+.composer-float .composer-select--agent .dq-select__trigger:focus-visible,
+.composer-float .composer-select--model .dq-select__trigger:active:not([data-disabled]),
+.composer-float .composer-select--effort .dq-select__trigger:active:not([data-disabled]),
+.composer-float .composer-select--project .dq-select__trigger:active:not([data-disabled]),
+.composer-float .composer-select--agent .dq-select__trigger:active:not([data-disabled]),
+.composer-float .composer-select--model .dq-select__trigger[data-state],
+.composer-float .composer-select--effort .dq-select__trigger[data-state],
+.composer-float .composer-select--project .dq-select__trigger[data-state],
+.composer-float .composer-select--agent .dq-select__trigger[data-state] {
+  border: none !important;
+  border-color: transparent !important;
+  outline: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  transform: none !important;
+  color: var(--dq-label-secondary);
+  font-weight: 500;
+}
+
+.composer-float .composer-select--model .dq-select__trigger:hover:not([data-disabled]),
+.composer-float .composer-select--effort .dq-select__trigger:hover:not([data-disabled]),
+.composer-float .composer-select--project .dq-select__trigger:hover:not([data-disabled]),
+.composer-float .composer-select--agent .dq-select__trigger:hover:not([data-disabled]),
+.composer-float .composer-select--model .dq-select__trigger:focus-visible,
+.composer-float .composer-select--effort .dq-select__trigger:focus-visible,
+.composer-float .composer-select--project .dq-select__trigger:focus-visible,
+.composer-float .composer-select--agent .dq-select__trigger:focus-visible {
+  background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent) !important;
+  color: var(--dq-label-primary);
+}
+
+.composer-float .composer-select--model .dq-select__chevron,
+.composer-float .composer-select--effort .dq-select__chevron,
+.composer-float .composer-select--project .dq-select__chevron,
+.composer-float .composer-select--agent .dq-select__chevron {
+  color: var(--dq-label-quaternary);
+}
+
 /* Flat edge-docked shell marker (no page glow) */
 .teams-app {
   height: 100%;
@@ -654,6 +704,15 @@ body.teams-is-resizing {
 
 .composer-float {
   pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.composer-float__card {
   overflow: hidden;
   border-radius: var(--dq-radius-menu);
   background: var(--dq-glass-popover-bg);
@@ -664,23 +723,27 @@ body.teams-is-resizing {
   transition: border-color var(--dq-transition-hover), box-shadow var(--dq-transition-hover);
 }
 
-.composer-float:focus-within {
+.composer-float:focus-within .composer-float__card {
   border-color: color-mix(in srgb, var(--dq-accent) 28%, transparent);
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--dq-accent) 12%, transparent),
     0 12px 40px color-mix(in srgb, var(--dq-mask) 24%, transparent);
 }
 
-.composer-float.is-closed {
+.composer-float.is-compose .composer-float__card {
+  border-color: color-mix(in srgb, var(--dq-accent) 30%, var(--dq-separator));
+}
+
+.composer-float.is-closed .composer-float__card {
   border-color: color-mix(in srgb, var(--dq-warning) 25%, var(--dq-border));
 }
 
-.composer-float.is-locked {
+.composer-float.is-locked .composer-float__card {
   border-color: var(--teams-glass-border-subtle);
   box-shadow: 0 0 0 1px var(--teams-glass-inset) inset;
 }
 
-.composer-float.is-locked:focus-within {
+.composer-float.is-locked:focus-within .composer-float__card {
   border-color: var(--teams-glass-border-subtle);
   box-shadow: 0 0 0 1px var(--teams-glass-inset) inset;
 }
@@ -1168,10 +1231,6 @@ body.teams-is-resizing {
 
 .task-list__item--draft {
   cursor: default;
-}
-
-.composer-float.is-compose {
-  border-color: color-mix(in srgb, var(--dq-accent) 30%, var(--dq-separator));
 }
 
 .composer-float.is-sending .composer-float__hint {

@@ -26,7 +26,6 @@ const editingAnnotation = ref('')
 const inputWrap = ref<HTMLElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const dragOver = ref(false)
-const agentPanelOpen = ref(false)
 const sessions = useSessionsStore()
 const projects = useProjectsStore()
 const llm = useLLMStore()
@@ -90,10 +89,6 @@ const primaryAgents = computed(() => {
   })
 })
 
-const selectedAgentName = computed(() => {
-  return primaryAgents.value.find((a) => a.id === sessions.selectedAgentId)?.name ?? ''
-})
-
 const placeholder = computed(() =>
   sessions.composingNew ? t('composer.placeholderNew') : t('composer.placeholderContinue'),
 )
@@ -139,7 +134,6 @@ watch(
 watch(
   () => sessions.composingNew,
   (v) => {
-    agentPanelOpen.value = false
     if (v) {
       clearComposer()
       if (!sessions.selectedProjectId && projects.sortedProjects.length) {
@@ -359,148 +353,52 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
     @dragleave.prevent="dragOver = false"
     @drop="onDrop"
   >
-    <div v-if="dragOver" class="composer-float__drop">{{ t('composer.dropHint') }}</div>
+    <!-- Upper card: input + model/effort/send -->
+    <div class="composer-float__card">
+      <div v-if="dragOver" class="composer-float__drop">{{ t('composer.dropHint') }}</div>
 
-    <div v-if="hasPendingApproval" class="composer-float__banner composer-float__banner--warn">
-      {{ t('sessions.pendingApprovalHint') }}
-    </div>
-    <div v-else-if="isTurnRunning" class="composer-float__banner composer-float__banner--run">
-      <span class="composer-float__run-dot" />
-      {{ t('composer.running') }}
-    </div>
-
-    <!-- New session: project + agent mode switch -->
-    <div v-if="sessions.composingNew" class="composer-float__setup">
-      <div class="composer-float__setup-field composer-float__setup-field--project">
-        <span class="composer-float__setup-label">{{ t('composer.selectProject') }}</span>
-        <DqSelect
-          v-model="sessions.selectedProjectId"
-          size="small"
-          class="composer-select composer-select--setup"
-          :aria-label="t('composer.selectProject')"
-          :placeholder="t('composer.selectProject')"
-        >
-          <DqOption v-for="p in projects.sortedProjects" :key="p.id" :value="p.id" :label="p.name" />
-        </DqSelect>
+      <div v-if="hasPendingApproval" class="composer-float__banner composer-float__banner--warn">
+        {{ t('sessions.pendingApprovalHint') }}
       </div>
-      <div v-if="showAgentSelect" class="composer-float__setup-field composer-float__setup-field--agent">
-        <span class="composer-float__setup-label">{{ t('composer.selectAgent') }}</span>
-        <DqSegmented
-          v-if="useAgentSegmented"
-          v-model="sessions.selectedAgentId"
-          block
-          class="composer-agent-seg"
-          :options="agentOptions"
-          :aria-label="t('composer.selectAgent')"
-        />
-        <DqSelect
-          v-else
-          v-model="sessions.selectedAgentId"
-          size="small"
-          class="composer-select composer-select--setup"
-          :aria-label="t('composer.selectAgent')"
-        >
-          <DqOption v-for="a in primaryAgents" :key="a.id" :value="a.id" :label="a.name" />
-        </DqSelect>
+      <div v-else-if="isTurnRunning" class="composer-float__banner composer-float__banner--run">
+        <span class="composer-float__run-dot" />
+        {{ t('composer.running') }}
       </div>
-    </div>
 
-    <ComposerAttachmentTray
-      :attachments="attachments"
-      :editing-id="editingId"
-      :editing-annotation="editingAnnotation"
-      @remove="removeAttachment"
-      @edit-start="startEditAnnotation"
-      @edit-save="saveEditAnnotation"
-      @edit-cancel="cancelEditAnnotation"
-      @update:editing-annotation="editingAnnotation = $event"
-    />
-
-    <div ref="inputWrap" class="composer-float__body">
-      <DqInput
-        v-model="content"
-        type="textarea"
-        :rows="sessions.composingNew ? 3 : 2"
-        class="composer-float__input"
-        :placeholder="placeholder"
-        @keydown="onKeydown"
-        @paste="onPaste"
+      <ComposerAttachmentTray
+        :attachments="attachments"
+        :editing-id="editingId"
+        :editing-annotation="editingAnnotation"
+        @remove="removeAttachment"
+        @edit-start="startEditAnnotation"
+        @edit-save="saveEditAnnotation"
+        @edit-cancel="cancelEditAnnotation"
+        @update:editing-annotation="editingAnnotation = $event"
       />
-      <p class="composer-float__hint">{{ t('composer.attachHint') }}</p>
-    </div>
 
-    <input
-      ref="fileInputRef"
-      type="file"
-      class="composer-float__file-input"
-      multiple
-      accept="image/*,.pdf,.txt,.md,.json,.csv,.png,.jpg,.jpeg,.webp,.gif"
-      @change="onFilePicked"
-    />
-
-    <div
-      v-if="!sessions.composingNew && agentPanelOpen && showAgentSelect && !useAgentSegmented"
-      class="composer-float__agent-panel"
-    >
-      <span class="composer-float__setup-label">{{ t('composer.selectAgent') }}</span>
-      <DqSelect
-        v-model="sessions.selectedAgentId"
-        size="small"
-        class="composer-select composer-select--setup"
-        :aria-label="t('composer.selectAgent')"
-      >
-        <DqOption v-for="a in primaryAgents" :key="a.id" :value="a.id" :label="a.name" />
-      </DqSelect>
-    </div>
-
-    <div class="composer-float__toolbar">
-      <div class="composer-float__meta">
-        <DqSegmented
-          v-if="!sessions.composingNew && showAgentSelect && useAgentSegmented"
-          v-model="sessions.selectedAgentId"
-          class="composer-agent-seg composer-agent-seg--compact"
-          :options="agentOptions"
-          :aria-label="t('composer.selectAgent')"
+      <div ref="inputWrap" class="composer-float__body">
+        <DqInput
+          v-model="content"
+          type="textarea"
+          :rows="sessions.composingNew ? 3 : 2"
+          class="composer-float__input"
+          :placeholder="placeholder"
+          @keydown="onKeydown"
+          @paste="onPaste"
         />
-        <button
-          v-else-if="!sessions.composingNew && showAgentSelect"
-          type="button"
-          class="composer-meta-chip"
-          :class="{ 'is-open': agentPanelOpen }"
-          :title="t('composer.changeAgent')"
-          @click="agentPanelOpen = !agentPanelOpen"
-        >
-          <span class="composer-meta-chip__muted">{{ t('composer.agentShort') }}</span>
-          <span class="composer-meta-chip__value">{{ selectedAgentName || '—' }}</span>
-        </button>
-
-        <span v-if="llm.modelsLoaded && !availableModels.length" class="composer-meta-chip composer-meta-chip--warn">
-          {{ t('composer.needLlm') }}
-        </span>
-
-        <DqSelect
-          v-if="llm.modelsLoaded && availableModels.length"
-          v-model="selectedBaseModelId"
-          size="small"
-          class="composer-select composer-select--model"
-          :aria-label="t('composer.selectModel')"
-        >
-          <DqOption v-for="model in availableModels" :key="model.id" :value="model.id" :label="model.label" />
-        </DqSelect>
-
-        <DqSelect
-          v-if="llm.modelsLoaded && availableEfforts.length > 1"
-          v-model="sessions.selectedEffort"
-          size="small"
-          class="composer-select composer-select--effort"
-          :aria-label="t('composer.selectEffort')"
-        >
-          <DqOption v-for="e in availableEfforts" :key="e" :value="e" :label="e" />
-        </DqSelect>
       </div>
 
-      <div class="composer-float__actions">
-        <div class="composer-float__tools">
+      <input
+        ref="fileInputRef"
+        type="file"
+        class="composer-float__file-input"
+        multiple
+        accept="image/*,.pdf,.txt,.md,.json,.csv,.png,.jpg,.jpeg,.webp,.gif"
+        @change="onFilePicked"
+      />
+
+      <div class="composer-float__footer">
+        <div class="composer-float__footer-leading">
           <button
             type="button"
             class="composer-tool-btn"
@@ -509,47 +407,126 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
             @click="openFilePicker"
           >
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+              <path d="M12 5v14" />
+              <path d="M5 12h14" />
             </svg>
           </button>
-          <button
-            type="button"
-            class="composer-tool-btn"
-            :title="t('composer.pasteImageHint')"
-            :aria-label="t('composer.pasteImageHint')"
-            @click="toast.info(t('composer.pasteImageHint'))"
+          <span
+            v-if="llm.modelsLoaded && !availableModels.length"
+            class="composer-meta-chip composer-meta-chip--warn"
           >
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <circle cx="8.5" cy="8.5" r="1.5" />
-              <path d="M21 15l-5-5L5 21" />
-            </svg>
-          </button>
+            {{ t('composer.needLlm') }}
+          </span>
         </div>
 
-        <button
-          v-if="isTurnRunning"
-          type="button"
-          class="composer-send composer-send--stop"
-          :aria-label="t('composer.stop')"
-          @click="stop"
+        <div class="composer-float__footer-trailing">
+          <div
+            v-if="llm.modelsLoaded && availableModels.length"
+            class="composer-select composer-select--model"
+          >
+            <DqSelect
+              v-model="selectedBaseModelId"
+              size="small"
+              :aria-label="t('composer.selectModel')"
+            >
+              <DqOption
+                v-for="model in availableModels"
+                :key="model.id"
+                :value="model.id"
+                :label="model.label"
+              />
+            </DqSelect>
+          </div>
+
+          <div
+            v-if="llm.modelsLoaded && availableEfforts.length > 1"
+            class="composer-select composer-select--effort"
+          >
+            <DqSelect
+              v-model="sessions.selectedEffort"
+              size="small"
+              :aria-label="t('composer.selectEffort')"
+            >
+              <DqOption v-for="e in availableEfforts" :key="e" :value="e" :label="e" />
+            </DqSelect>
+          </div>
+
+          <button
+            v-if="isTurnRunning"
+            type="button"
+            class="composer-send composer-send--stop"
+            :aria-label="t('composer.stop')"
+            @click="stop"
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+              <rect x="5" y="5" width="14" height="14" rx="2" />
+            </svg>
+            <span>{{ t('composer.stop') }}</span>
+          </button>
+          <button
+            v-else
+            type="button"
+            class="composer-send"
+            :disabled="!canSend"
+            :aria-label="t('composer.send')"
+            @click="send"
+          >
+            <span>{{ t('composer.send') }}</span>
+            <kbd class="composer-send__kbd">{{ sendShortcut }}</kbd>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lower tray: project + agent context -->
+    <div
+      v-if="sessions.composingNew || showAgentSelect"
+      class="composer-float__tray"
+    >
+      <div class="composer-float__tray-leading">
+        <div
+          v-if="sessions.composingNew"
+          class="composer-select composer-select--project"
         >
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
-            <rect x="5" y="5" width="14" height="14" rx="2" />
-          </svg>
-          <span>{{ t('composer.stop') }}</span>
-        </button>
-        <button
-          v-else
-          type="button"
-          class="composer-send"
-          :disabled="!canSend"
-          :aria-label="t('composer.send')"
-          @click="send"
+          <DqSelect
+            v-model="sessions.selectedProjectId"
+            size="small"
+            :aria-label="t('composer.selectProject')"
+            :placeholder="t('composer.selectProject')"
+          >
+            <DqOption
+              v-for="p in projects.sortedProjects"
+              :key="p.id"
+              :value="p.id"
+              :label="p.name"
+            />
+          </DqSelect>
+        </div>
+
+        <DqSegmented
+          v-if="showAgentSelect && useAgentSegmented"
+          v-model="sessions.selectedAgentId"
+          class="composer-agent-seg composer-agent-seg--compact"
+          :options="agentOptions"
+          :aria-label="t('composer.selectAgent')"
+        />
+        <div
+          v-else-if="showAgentSelect"
+          class="composer-select composer-select--agent"
         >
-          <span>{{ t('composer.send') }}</span>
-          <kbd class="composer-send__kbd">{{ sendShortcut }}</kbd>
-        </button>
+          <DqSelect
+            v-model="sessions.selectedAgentId"
+            size="small"
+            :aria-label="t('composer.selectAgent')"
+          >
+            <DqOption
+              v-for="a in primaryAgents"
+              :key="a.id"
+              :value="a.id"
+              :label="a.name"
+            />
+          </DqSelect>
+        </div>
       </div>
     </div>
   </div>
@@ -558,29 +535,22 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
 <style scoped>
 .composer-float {
   position: relative;
-  background: var(--dq-glass-popover-bg);
-  border: 1px solid var(--dq-glass-border-strong);
-  border-radius: var(--dq-radius-menu);
-  box-shadow: var(--dq-shadow-glass);
-  -webkit-backdrop-filter: var(--dq-glass-blur-heavy);
-  backdrop-filter: var(--dq-glass-blur-heavy);
-  transition: border-color 0.18s ease, box-shadow 0.18s ease;
-}
-
-.composer-float:focus-within {
-  border-color: var(--dq-accent);
-  box-shadow:
-    var(--dq-shadow-glass),
-    0 0 0 1px color-mix(in srgb, var(--dq-accent) 16%, transparent);
-}
-
-.composer-float.is-dragover {
-  border-color: var(--dq-accent);
-  background: color-mix(in srgb, var(--dq-accent) 6%, var(--dq-glass-popover-bg));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .composer-float.is-blocked {
   opacity: 0.94;
+}
+
+.composer-float.is-dragover .composer-float__card {
+  border-color: var(--dq-accent);
+  background: color-mix(in srgb, var(--dq-accent) 6%, var(--dq-glass-popover-bg));
+}
+
+.composer-float__card {
+  position: relative;
 }
 
 .composer-float__drop {
@@ -625,132 +595,106 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
   animation: pulse 1.2s ease-in-out infinite;
 }
 
-.composer-float__setup {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px 0;
-}
-
-.composer-float__setup-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.composer-float__setup-field--project {
-  max-width: 280px;
-}
-
-.composer-agent-seg {
-  width: 100%;
-}
-
-.composer-agent-seg--compact {
-  width: auto;
-  flex-shrink: 0;
-}
-
-.composer-agent-seg--compact :deep(.dq-segmented__item) {
-  padding: 4px 10px;
-  font-size: var(--dq-font-size-caption);
-}
-
-.composer-float__setup-label {
-  font-size: var(--dq-font-size-caption);
-  font-weight: 600;
-  color: var(--dq-label-tertiary);
-  letter-spacing: 0.02em;
-}
-
-.composer-float__agent-panel {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 14px 8px;
-}
-
-.composer-float__agent-panel .composer-select--setup {
-  flex: 1;
-  max-width: 220px;
-}
-
 .composer-float__body {
-  padding: 10px 14px 0;
+  padding: 12px 14px 4px;
 }
 
-.composer-float__hint {
-  margin: 6px 2px 0;
-  font-size: 11px;
-  color: var(--dq-label-quaternary);
-  line-height: 1.4;
+.composer-float__body :deep(.dq-input),
+.composer-float__body :deep(textarea) {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  resize: none;
 }
 
 .composer-float__file-input {
   display: none;
 }
 
-.composer-float__toolbar {
+.composer-float__footer {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  padding: 10px 12px 12px;
+  padding: 6px 10px 10px;
   min-width: 0;
 }
 
-.composer-float__meta {
+.composer-float__footer-leading,
+.composer-float__footer-trailing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.composer-float__footer-trailing {
+  flex: 1 1 auto;
+  justify-content: flex-end;
+  flex-shrink: 1;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.composer-float__tray {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px 2px;
+  min-width: 0;
+}
+
+.composer-float__tray-leading {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
-  flex: 1;
   overflow-x: auto;
   scrollbar-width: none;
 }
 
-.composer-float__meta::-webkit-scrollbar {
+.composer-float__tray-leading::-webkit-scrollbar {
   display: none;
+}
+
+.composer-agent-seg--compact {
+  width: auto;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+
+.composer-agent-seg--compact :deep(.dq-segmented__item) {
+  padding: 4px 8px;
+  font-size: var(--dq-font-size-caption);
+  font-weight: 500;
+  color: var(--dq-label-tertiary);
+  border-radius: 6px;
+}
+
+.composer-agent-seg--compact :deep(.dq-segmented__item.is-active) {
+  color: var(--dq-label-primary);
+  background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+  box-shadow: none;
 }
 
 .composer-meta-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
   height: 28px;
   padding: 0 8px;
-  border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
-  background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
-  color: var(--dq-label-primary);
+  border-radius: 6px;
+  border: none;
   font-size: var(--dq-font-size-caption);
-  cursor: pointer;
   white-space: nowrap;
 }
 
-.composer-meta-chip:hover,
-.composer-meta-chip.is-open {
-  border-color: color-mix(in srgb, var(--dq-accent) 35%, transparent);
-  background: color-mix(in srgb, var(--dq-accent) 8%, transparent);
-}
-
-.composer-meta-chip__muted {
-  color: var(--dq-label-tertiary);
-}
-
-.composer-meta-chip__value {
-  max-width: 88px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-weight: 600;
-}
-
 .composer-meta-chip--warn {
-  cursor: default;
   color: var(--dq-system-orange);
-  border-color: color-mix(in srgb, var(--dq-system-orange) 30%, transparent);
   background: color-mix(in srgb, var(--dq-system-orange) 10%, transparent);
 }
 
@@ -758,41 +702,67 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
   flex: 0 1 auto;
   width: auto !important;
   min-width: 0;
+  max-width: 100%;
+  display: block;
+  overflow: hidden;
+}
+
+.composer-select :deep(.dq-select) {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .composer-select :deep(.dq-select__trigger) {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 28px;
-  padding: 2px 8px;
+  padding: 2px 6px;
   font-size: var(--dq-font-size-caption);
+  overflow: hidden;
 }
 
-.composer-select--setup {
-  width: 100% !important;
-  max-width: none;
+.composer-select :deep(.dq-select__value) {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-select--project {
+  flex: 0 1 160px;
+  max-width: 200px;
 }
 
 .composer-select--model {
-  flex: 0 1 148px;
+  flex: 1 1 100px;
+  min-width: 64px;
   max-width: 180px;
 }
 
 .composer-select--effort {
-  flex: 0 0 72px;
-  max-width: 80px;
+  flex: 0 0 auto;
+  width: max-content;
+  min-width: 48px;
+  max-width: 72px;
+  overflow: visible;
 }
 
-.composer-float__actions {
-  display: flex;
-  align-items: center;
+.composer-select--effort :deep(.dq-select),
+.composer-select--effort :deep(.dq-select__trigger) {
+  width: auto;
+}
+
+.composer-select--agent {
+  flex: 0 1 120px;
+  max-width: 160px;
+}
+
+.composer-float__footer-trailing .composer-send {
   flex-shrink: 0;
-  gap: 8px;
-}
-
-.composer-float__tools {
-  display: flex;
-  align-items: center;
-  gap: 2px;
 }
 
 .composer-tool-btn {
@@ -819,6 +789,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
   align-items: center;
   gap: 8px;
   height: 32px;
+  margin-left: 4px;
   padding: 0 12px 0 14px;
   border: none;
   border-radius: 10px;
@@ -869,5 +840,4 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
     opacity: 0.4;
   }
 }
-
 </style>
