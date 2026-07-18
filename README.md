@@ -196,6 +196,24 @@ make test               # layer check + go test ./...
 make test-integration   # integration tests
 ```
 
+### Harbor local agent compare (smoke suite)
+
+16 file/coding tasks via [Harbor](https://github.com/laude-institute/harbor) + Podman. Same model (`deepseek-v4-flash`). Pass = Mean reward ≥ 1.0. Not an official Terminal-Bench / leaderboard run.
+
+| Agent | Pass | Fail | Notes |
+|-------|------|------|-------|
+| **DanQing** | **15** | 1 | `danqing-teams-cli` in-container |
+| OpenCode | 12 | 4 | Harbor `opencode` (`deepseek/` provider) |
+| OpenHands | 15 | 1 | Harbor `openhands-sdk` |
+
+All three failed `replace-marker`. OpenCode also failed `fix-python`, `fix-shell`, `sort-names`.
+
+Details: [`evals/dq_harbor/README.md`](evals/dq_harbor/README.md) · table: [`evals/dq_harbor/COMPARE_RESULTS.md`](evals/dq_harbor/COMPARE_RESULTS.md)
+
+```bash
+./evals/dq_harbor/compare_agents.sh   # DanQing + OpenCode + OpenHands SDK
+```
+
 ## Environment
 
 | Variable | Default | Purpose |
@@ -236,5 +254,6 @@ Tag builds are attached to the GitHub Release.
 | Doc | Description |
 |-----|-------------|
 | [docs/core-design.md](docs/core-design.md) | Core design: unified agent architecture & engine |
+| [evals/dq_harbor/README.md](evals/dq_harbor/README.md) | Harbor local smoke eval & agent compare |
 | [AGENTS.md](AGENTS.md) | Contributor / agent quick reference |
 | [config.example.yaml](config.example.yaml) | Full config reference |

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,11 @@ import (
 )
 
 var _ port.Engine = (*Engine)(nil)
+
+func evalModeEnabled() bool {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv("TEAMS_EVAL_MODE")))
+	return v == "1" || v == "true" || v == "yes"
+}
 
 type engineRunCfg struct {
 	autoApprove            bool
@@ -775,6 +781,9 @@ func (e *Engine) buildWorkerRegistry(agent domain.Agent) *tool.Registry {
 }
 
 func (e *Engine) waitAskUser(ctx context.Context, sessionID, turnID, callID, question string, options []string, defaultOpt string, formFields []domain.AskUserFormField) (string, error) {
+	if evalModeEnabled() {
+		return "", fmt.Errorf("ask_user is disabled in eval mode")
+	}
 	ch := make(chan string, 1)
 	e.mu.Lock()
 	e.askUserWait[callID] = ch

@@ -26,9 +26,9 @@
 # SQLite data
 /data/
 
-# Logs
-*.log
+/jobs/
 
 # Node (frontend, added later)
 node_modules/
 /desktop/src-tauri/bin/
+/evals/dq_harbor/compare_results/

@@ -14,7 +14,18 @@ export DQ_APP_NAME := $(APP_NAME)
 	frontend-install frontend-dev frontend-build frontend-typecheck \
 	check-layers test test-integration \
 	build-go build-server build-cli build-tui build-sidecar build build-all clean \
-	pack-prereqs pack-macos-desktop pack-linux-server pack-windows-desktop
+	pack-prereqs pack-macos-desktop pack-linux-server pack-windows-desktop \
+	eval-harbor-bin eval-harbor-smoke eval-harbor-suite eval-harbor-compare
+
+EVAL_BIN_DIR := $(OUT_DIR)/eval
+EVAL_CLI_BIN := $(EVAL_BIN_DIR)/danqing-teams-cli
+# Podman on Apple Silicon typically runs linux/arm64; Linux x86 hosts use amd64.
+EVAL_GOARCH ?= $(shell uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+HARBOR_TASK ?= $(CURDIR)/evals/dq_harbor/tasks/hello-txt
+HARBOR_MODEL ?= $(TEAMS_MODEL)
+# Harbor 0.19 has no built-in "podman" env; use docker API against Podman via DOCKER_HOST.
+HARBOR_ENV ?= docker
+PODMAN_BIN ?= $(shell command -v podman 2>/dev/null || echo /opt/podman/bin/podman)
 
 help:
 	@echo "DanQing Teams"
@@ -29,6 +40,7 @@ help:
 	@echo ""
 	@echo "Frontend:  frontend-install | frontend-dev | frontend-build | frontend-typecheck"
 	@echo "Test:      check-layers | test | test-integration"
+	@echo "Eval:      eval-harbor-bin | eval-harbor-smoke | eval-harbor-suite | eval-harbor-compare"
 	@echo "Build:     build | build-all | build-go | build-server | build-cli | build-tui | build-sidecar | clean"
 	@echo "Release:   pack-macos-desktop | pack-linux-server | pack-windows-desktop"
 
@@ -119,3 +131,63 @@ pack-linux-server: frontend-build build-go
 pack-windows-desktop: pack-prereqs frontend-build
 	@chmod +x scripts/*.sh
 	@RELEASE_VERSION=$(RELEASE_VERSION) ./scripts/pack_desktop_windows.sh
+
+# Cross-compile CLI for Harbor task containers (linux).
+eval-harbor-bin:
+	@mkdir -p $(EVAL_BIN_DIR)
+	GOOS=linux GOARCH=$(EVAL_GOARCH) CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(EVAL_CLI_BIN) ./cli
+	@echo "built $(EVAL_CLI_BIN) (linux/$(EVAL_GOARCH))"
+
+# Local Harbor smoke: oracle verifies the task, then DanQing agent runs it.
+# Requires: Podman (+ DOCKER_HOST), `uv tool install harbor`, and LLM credentials.
+eval-harbor-smoke: eval-harbor-bin
+	@test -x "$(PODMAN_BIN)" || (echo "podman not found (tried $(PODMAN_BIN))" >&2; exit 1)
+	@command -v harbor >/dev/null 2>&1 || (echo "harbor not found — install with: uv tool install harbor" >&2; exit 1)
+	@test -n "$(HARBOR_MODEL)" || (echo "Set TEAMS_MODEL or HARBOR_MODEL (e.g. deepseek/deepseek-chat)" >&2; exit 1)
+	chmod +x $(HARBOR_TASK)/tests/test.sh $(HARBOR_TASK)/solution/solve.sh
+	@SOCK="$$($(PODMAN_BIN) machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}' 2>/dev/null || true)"; \
+	  if [ -n "$$SOCK" ]; then export DOCKER_HOST="unix://$$SOCK"; fi; \
+	  export PATH="$(dir $(PODMAN_BIN)):$$PATH"; \
+	  echo "==> oracle smoke on $(HARBOR_TASK) (env=$(HARBOR_ENV) DOCKER_HOST=$$DOCKER_HOST)"; \
+	  harbor run --path $(HARBOR_TASK) --agent oracle --env $(HARBOR_ENV) --n-concurrent 1; \
+	  echo "==> DanQing agent on $(HARBOR_TASK) model=$(HARBOR_MODEL)"; \
+	  PYTHONPATH=$(CURDIR)/evals \
+	  DANQING_CLI_BIN=$(EVAL_CLI_BIN) \
+	  harbor run --path $(HARBOR_TASK) \
+		--agent dq_harbor.agent:DanQingAgent \
+		--model $(HARBOR_MODEL) \
+		--env $(HARBOR_ENV) \
+		--n-concurrent 1 \
+		$(if $(TEAMS_API_KEY),--ae TEAMS_API_KEY=$(TEAMS_API_KEY),) \
+		$(if $(TEAMS_BASE_URL),--ae TEAMS_BASE_URL=$(TEAMS_BASE_URL),) \
+		$(if $(OPENAI_API_KEY),--ae OPENAI_API_KEY=$(OPENAI_API_KEY),) \
+		$(if $(ANTHROPIC_API_KEY),--ae ANTHROPIC_API_KEY=$(ANTHROPIC_API_KEY),) \
+		$(if $(OPENAI_BASE_URL),--ae OPENAI_BASE_URL=$(OPENAI_BASE_URL),)
+
+# Run every task under evals/dq_harbor/tasks/ for DanQing (after oracle check on hello-txt).
+eval-harbor-suite: eval-harbor-bin
+	@test -x "$(PODMAN_BIN)" || (echo "podman not found (tried $(PODMAN_BIN))" >&2; exit 1)
+	@command -v harbor >/dev/null 2>&1 || (echo "harbor not found — install with: uv tool install harbor" >&2; exit 1)
+	@test -n "$(HARBOR_MODEL)" || (echo "Set TEAMS_MODEL or HARBOR_MODEL" >&2; exit 1)
+	chmod +x $(CURDIR)/evals/dq_harbor/run_suite.sh
+	@SOCK="$$($(PODMAN_BIN) machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}' 2>/dev/null || true)"; \
+	  if [ -n "$$SOCK" ]; then export DOCKER_HOST="unix://$$SOCK"; fi; \
+	  export PATH="$(dir $(PODMAN_BIN)):$$PATH"; \
+	  HARBOR_ENV=$(HARBOR_ENV) HARBOR_MODEL=$(HARBOR_MODEL) \
+	    $(CURDIR)/evals/dq_harbor/run_suite.sh oracle; \
+	  HARBOR_ENV=$(HARBOR_ENV) HARBOR_MODEL=$(HARBOR_MODEL) \
+	    DANQING_CLI_BIN=$(EVAL_CLI_BIN) \
+	    $(CURDIR)/evals/dq_harbor/run_suite.sh dq_harbor.agent:DanQingAgent
+
+# Same suite for a comparison agent, e.g. make eval-harbor-compare HARBOR_COMPARE_AGENT=opencode
+HARBOR_COMPARE_AGENT ?= opencode
+eval-harbor-compare:
+	@test -x "$(PODMAN_BIN)" || (echo "podman not found (tried $(PODMAN_BIN))" >&2; exit 1)
+	@command -v harbor >/dev/null 2>&1 || (echo "harbor not found" >&2; exit 1)
+	@test -n "$(HARBOR_MODEL)" || (echo "Set TEAMS_MODEL or HARBOR_MODEL" >&2; exit 1)
+	chmod +x $(CURDIR)/evals/dq_harbor/run_suite.sh
+	@SOCK="$$($(PODMAN_BIN) machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}' 2>/dev/null || true)"; \
+	  if [ -n "$$SOCK" ]; then export DOCKER_HOST="unix://$$SOCK"; fi; \
+	  export PATH="$(dir $(PODMAN_BIN)):$$PATH"; \
+	  HARBOR_ENV=$(HARBOR_ENV) HARBOR_MODEL=$(HARBOR_MODEL) \
+	    $(CURDIR)/evals/dq_harbor/run_suite.sh $(HARBOR_COMPARE_AGENT)

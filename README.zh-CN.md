@@ -196,6 +196,24 @@ make test               # 分层检查 + go test ./...
 make test-integration   # 集成测试
 ```
 
+### Harbor 本地 Agent 对比（冒烟套件）
+
+16 个文件/编程任务，经 [Harbor](https://github.com/laude-institute/harbor) + Podman。同一模型（`deepseek-v4-flash`）。通过 = Mean reward ≥ 1.0。非官方 Terminal-Bench / 榜单提交。
+
+| Agent | 通过 | 失败 | 说明 |
+|-------|------|------|------|
+| **DanQing** | **15** | 1 | 容器内 `danqing-teams-cli` |
+| OpenCode | 12 | 4 | Harbor `opencode`（`deepseek/` provider） |
+| OpenHands | 15 | 1 | Harbor `openhands-sdk` |
+
+三方均未过 `replace-marker`。OpenCode 另挂 `fix-python`、`fix-shell`、`sort-names`。
+
+详情：[`evals/dq_harbor/README.md`](evals/dq_harbor/README.md) · 对照表：[`evals/dq_harbor/COMPARE_RESULTS.md`](evals/dq_harbor/COMPARE_RESULTS.md)
+
+```bash
+./evals/dq_harbor/compare_agents.sh   # DanQing + OpenCode + OpenHands SDK
+```
+
 ## 环境变量
 
 | 变量 | 默认 | 说明 |
@@ -236,5 +254,6 @@ Tag 触发时会将产物附加到 GitHub Release。
 | 文档 | 说明 |
 |------|------|
 | [docs/core-design.md](docs/core-design.md) | 核心设计：统一 Agent 架构与引擎 |
+| [evals/dq_harbor/README.md](evals/dq_harbor/README.md) | Harbor 本地冒烟评测与 Agent 对比 |
 | [AGENTS.md](AGENTS.md) | 贡献者 / Agent 速查 |
 | [config.example.yaml](config.example.yaml) | 完整配置参考 |
