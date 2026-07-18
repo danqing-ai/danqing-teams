@@ -1,0 +1,89 @@
+import {
+  buildUserInputWithAttachments,
+  type ElementAttachment,
+} from '@/types/element-attachment'
+
+export type ComposerAttachmentKind = 'image' | 'file' | 'element'
+
+export interface ImageComposerAttachment {
+  id: string
+  kind: 'image'
+  name: string
+  mime: string
+  size: number
+  dataUrl: string
+}
+
+export interface FileComposerAttachment {
+  id: string
+  kind: 'file'
+  name: string
+  mime: string
+  size: number
+  /** Placeholder until file upload pipeline exists. */
+  placeholder: true
+}
+
+export interface ElementComposerAttachment {
+  id: string
+  kind: 'element'
+  data: ElementAttachment
+}
+
+export type ComposerAttachment =
+  | ImageComposerAttachment
+  | FileComposerAttachment
+  | ElementComposerAttachment
+
+/** API payload for vision models (matches domain.UserAttachment). */
+export interface ApiUserAttachment {
+  type: 'image'
+  name?: string
+  mimeType?: string
+  data: string // raw base64 or data URL
+}
+
+export const MAX_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024
+
+export function createComposerAttachmentId(prefix: string): string {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+export function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
+/** Text + element/file placeholders; images are sent as structured attachments. */
+export function buildComposerUserInput(
+  text: string,
+  atts: ComposerAttachment[],
+): string {
+  const elements = atts
+    .filter((a): a is ElementComposerAttachment => a.kind === 'element')
+    .map((a) => a.data)
+  const files = atts.filter((a): a is FileComposerAttachment => a.kind === 'file')
+
+  let body = buildUserInputWithAttachments(text, elements)
+
+  if (files.length) {
+    const blocks = files
+      .map((f) => `[Attached file (pending upload): ${f.name} · ${f.mime} · ${formatBytes(f.size)}]`)
+      .join('\n')
+    body = body ? `${body}\n\n${blocks}` : blocks
+  }
+
+  return body
+}
+
+export function toApiImageAttachments(atts: ComposerAttachment[]): ApiUserAttachment[] {
+  return atts
+    .filter((a): a is ImageComposerAttachment => a.kind === 'image' && Boolean(a.dataUrl))
+    .map((img) => ({
+      type: 'image' as const,
+      name: img.name,
+      mimeType: img.mime || 'image/png',
+      data: img.dataUrl,
+    }))
+}

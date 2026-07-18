@@ -28,11 +28,19 @@ func (m *SessionManager) SetEngine(engine port.Engine) {
 }
 
 func (m *SessionManager) Create(ctx context.Context, req domain.CreateSessionRequest) (domain.Session, error) {
-	if req.Content == "" {
-		return domain.Session{}, fmt.Errorf("content required")
+	atts, err := domain.NormalizeUserAttachments(req.Attachments)
+	if err != nil {
+		return domain.Session{}, err
+	}
+	if strings.TrimSpace(req.Content) == "" && len(atts) == 0 {
+		return domain.Session{}, fmt.Errorf("content or attachments required")
 	}
 	if req.AgentID == "" {
 		return domain.Session{}, fmt.Errorf("agentId required")
+	}
+	content := req.Content
+	if strings.TrimSpace(content) == "" && len(atts) > 0 {
+		content = "[Image attachment]"
 	}
 	now := time.Now().UTC()
 	s := domain.Session{
@@ -40,7 +48,7 @@ func (m *SessionManager) Create(ctx context.Context, req domain.CreateSessionReq
 		ProjectID: req.ProjectID,
 		AgentID:   req.AgentID,
 		ModelID:   req.ModelID,
-		Content:   req.Content,
+		Content:   content,
 		Status:    domain.SessionStatusActive,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -48,7 +56,7 @@ func (m *SessionManager) Create(ctx context.Context, req domain.CreateSessionReq
 	if err := m.store.Sessions().Create(ctx, s); err != nil {
 		return domain.Session{}, err
 	}
-	m.engine.StartSession(ctx, s)
+	m.engine.StartSession(ctx, s, atts)
 	go m.generateTitle(s.ID, s.Content, s.ModelID)
 	return s, nil
 }
@@ -84,7 +92,18 @@ func (m *SessionManager) generateTitle(sessionID, content, modelID string) {
 }
 
 func (m *SessionManager) StartTurn(ctx context.Context, sessionID string, req domain.SendMessageRequest) (string, error) {
-	return m.engine.StartTurn(ctx, sessionID, req.UserInput, req.AgentID, req.ModelID)
+	atts, err := domain.NormalizeUserAttachments(req.Attachments)
+	if err != nil {
+		return "", err
+	}
+	userInput := req.UserInput
+	if strings.TrimSpace(userInput) == "" && len(atts) > 0 {
+		userInput = "[Image attachment]"
+	}
+	if strings.TrimSpace(userInput) == "" {
+		return "", fmt.Errorf("userInput or attachments required")
+	}
+	return m.engine.StartTurn(ctx, sessionID, userInput, req.AgentID, req.ModelID, atts)
 }
 
 func (m *SessionManager) CancelTurn(ctx context.Context, turnID string) {

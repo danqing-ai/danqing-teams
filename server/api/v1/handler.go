@@ -164,7 +164,12 @@ func createSession(h *Handler) gin.HandlerFunc {
 		}
 		session, err := h.Sessions.Create(c, req)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			msg := err.Error()
+			if strings.Contains(msg, "required") || strings.Contains(msg, "attachments[") || strings.Contains(msg, "unsupported") {
+				c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
 			return
 		}
 		c.JSON(http.StatusCreated, session)
@@ -412,7 +417,11 @@ func sendMessage(h *Handler) gin.HandlerFunc {
 				return
 			}
 		}
-		turnID, _ := h.Sessions.StartTurn(c, c.Param("id"), req)
+		turnID, err := h.Sessions.StartTurn(c, c.Param("id"), req)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{"turnId": turnID})
 	}
 }

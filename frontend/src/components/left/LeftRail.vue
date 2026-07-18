@@ -236,9 +236,28 @@ function sessionTitle(t_: Session): string {
   return (t_.title ?? t_.content).trim().slice(0, 40) || t('navigation.untitledTask')
 }
 
-const userLabel = computed(() => 'nil luo')
+const userLabel = computed(() => t('navigation.userFallback'))
 const userInitial = computed(() => userLabel.value.slice(0, 1).toUpperCase())
 const userPlan = computed(() => 'DanQing')
+
+const resourcesCollapsed = ref(localStorage.getItem('app-resources-collapsed') === '1')
+watch(resourcesCollapsed, (v) => localStorage.setItem('app-resources-collapsed', v ? '1' : '0'))
+
+const sidebarSearch = ref('')
+const filteredProjects = computed(() => {
+  const q = sidebarSearch.value.trim().toLowerCase()
+  if (!q) return projects.sortedProjects
+  return projects.sortedProjects.filter((p) => {
+    if (p.name.toLowerCase().includes(q)) return true
+    return projectSessions(p).some((s) => sessionTitle(s).toLowerCase().includes(q))
+  })
+})
+
+function sessionStatusClass(s: Session): string {
+  if (sessions.runningTurnId && sessions.currentSessionId === s.id) return 'is-running'
+  // pending approval on current session only (global pendingApprovals is for active stream)
+  return ''
+}
 
 const {
   appVersion,
@@ -324,7 +343,25 @@ watch(() => projects.projects.length, (len) => {
           </DqButton>
 
           <div class="module-sidebar__modules">
-            <nav class="module-sidebar__menu" aria-label="模块导航">
+            <button
+              type="button"
+              class="module-sidebar__section-toggle"
+              @click="resourcesCollapsed = !resourcesCollapsed"
+            >
+              <span>{{ $t('navigation.resources') }}</span>
+              <svg
+                viewBox="0 0 24 24"
+                width="14"
+                height="14"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                :style="{ transform: resourcesCollapsed ? 'rotate(-90deg)' : 'none' }"
+              >
+                <path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+            <nav v-show="!resourcesCollapsed" class="module-sidebar__menu" aria-label="模块导航">
               <button
                 v-for="item in menuItems"
                 :key="item.module"
@@ -348,6 +385,10 @@ watch(() => projects.projects.length, (len) => {
           </div>
 
           <div class="module-sidebar__divider" />
+
+          <div class="module-sidebar__search">
+            <DqInput v-model="sidebarSearch" size="small" :placeholder="$t('navigation.searchPlaceholder')" />
+          </div>
 
           <div class="module-sidebar__section">
             <div class="module-sidebar__section-head">
@@ -412,8 +453,9 @@ watch(() => projects.projects.length, (len) => {
 
             <div v-if="projects.loading" class="module-sidebar__empty">{{ $t('navigation.loading_') }}</div>
             <div v-else-if="!projects.sortedProjects.length" class="module-sidebar__empty">{{ $t('navigation.noProjects') }}</div>
+            <div v-else-if="!filteredProjects.length" class="module-sidebar__empty">{{ $t('navigation.noSearchResults') }}</div>
             <nav v-else class="project-tree" aria-label="项目列表">
-              <div v-for="p in projects.sortedProjects" :key="p.id" class="project-tree__group">
+              <div v-for="p in filteredProjects" :key="p.id" class="project-tree__group">
                 <div class="project-tree__row" :class="{ 'is-active': false }" @click="toggleProject(p.id)">
                   <span class="project-tree__toggle" :class="{ 'is-expanded': expandedProjects.has(p.id) }">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -436,7 +478,7 @@ watch(() => projects.projects.length, (len) => {
                   </template>
                   <span v-else class="project-tree__name">{{ p.name }}</span>
                   <span @click.stop>
-                    <DqDropdown class="project-tree__menu" @command="(cmd) => onProjectCommand(cmd, p)">
+                    <DqDropdown class="project-tree__menu" @command="(cmd: string) => onProjectCommand(cmd, p)">
                       <DqIconButton aria-label="项目菜单" @click.stop>
                         <DqIcon :size="14"><MoreFilled /></DqIcon>
                       </DqIconButton>
@@ -460,14 +502,23 @@ watch(() => projects.projects.length, (len) => {
                     <button
                       type="button"
                       class="project-tree__session"
-                      :class="{ 'is-active': sessions.currentSessionId === t_.id && !sessions.composingNew }"
+                      :class="[
+                        { 'is-active': sessions.currentSessionId === t_.id && !sessions.composingNew },
+                        sessionStatusClass(t_),
+                      ]"
                       @click="selectSession(t_.id)"
                     >
-                      <span class="project-tree__session-dot" />
+                      <span
+                        class="project-tree__session-dot"
+                        :class="{
+                          'is-running': sessions.runningTurnId && sessions.currentSessionId === t_.id,
+                        }"
+                        :title="sessions.runningTurnId && sessions.currentSessionId === t_.id ? $t('navigation.sessionRunning') : undefined"
+                      />
                       <span class="project-tree__session-name">{{ sessionTitle(t_) }}</span>
                       <span class="project-tree__session-time">{{ formatRelativeTime(t_.updatedAt || t_.createdAt) }}</span>
                     </button>
-                    <DqDropdown @command="(cmd) => onSessionCommand(cmd, t_.id)">
+                    <DqDropdown @command="(cmd: string) => onSessionCommand(cmd, t_.id)">
                       <button type="button" class="project-tree__session-action" title="会话操作" @click.stop>
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
                           <circle cx="12" cy="5" r="1.5" />
@@ -951,6 +1002,12 @@ watch(() => projects.projects.length, (len) => {
   animation: session-dot-pulse 2s ease-in-out infinite;
 }
 
+.project-tree__session-dot.is-running {
+  background: var(--dq-system-orange);
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--dq-system-orange) 30%, transparent);
+  animation: session-dot-pulse 1.2s ease-in-out infinite;
+}
+
 @keyframes session-dot-pulse {
   0%, 100% { box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--dq-accent) 25%, transparent); }
   50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--dq-accent) 12%, transparent); }
@@ -981,6 +1038,33 @@ watch(() => projects.projects.length, (len) => {
 
 .module-sidebar__modules {
   padding: 8px 0;
+}
+
+.module-sidebar__section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: calc(100% - 16px);
+  margin: 0 8px 4px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dq-label-tertiary);
+  font-size: var(--dq-font-size-caption);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.module-sidebar__section-toggle:hover {
+  color: var(--dq-label-secondary);
+  background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
+}
+
+.module-sidebar__search {
+  padding: 0 10px 8px;
 }
 
 .module-sidebar__divider {

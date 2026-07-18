@@ -45,7 +45,9 @@ func (p *HTTPProvider) Chat(ctx context.Context, req port.LLMChatRequest, effort
 		// per OpenAI API spec. Empty string causes some providers (e.g. DeepSeek)
 		// to not recognize the message as a tool_calls carrier, making subsequent
 		// tool messages appear unpaired → 400 error.
-		if m.Content != "" || len(m.ToolCalls) == 0 {
+		if len(m.Parts) > 0 && len(m.ToolCalls) == 0 {
+			msg["content"] = openaiUserContent(m)
+		} else if m.Content != "" || len(m.ToolCalls) == 0 {
 			msg["content"] = m.Content
 		}
 		if len(m.ToolCalls) > 0 {

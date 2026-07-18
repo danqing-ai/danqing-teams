@@ -1,13 +1,20 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useSessionsStore } from '@/stores/sessions'
 import type { StreamEvent } from '@/types/mission'
 
 const { t } = useI18n()
+const sessions = useSessionsStore()
 
 const props = defineProps<{
   streamEvents: StreamEvent[]
 }>()
+
+function agentDisplayName(agentId: string): string {
+  const found = sessions.agents.find((a) => a.id === agentId)
+  return found?.name || agentId || 'AI'
+}
 
 interface Expert {
   turnId: string
@@ -32,19 +39,19 @@ const experts = computed<Expert[]>(() => {
       if (!payload) continue
       const childTurnId = String(payload.childTurnId ?? '')
       if (!childTurnId) continue
+      const agentId = String(payload.agentId ?? '')
       if (!map[childTurnId]) {
         map[childTurnId] = {
           turnId: childTurnId,
-          agentId: String(payload.agentId ?? ''),
-          agentName: String(payload.agentId ?? 'AI'),
+          agentId,
+          agentName: agentDisplayName(agentId),
           goal: String(payload.goal ?? ''),
           status: 'running',
           stepsUsed: 0,
         }
       } else {
-        // Update in case started arrived after other events
-        map[childTurnId].agentId = String(payload.agentId ?? map[childTurnId].agentId)
-        map[childTurnId].agentName = String(payload.agentId ?? map[childTurnId].agentName)
+        map[childTurnId].agentId = agentId || map[childTurnId].agentId
+        map[childTurnId].agentName = agentDisplayName(map[childTurnId].agentId)
         map[childTurnId].goal = String(payload.goal ?? map[childTurnId].goal)
       }
       continue

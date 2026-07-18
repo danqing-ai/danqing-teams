@@ -44,11 +44,13 @@ func (p *AnthropicProvider) Chat(ctx context.Context, req port.LLMChatRequest, e
 			continue
 		}
 		msg := map[string]any{
-			"role":    m.Role,
-			"content": m.Content,
+			"role": m.Role,
 		}
 		if m.Role == "assistant" && len(m.ToolCalls) > 0 {
 			var contents []map[string]any
+			if m.Content != "" {
+				contents = append(contents, map[string]any{"type": "text", "text": m.Content})
+			}
 			for _, tc := range m.ToolCalls {
 				contents = append(contents, map[string]any{
 					"type":  "tool_use",
@@ -58,13 +60,14 @@ func (p *AnthropicProvider) Chat(ctx context.Context, req port.LLMChatRequest, e
 				})
 			}
 			msg["content"] = contents
-		}
-		if m.Role == "tool" {
+		} else if m.Role == "tool" {
 			msg["content"] = []map[string]any{{
 				"type":        "tool_result",
 				"tool_use_id": m.ToolCallID,
 				"content":     m.Content,
 			}}
+		} else {
+			msg["content"] = anthropicUserContent(m)
 		}
 		messages = append(messages, msg)
 	}

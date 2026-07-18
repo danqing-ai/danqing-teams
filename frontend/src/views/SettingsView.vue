@@ -113,7 +113,7 @@ const runtimeForm = ref({
   maxDelegationDepth: 3,
   recallTopK: 3,
   searchTopK: 3,
-  compactionEnabled: false,
+  compactionEnabled: true,
   compactionMaxTokens: 128000,
   compactionTriggerRatio: 0.85,
   compactionCutTokens: 16000,
@@ -466,13 +466,28 @@ async function handleSaveModelConfig() {
 }
 
 
-const menuItems = computed(() => [
-  { id: 'appearance' as SettingsTab, label: t('settings.appearance'), icon: Brush },
-  { id: 'runtime' as SettingsTab, label: t('settings.runtime'), icon: Setting },
-  { id: 'models' as SettingsTab, label: t('settings.models'), icon: Cpu },
-  { id: 'modelConfig' as SettingsTab, label: t('settings.modelConfig'), icon: Setting },
-  { id: 'search' as SettingsTab, label: t('settings.search'), icon: Search },
-  { id: 'about' as SettingsTab, label: t('settings.about'), icon: Monitor },
+const menuGroups = computed(() => [
+  {
+    label: t('settings.groupModels'),
+    items: [
+      { id: 'models' as SettingsTab, label: t('settings.models'), icon: Cpu },
+      { id: 'modelConfig' as SettingsTab, label: t('settings.modelConfig'), icon: Setting },
+      { id: 'search' as SettingsTab, label: t('settings.search'), icon: Search },
+    ],
+  },
+  {
+    label: t('settings.groupRuntime'),
+    items: [
+      { id: 'runtime' as SettingsTab, label: t('settings.runtime'), icon: Setting },
+    ],
+  },
+  {
+    label: t('settings.groupAppearance'),
+    items: [
+      { id: 'appearance' as SettingsTab, label: t('settings.appearance'), icon: Brush },
+      { id: 'about' as SettingsTab, label: t('settings.about'), icon: Monitor },
+    ],
+  },
 ])
 
 const footerHint = computed(() => {
@@ -519,19 +534,22 @@ const hasFooterActions = computed(() => {
         <span class="settings-sidebar__title">{{ $t('settings.title') }}</span>
       </div>
       <nav class="settings-sidebar__menu" :aria-label="$t('settings.category')">
-        <button
-          v-for="item in menuItems"
-          :key="item.id"
-          type="button"
-          class="settings-sidebar__item"
-          :class="{ 'is-active': activeTab === item.id }"
-          @click="activeTab = item.id"
-        >
-          <DqIcon :size="18">
-            <component :is="item.icon" />
-          </DqIcon>
-          <span>{{ item.label }}</span>
-        </button>
+        <div v-for="group in menuGroups" :key="group.label" class="settings-sidebar__group">
+          <div class="settings-sidebar__group-label">{{ group.label }}</div>
+          <button
+            v-for="item in group.items"
+            :key="item.id"
+            type="button"
+            class="settings-sidebar__item"
+            :class="{ 'is-active': activeTab === item.id }"
+            @click="activeTab = item.id"
+          >
+            <DqIcon :size="18">
+              <component :is="item.icon" />
+            </DqIcon>
+            <span>{{ item.label }}</span>
+          </button>
+        </div>
       </nav>
     </aside>
 
@@ -1277,6 +1295,22 @@ const hasFooterActions = computed(() => {
   font-size: var(--dq-font-size-body);
   font-weight: 600;
   color: var(--dq-label-tertiary);
+}
+
+.settings-sidebar__group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+
+.settings-sidebar__group-label {
+  padding: 8px 12px 4px;
+  font-size: var(--dq-font-size-caption);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dq-label-quaternary);
 }
 
 .settings-sidebar__menu {

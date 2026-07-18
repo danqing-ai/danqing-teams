@@ -30,6 +30,7 @@ const loading = ref(false)
 const branches = ref<GitBranches | null>(null)
 const selectedBranch = ref('')
 const switching = ref(false)
+const filterQuery = ref('')
 
 async function loadChanges() {
   if (!sessions.selectedProjectId) {
@@ -113,16 +114,28 @@ function statusType(s: string): string {
   }
 }
 
-const stagedChanges = computed(() => data.value?.changes?.filter(c => c.staged) ?? [])
-const unstagedChanges = computed(() => data.value?.changes?.filter(c => !c.staged) ?? [])
+function matchesFilter(c: GitFileChange): boolean {
+  const q = filterQuery.value.trim().toLowerCase()
+  if (!q) return true
+  return c.file.toLowerCase().includes(q) || (c.origFile?.toLowerCase().includes(q) ?? false)
+}
+
+const stagedChanges = computed(() => data.value?.changes?.filter(c => c.staged && matchesFilter(c)) ?? [])
+const unstagedChanges = computed(() => data.value?.changes?.filter(c => !c.staged && matchesFilter(c)) ?? [])
 const branchList = computed(() => branches.value?.branches ?? [])
+const totalCount = computed(() => data.value?.changes?.length ?? 0)
 
 function changeLabel(c: GitFileChange): string {
   if (c.origFile) return `${c.file} ← ${c.origFile}`
   return c.file
 }
 
-defineExpose({ refresh })
+function jumpToFile(file: string) {
+  // Expose selection for future file open; copy path for now
+  void navigator.clipboard?.writeText(file).catch(() => {})
+}
+
+defineExpose({ refresh, totalCount })
 </script>
 
 <template>
@@ -156,35 +169,42 @@ defineExpose({ refresh })
       </div>
 
       <div v-else-if="!data?.changes?.length" class="changes-panel__empty">
-        <p>没有文件变更</p>
-        <p class="changes-panel__hint">暂存区和工作区都是干净的</p>
+        <p>{{ $t('sessions.noChanges') }}</p>
+        <p class="changes-panel__hint">{{ $t('sessions.noChangesHint') }}</p>
       </div>
 
       <div v-else class="changes-panel__list">
+        <div class="changes-panel__filter">
+          <DqInput v-model="filterQuery" size="small" :placeholder="$t('sessions.filterChanges')" />
+        </div>
         <template v-if="stagedChanges.length">
-          <div class="changes-panel__group-label">已暂存</div>
-          <div
+          <div class="changes-panel__group-label">{{ $t('sessions.changesStaged') }}</div>
+          <button
             v-for="c in stagedChanges"
             :key="c.file"
+            type="button"
             class="changes-panel__item"
             :class="`is-${statusType(c.status)}`"
+            @click="jumpToFile(c.file)"
           >
             <span class="changes-panel__item-status">{{ statusLabel(c.status) }}</span>
             <span class="changes-panel__item-file" :title="changeLabel(c)">{{ changeLabel(c) }}</span>
-          </div>
+          </button>
         </template>
 
         <template v-if="unstagedChanges.length">
-          <div class="changes-panel__group-label">未暂存</div>
-          <div
+          <div class="changes-panel__group-label">{{ $t('sessions.changesUnstaged') }}</div>
+          <button
             v-for="c in unstagedChanges"
             :key="c.file"
+            type="button"
             class="changes-panel__item"
             :class="`is-${statusType(c.status)}`"
+            @click="jumpToFile(c.file)"
           >
             <span class="changes-panel__item-status">{{ statusLabel(c.status) }}</span>
             <span class="changes-panel__item-file" :title="changeLabel(c)">{{ changeLabel(c) }}</span>
-          </div>
+          </button>
         </template>
       </div>
     </template>
@@ -226,6 +246,19 @@ defineExpose({ refresh })
   flex: 1;
   overflow-y: auto;
   padding: 8px 0;
+}
+
+.changes-panel__filter {
+  padding: 4px 12px 8px;
+}
+
+.changes-panel__item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
 }
 
 .changes-panel__branch {

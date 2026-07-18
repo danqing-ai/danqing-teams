@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import LeftRail from '@/components/left/LeftRail.vue'
+import AppCommandPalette from '@/components/common/AppCommandPalette.vue'
 import { useSessionsStore } from '@/stores/sessions'
 import { useProjectsStore } from '@/stores/projects'
 import { useLLMStore } from '@/stores/llm'
+import { useWorkspaceUiStore } from '@/stores/workspaceUi'
 import { initAppVersion, startSilentUpdateCheck } from '@/composables/useAppUpdater'
 import type { AppModule } from '@/types/app-module'
 
@@ -13,6 +15,14 @@ const route = useRoute()
 const sessions = useSessionsStore()
 const projects = useProjectsStore()
 const llm = useLLMStore()
+const workspaceUi = useWorkspaceUiStore()
+
+function onGlobalKeydown(e: KeyboardEvent) {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault()
+    workspaceUi.togglePalette()
+  }
+}
 
 const activeModule = computed<AppModule>(() => {
   const name = route.name as string
@@ -37,6 +47,7 @@ function onSelectSession(id: string) {
 }
 
 onMounted(async () => {
+  window.addEventListener('keydown', onGlobalKeydown)
   void initAppVersion()
   startSilentUpdateCheck()
   await sessions.loadCatalog()
@@ -46,6 +57,10 @@ onMounted(async () => {
   }
   sessions.syncModelSelection(llm.models, new Set())
   await sessions.loadSessions()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', onGlobalKeydown)
 })
 
 watch(() => llm.models, (newModels, oldModels) => {
@@ -60,6 +75,7 @@ watch(() => llm.models, (newModels, oldModels) => {
     <main class="app-workspace">
       <RouterView />
     </main>
+    <AppCommandPalette />
   </div>
 </template>
 

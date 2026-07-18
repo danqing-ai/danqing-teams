@@ -1,30 +1,33 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useSessionsStore } from '@/stores/sessions'
+import { useWorkspaceUiStore } from '@/stores/workspaceUi'
 import FloatingComposer from '@/components/composer/FloatingComposer.vue'
-import PlanPanel from '@/components/center/PlanPanel.vue'
-import FileTree from '@/components/center/FileTree.vue'
-import ExpertsPanel from '@/components/center/ExpertsPanel.vue'
-import ChangesPanel from '@/components/center/ChangesPanel.vue'
-import TerminalPanel from '@/components/center/TerminalPanel.vue'
+import WelcomeEmpty from '@/components/center/WelcomeEmpty.vue'
+import ContextUsageBar from '@/components/center/ContextUsageBar.vue'
+import ApprovalRail from '@/components/center/ApprovalRail.vue'
+import ToolCardBlock from '@/components/center/ToolCardBlock.vue'
+import RightWorkspacePanel from '@/components/center/RightWorkspacePanel.vue'
 import ElementAnnotatePopover from '@/components/center/ElementAnnotatePopover.vue'
 import { renderMarkdown } from '@/utils/markdown-render'
 import { toast } from '@/utils/feedback'
 import { apiBaseUrl } from '@/utils/desktop'
 import { fromInspectPayload, type InspectElementPayload } from '@/types/element-attachment'
+import { fetchJSON } from '@/api/client'
+import { formatTokenCount, useSessionContextUsage } from '@/composables/useSessionContextUsage'
 
 import type { StreamEvent, TurnLog } from '@/types/mission'
 
 const router = useRouter()
+const { t } = useI18n()
 const sessions = useSessionsStore()
-const rightTab = ref<'plan' | 'files' | 'experts' | 'changes' | 'terminal' | 'browser'>('plan')
-const terminalOpened = ref(false)
-watch(rightTab, (t) => {
-  if (t === 'terminal') terminalOpened.value = true
-})
-const fileTreeRef = ref<InstanceType<typeof FileTree> | null>(null)
-const changesPanelRef = ref<InstanceType<typeof ChangesPanel> | null>(null)
+const workspaceUi = useWorkspaceUiStore()
+const { rightTab } = storeToRefs(workspaceUi)
+const rightPanelRef = ref<InstanceType<typeof RightWorkspacePanel> | null>(null)
+const { tokensForTurn } = useSessionContextUsage()
 const isEditingTitle = ref(false)
 const editingTitle = ref('')
 const browserUrl = ref('')
@@ -304,11 +307,18 @@ interface ToolCard {
   stepNum: number
 }
 
+interface UserImageAttachment {
+  name?: string
+  mimeType?: string
+  dataUrl: string
+}
+
 interface Turn {
   id: string
   parentTurnId?: string
   goal: string
   userText?: string
+  userImages?: UserImageAttachment[]
   agentId?: string
   agentName?: string
   status?: string
@@ -483,6 +493,21 @@ const turnMap = computed(() => {
     if (ev.type === 'user.message') {
       const payload = asRecord(ev.payload)
       map[turnId].userText = String(payload?.content ?? payload?.text ?? '')
+      const rawAtts = payload?.attachments
+      if (Array.isArray(rawAtts)) {
+        map[turnId].userImages = rawAtts
+          .map((a) => {
+            const r = asRecord(a)
+            const dataUrl = String(r?.dataUrl ?? '')
+            if (!dataUrl) return null
+            return {
+              name: r?.name ? String(r.name) : undefined,
+              mimeType: r?.mimeType ? String(r.mimeType) : undefined,
+              dataUrl,
+            }
+          })
+          .filter((x): x is UserImageAttachment => Boolean(x))
+      }
     }
     if (ev.type === 'turn.ended' || ev.type === 'turn.failed') {
       const payload = asRecord(ev.payload)
@@ -534,7 +559,7 @@ const turnMap = computed(() => {
   }
 
   // Post-process: filter noise events
-  const NOISE_TYPES = new Set(['turn.started', 'turn.ended', 'turn.failed', 'step.started', 'step.ended', 'llm.usage', 'context.compacted'])
+  const NOISE_TYPES = new Set(['turn.started', 'turn.ended', 'turn.failed', 'step.started', 'step.ended', 'llm.usage'])
   for (const turnId in map) {
     const turn = map[turnId]
     turn.events = turn.events.filter((ev) => !NOISE_TYPES.has(ev.type))
@@ -1274,21 +1299,100 @@ function turnSummary(turn: Turn): { toolCount: number; completedTools: number; e
   let completedTools = 0
   let errorTools = 0
   let runningTools = 0
-  let tokensUsed = 0
   for (const ev of turn.events) {
     if (ev.type === '__tool_card__') {
       toolCount++
-      const card = ev.payload as ToolCard
-      if (card.status === 'completed') completedTools++
-      if (card.status === 'error') errorTools++
-      if (card.status === 'running' || card.status === 'pending') runningTools++
-    } else if (ev.type === 'llm.usage') {
-      const p = asRecord(ev.payload)
-      tokensUsed += Number(p?.totalTokens ?? p?.total_tokens ?? 0)
+      const st = (ev.payload as ToolCard).status
+      if (st === 'completed') completedTools++
+      else if (st === 'error') errorTools++
+      else if (st === 'running' || st === 'pending') runningTools++
     }
   }
+  const tokensUsed = tokensForTurn(turn.id)
   return { toolCount, completedTools, errorTools, runningTools, tokensUsed }
 }
+
+function onWelcomePrompt(text: string) {
+  composerRef.value?.appendContent?.(text)
+  composerRef.value?.focusInput?.()
+}
+
+const WRITE_TOOL_NAMES = new Set(['write_file', 'edit_file', 'apply_patch', 'str_replace', 'create_file', 'delete_file', 'bash', 'shell', 'run_terminal'])
+
+async function refreshChangesCount() {
+  if (!sessions.selectedProjectId) {
+    workspaceUi.changesCount = 0
+    return
+  }
+  try {
+    const data = await fetchJSON<{ changes?: { file: string }[] }>(`/projects/${sessions.selectedProjectId}/git-changes`)
+    workspaceUi.changesCount = data?.changes?.length ?? 0
+  } catch {
+    /* ignore */
+  }
+}
+
+watch(
+  () => sessions.streamEvents.length,
+  () => {
+    const last = sessions.streamEvents[sessions.streamEvents.length - 1]
+    if (!last) return
+    if (last.type === 'tool.completed' || last.type === 'tool.running') {
+      const p = asRecord(last.payload)
+      const name = String(p?.name ?? '')
+      if (WRITE_TOOL_NAMES.has(name) || name.includes('write') || name.includes('edit') || name.includes('patch')) {
+        void refreshChangesCount().then(() => {
+          if (workspaceUi.changesCount > 0 && rightTab.value !== 'changes') {
+            // keep badge; optional soft nudge only when turn ends
+          }
+        })
+      }
+    }
+    if (last.type === 'turn.ended' || last.type === 'report') {
+      void refreshChangesCount().then(() => {
+        if (workspaceUi.changesCount > 0 && rightTab.value !== 'changes') {
+          // Badge already updated; soft-switch only when user is on plan tab
+          if (rightTab.value === 'plan') workspaceUi.setRightTab('changes')
+        }
+      })
+    }
+  },
+)
+
+watch(
+  () => sessions.selectedProjectId,
+  () => { void refreshChangesCount() },
+  { immediate: true },
+)
+
+function syncExpertsRunning() {
+  const map = new Map<string, boolean>()
+  for (const ev of sessions.streamEvents) {
+    if (ev.type === 'delegate.started') {
+      const p = asRecord(ev.payload)
+      const id = String(p?.childTurnId ?? '')
+      if (id) map.set(id, true)
+    } else if (ev.type === 'delegate.completed') {
+      for (const [id, running] of map) {
+        if (running) {
+          map.set(id, false)
+          break
+        }
+      }
+    }
+  }
+  let n = 0
+  for (const v of map.values()) if (v) n++
+  workspaceUi.expertsRunning = n
+}
+
+watch(() => sessions.streamEvents.length, syncExpertsRunning, { immediate: true })
+
+watch(
+  () => approvalAnchors.value.filter((a) => a.pending).length,
+  (n) => { workspaceUi.pendingApprovals = n },
+  { immediate: true },
+)
 
 function onTitleKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter') {
@@ -1322,9 +1426,9 @@ function onTitleKeydown(e: KeyboardEvent) {
       </div>
       <div class="session-workspace__actions">
         <DqButton v-if="sessions.runningTurnId" type="warning" size="small" @click="cancelRunning">
-          取消运行
+          {{ t('sessions.cancelRunning') }}
         </DqButton>
-        <button class="session-workspace__copy-btn" title="复制链接" @click="copyLink">
+        <button class="session-workspace__copy-btn" :title="t('sessions.copyLink')" @click="copyLink">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
             <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
@@ -1332,6 +1436,8 @@ function onTitleKeydown(e: KeyboardEvent) {
         </button>
       </div>
     </header>
+
+    <ContextUsageBar />
 
     <div ref="bodyRef" class="session-workspace__body" :style="{ gridTemplateColumns: `${splitPercent}% 8px 1fr` }">
       <div class="session-workspace__stream">
@@ -1342,14 +1448,12 @@ function onTitleKeydown(e: KeyboardEvent) {
         @scroll="onScrollAreaScroll"
       >
         <div v-if="sessions.composingNew && !sessions.currentSession" class="session-workspace__empty">
-          <DqEmpty description="新建会话">
-            <p class="session-workspace__hint">在下方 Composer 输入目标，选择项目并发送。没有项目时点击项目下拉可新建。</p>
-          </DqEmpty>
+          <WelcomeEmpty @pick-prompt="onWelcomePrompt" />
         </div>
 
         <div v-else-if="!visibleTurns.length" class="session-workspace__empty">
-          <DqEmpty description="等待任务开始">
-            <p class="session-workspace__hint">输入第一条消息启动 Agent。</p>
+          <DqEmpty :description="t('sessions.waitingFirstMessage')">
+            <p class="session-workspace__hint">{{ t('sessions.waitingFirstHint') }}</p>
           </DqEmpty>
         </div>
 
@@ -1404,7 +1508,7 @@ function onTitleKeydown(e: KeyboardEvent) {
                     </span>
                   </template>
                   <span v-if="turnSummary(turn).tokensUsed > 0" class="turn__summary-item turn__summary-item--tokens">
-                    {{ turnSummary(turn).tokensUsed >= 1000 ? (turnSummary(turn).tokensUsed / 1000).toFixed(1) + 'k' : turnSummary(turn).tokensUsed }} tokens
+                    {{ formatTokenCount(turnSummary(turn).tokensUsed) }} tokens
                   </span>
                 </div>
                 <button class="turn__download-btn" title="下载 Turn Log" @click.stop="downloadTurnLog(turn.id)">
@@ -1418,9 +1522,19 @@ function onTitleKeydown(e: KeyboardEvent) {
             </div>
 
             <div v-show="!isTurnCollapsed(turn.id)" class="turn__body">
-            <div v-if="turn.userText" class="turn__user">
+            <div v-if="turn.userText || turn.userImages?.length" class="turn__user">
               <div class="turn__bubble turn__bubble--user">
-                <p>{{ turn.userText }}</p>
+                <div v-if="turn.userImages?.length" class="turn__user-images">
+                  <img
+                    v-for="(img, i) in turn.userImages"
+                    :key="`${turn.id}-img-${i}`"
+                    class="turn__user-image"
+                    :src="img.dataUrl"
+                    :alt="img.name || 'attachment'"
+                    :title="img.name || undefined"
+                  />
+                </div>
+                <p v-if="turn.userText && turn.userText !== '[Image attachment]'">{{ turn.userText }}</p>
               </div>
             </div>
 
@@ -1433,65 +1547,16 @@ function onTitleKeydown(e: KeyboardEvent) {
                     class="turn__event"
                   >
                     <template v-if="ev.type === '__tool_card__'">
-                      <div
-                        class="tool-card"
-                        :class="{
-                          'is-expanded': isToolCardExpanded(ev.seq),
-                          'is-running': (ev.payload as ToolCard).status === 'running' && !((ev.payload as ToolCard).name === 'delegate_agent' && delegateCardAwaiting(ev.seq)),
-                          'is-awaiting-approval': (ev.payload as ToolCard).name === 'delegate_agent' && delegateCardAwaiting(ev.seq),
-                          'is-completed': (ev.payload as ToolCard).status === 'completed',
-                          'is-error': (ev.payload as ToolCard).status === 'error',
-                        }"
-                      >
-                        <div class="tool-card__header" @click="toggleToolCard(ev.seq)">
-                          <div class="tool-card__meta">
-                            <span class="tool-card__icon" v-html="toolSvgIcon((ev.payload as ToolCard).name)" />
-                            <span class="tool-card__name">{{ (ev.payload as ToolCard).name }}</span>
-                            <span v-if="(ev.payload as ToolCard).description" class="tool-card__desc">{{ (ev.payload as ToolCard).description }}</span>
-                          </div>
-                          <div class="tool-card__actions">
-                            <span
-                              v-if="(ev.payload as ToolCard).name === 'delegate_agent' && delegateCardAwaiting(ev.seq)"
-                              class="tool-card__status-badge is-awaiting"
-                            >
-                              <span class="tool-card__spinner" />
-                              <span>{{ delegateCardAwaitingLabel(ev.seq) }}</span>
-                            </span>
-                            <span v-else-if="(ev.payload as ToolCard).status === 'running'" class="tool-card__status-badge is-running">
-                              <span class="tool-card__spinner" />
-                              <span>执行中</span>
-                            </span>
-                            <span v-else-if="(ev.payload as ToolCard).status === 'error'" class="tool-card__status-badge is-error">错误</span>
-                            <span
-                              v-if="(ev.payload as ToolCard).name === 'delegate_agent' && delegateChildTurnId(ev.seq)"
-                              class="tool-card__link"
-                              :class="{ 'is-awaiting': delegateCardAwaiting(ev.seq) }"
-                              @click.stop="drillIntoChildTurnBySeq(ev.seq)"
-                            >{{ delegateCardLinkLabel(ev.seq) }}</span>
-                            <svg class="tool-card__chevron" :class="{ 'is-open': isToolCardExpanded(ev.seq) }" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                          </div>
-                        </div>
-                        <div v-show="isToolCardExpanded(ev.seq)" class="tool-card__body">
-                          <div v-if="(ev.payload as ToolCard).inputStr && (ev.payload as ToolCard).name !== 'ask_user'" class="tool-card__section">
-                            <span class="tool-card__section-label">输入</span>
-                            <div v-if="toolInputFields((ev.payload as ToolCard).inputStr)" class="tool-card__fields">
-                              <div v-for="field in toolInputFields((ev.payload as ToolCard).inputStr)" :key="field.key" class="tool-card__field">
-                                <span class="tool-card__field-key">{{ field.key }}</span>
-                                <span class="tool-card__field-val" :title="field.value">{{ truncateText(field.value) }}</span>
-                              </div>
-                            </div>
-                            <pre v-else class="tool-card__code">{{ (ev.payload as ToolCard).inputStr }}</pre>
-                          </div>
-                          <div v-if="(ev.payload as ToolCard).output" class="tool-card__section">
-                            <span class="tool-card__section-label">输出</span>
-                            <pre class="tool-card__code">{{ (ev.payload as ToolCard).output }}</pre>
-                          </div>
-                          <div v-if="(ev.payload as ToolCard).error" class="tool-card__section tool-card__section--error">
-                            <span class="tool-card__section-label">错误</span>
-                            <pre class="tool-card__code">{{ (ev.payload as ToolCard).error }}</pre>
-                          </div>
-                        </div>
-                      </div>
+                      <ToolCardBlock
+                        :card="ev.payload as ToolCard"
+                        :expanded="isToolCardExpanded(ev.seq)"
+                        :awaiting-approval="(ev.payload as ToolCard).name === 'delegate_agent' && delegateCardAwaiting(ev.seq)"
+                        :awaiting-label="delegateCardAwaitingLabel(ev.seq)"
+                        :show-child-link="(ev.payload as ToolCard).name === 'delegate_agent' && !!delegateChildTurnId(ev.seq)"
+                        :child-link-label="delegateCardLinkLabel(ev.seq)"
+                        @toggle="toggleToolCard(ev.seq)"
+                        @open-child="drillIntoChildTurnBySeq(ev.seq)"
+                      />
                     </template>
 
                     <template v-else-if="ev.type === 'agent.message'">
@@ -1661,124 +1726,25 @@ function onTitleKeydown(e: KeyboardEvent) {
         </div>
       </div>
 
-      <aside
-        v-if="approvalAnchors.length"
-        class="approval-rail"
-        aria-label="审批事件锚点"
-      >
-        <div class="approval-rail__track" />
-        <button
-          v-for="a in approvalAnchors"
-          :key="a.key"
-          type="button"
-          class="approval-rail__anchor"
-          :class="{
-            'is-permission': a.kind === 'permission',
-            'is-ask': a.kind === 'ask',
-            'is-pending': a.pending,
-          }"
-          :style="{ top: `${a.topPercent}%` }"
-          :title="a.label"
-          @click="jumpToApprovalAnchor(a)"
-        >
-          <span class="approval-rail__dot" />
-          <span class="approval-rail__tip">{{ a.kind === 'permission' ? '审批' : '提问' }}</span>
-        </button>
-      </aside>
+      <ApprovalRail :anchors="approvalAnchors" @jump="jumpToApprovalAnchor" />
+      
       </div>
 
       <div class="session-workspace__split" @pointerdown="onSplitResizePointerDown" />
 
       <div class="session-workspace__right">
-        <div class="session-workspace__right-tabs">
-          <button
-            class="session-workspace__right-tab"
-            :class="{ 'is-active': rightTab === 'plan' }"
-            @click="rightTab = 'plan'"
-            title="计划"
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/>
-              <circle cx="12" cy="12" r="6"/>
-              <circle cx="12" cy="12" r="2"/>
-            </svg>
-          </button>
-          <button
-            class="session-workspace__right-tab"
-            :class="{ 'is-active': rightTab === 'files' }"
-            @click="rightTab = 'files'"
-            title="文件"
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-            </svg>
-          </button>
-          <button
-            class="session-workspace__right-tab"
-            :class="{ 'is-active': rightTab === 'experts' }"
-            @click="rightTab = 'experts'"
-            title="专家"
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-              <circle cx="9" cy="7" r="4"/>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-            </svg>
-          </button>
-          <button
-            class="session-workspace__right-tab"
-            :class="{ 'is-active': rightTab === 'changes' }"
-            @click="rightTab = 'changes'"
-            title="变更"
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="6" y1="3" x2="6" y2="15"/>
-              <circle cx="18" cy="6" r="3"/>
-              <circle cx="6" cy="18" r="3"/>
-              <path d="M18 9a9 9 0 0 1-9 9"/>
-            </svg>
-          </button>
-          <button
-            class="session-workspace__right-tab"
-            :class="{ 'is-active': rightTab === 'terminal' }"
-            @click="rightTab = 'terminal'"
-            title="终端"
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="4 17 10 11 4 5"/>
-              <line x1="12" y1="19" x2="20" y2="19"/>
-            </svg>
-          </button>
-          <button
-            class="session-workspace__right-tab"
-            :class="{ 'is-active': rightTab === 'browser' }"
-            @click="rightTab = 'browser'"
-            title="浏览器"
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="2" y1="12" x2="22" y2="12"/>
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-            </svg>
-          </button>
-        </div>
-        <PlanPanel v-if="rightTab === 'plan'" :stream-events="sessions.streamEvents" />
-        <template v-else-if="rightTab === 'files'">
-          <FileTree
-            v-if="sessions.selectedProjectId"
-            ref="fileTreeRef"
-            :project-id="sessions.selectedProjectId"
-            @open-in-browser="openFileInBrowser"
-          />
-          <div v-else class="session-workspace__right-empty">
-            未关联项目
-          </div>
-        </template>
-        <ExpertsPanel v-else-if="rightTab === 'experts'" :stream-events="sessions.streamEvents" />
-        <ChangesPanel v-else-if="rightTab === 'changes'" ref="changesPanelRef" />
-        <template v-else-if="rightTab === 'browser'">
-          <div class="session-workspace__browser">
+        <RightWorkspacePanel
+          ref="rightPanelRef"
+          v-model:tab="rightTab"
+          :stream-events="sessions.streamEvents"
+          :project-id="sessions.selectedProjectId"
+          :changes-count="workspaceUi.changesCount"
+          :experts-running="workspaceUi.expertsRunning"
+          @open-in-browser="openFileInBrowser"
+        >
+          <template #browser>
+<div class="session-workspace__browser">
+            <p v-if="selectingElement" class="session-workspace__browser-hint">{{ t('sessions.designModeHint') }}</p>
             <div class="session-workspace__browser-bar">
               <input
                 v-model="browserUrlInput"
@@ -1797,7 +1763,7 @@ function onTitleKeydown(e: KeyboardEvent) {
               <button
                 class="session-workspace__browser-btn"
                 :class="{ 'is-active': selectingElement }"
-                :title="selectingElement ? '取消选择 (Esc)' : '选择元素'"
+                :title="selectingElement ? t('sessions.designModeOn') : t('sessions.designModeOff')"
                 @click="selectingElement ? stopElementSelect() : startElementSelect()"
               >
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>
@@ -1826,19 +1792,8 @@ function onTitleKeydown(e: KeyboardEvent) {
               />
             </div>
           </div>
-        </template>
-        <div
-          v-if="rightTab === 'terminal' && !sessions.selectedProjectId"
-          class="session-workspace__right-empty"
-        >
-          未关联项目
-        </div>
-        <TerminalPanel
-          v-if="terminalOpened && sessions.selectedProjectId"
-          v-show="rightTab === 'terminal'"
-          :key="sessions.selectedProjectId"
-          :project-id="sessions.selectedProjectId"
-        />
+          </template>
+        </RightWorkspacePanel>
       </div>
     </div>
 
@@ -2287,6 +2242,21 @@ function onTitleKeydown(e: KeyboardEvent) {
   background: var(--dq-accent);
   color: var(--dq-color-white);
   box-shadow: 0 1px 3px color-mix(in srgb, var(--dq-accent) 20%, transparent);
+}
+
+.turn__user-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.turn__user-image {
+  max-width: min(240px, 100%);
+  max-height: 180px;
+  border-radius: 8px;
+  object-fit: contain;
+  background: color-mix(in srgb, var(--dq-color-black) 12%, transparent);
 }
 
 .turn__bubble p {
@@ -3263,6 +3233,12 @@ function onTitleKeydown(e: KeyboardEvent) {
   background: var(--teams-glass-bg);
 }
 
+.session-workspace__right > :deep(.right-workspace) {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
 .session-workspace__right-tabs {
   display: flex;
   flex-shrink: 0;
@@ -3342,6 +3318,15 @@ function onTitleKeydown(e: KeyboardEvent) {
 }
 
 /* ── Browser tab ── */
+.session-workspace__browser-hint {
+  margin: 0;
+  padding: 6px 12px;
+  font-size: var(--dq-font-size-caption);
+  color: var(--dq-accent);
+  background: color-mix(in srgb, var(--dq-accent) 10%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--dq-accent) 20%, transparent);
+}
+
 .session-workspace__browser {
   flex: 1;
   min-height: 0;
@@ -3405,22 +3390,23 @@ function onTitleKeydown(e: KeyboardEvent) {
 
 .session-workspace__browser-stage {
   position: relative;
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
   overflow: hidden;
 }
 
 .session-workspace__browser-frame {
-  flex: 1;
-  min-height: 0;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   border: none;
+  display: block;
 }
 
 .session-workspace__browser-md {
-  flex: 1;
-  min-height: 0;
+  position: absolute;
+  inset: 0;
   overflow-y: auto;
   padding: 24px 32px;
   background: var(--dq-bg-base);

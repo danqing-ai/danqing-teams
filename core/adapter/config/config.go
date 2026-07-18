@@ -66,7 +66,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("runtime.team.max_delegation_depth", 3)
 	v.SetDefault("runtime.memory.recall_top_k", 3)
 	v.SetDefault("runtime.knowledge.search_top_k", 3)
-	v.SetDefault("runtime.compaction.enabled", false)
+	v.SetDefault("runtime.compaction.enabled", true)
 	v.SetDefault("runtime.compaction.model", "")
 	v.SetDefault("runtime.compaction.max_tokens", 128000)
 	v.SetDefault("runtime.compaction.trigger_ratio", 0.85)

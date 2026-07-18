@@ -16,8 +16,16 @@ type TurnEndedPayload struct {
 	Summary string `json:"summary,omitempty"`
 }
 
+type UserMessageAttachment struct {
+	Type     string `json:"type"`
+	Name     string `json:"name,omitempty"`
+	MimeType string `json:"mimeType,omitempty"`
+	DataURL  string `json:"dataUrl,omitempty"` // data:<mime>;base64,... for UI preview
+}
+
 type UserMessagePayload struct {
-	Content string `json:"content"`
+	Content     string                  `json:"content"`
+	Attachments []UserMessageAttachment `json:"attachments,omitempty"`
 }
 
 type AgentMessagePayload struct {

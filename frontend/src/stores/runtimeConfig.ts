@@ -44,7 +44,7 @@ function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
     maxDelegationDepth: rt.team.maxDelegationDepth,
     recallTopK: rt.memory.recallTopK,
     searchTopK: rt.knowledge.searchTopK,
-    compactionEnabled: rt.compaction?.enabled ?? false,
+    compactionEnabled: rt.compaction?.enabled ?? true,
     compactionMaxTokens: rt.compaction?.maxTokens ?? 128000,
     compactionTriggerRatio: rt.compaction?.triggerRatio ?? 0.85,
     compactionCutTokens: rt.compaction?.cutTokens ?? 16000,

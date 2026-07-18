@@ -159,8 +159,9 @@ func (e *Engine) RegisterTool(h tool.Handler) {
 	e.toolCatalog.Register(h)
 }
 
-func (e *Engine) StartSession(ctx context.Context, s domain.Session) {
+func (e *Engine) StartSession(ctx context.Context, s domain.Session, attachments []domain.UserAttachment) {
 	turnID := fmt.Sprintf("turn-%d", time.Now().UnixNano())
+	atts := append([]domain.UserAttachment(nil), attachments...)
 	go func() {
 		turnCtx, cancel := context.WithCancel(context.Background())
 		e.mu.Lock()
@@ -181,13 +182,14 @@ func (e *Engine) StartSession(ctx context.Context, s domain.Session) {
 		agentPtr := *agent
 
 		reg := e.setupRegistry(s, agentPtr)
-		rep, err := e.runTurn(turnCtx, s.ID, turnID, s.Content, s.ModelID, s.ProjectID, agentPtr, reg)
+		rep, err := e.runTurn(turnCtx, s.ID, turnID, s.Content, s.ModelID, s.ProjectID, agentPtr, reg, atts)
 		e.turnLog.EndTurn(turnID, turnStatus(err, rep))
 	}()
 }
 
-func (e *Engine) StartTurn(ctx context.Context, sessionID, userInput, agentID, modelID string) (string, error) {
+func (e *Engine) StartTurn(ctx context.Context, sessionID, userInput, agentID, modelID string, attachments []domain.UserAttachment) (string, error) {
 	turnID := fmt.Sprintf("turn-%d", time.Now().UnixNano())
+	atts := append([]domain.UserAttachment(nil), attachments...)
 	// Reset session status to active so UI shows "运行中"
 	e.updateSessionStatus(sessionID, domain.SessionStatusActive)
 	go func() {
@@ -221,7 +223,7 @@ func (e *Engine) StartTurn(ctx context.Context, sessionID, userInput, agentID, m
 		}()
 
 		reg := e.setupRegistry(s, agentPtr)
-		rep, err := e.runTurn(turnCtx, sessionID, turnID, userInput, targetModelID, s.ProjectID, agentPtr, reg)
+		rep, err := e.runTurn(turnCtx, sessionID, turnID, userInput, targetModelID, s.ProjectID, agentPtr, reg, atts)
 		e.turnLog.EndTurn(turnID, turnStatus(err, rep))
 	}()
 	return turnID, nil
@@ -493,14 +495,14 @@ func (e *Engine) resolveAgentSkills(agent domain.Agent) []domain.Skill {
 	return result
 }
 
-func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, projectID string, agent domain.Agent, reg *tool.Registry) (domain.Report, error) {
+func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, projectID string, agent domain.Agent, reg *tool.Registry, attachments []domain.UserAttachment) (domain.Report, error) {
 	cfg := e.loadRunCfg(ctx)
 
 	e.turnRunner.Registry = reg
 	e.stream.Publish(ctx, sessionID, turnID, domain.EventTurnStarted, domain.TurnStartedPayload{
 		TurnID: turnID, AgentID: agent.ID, Goal: goal,
 	})
-	e.stream.Publish(ctx, sessionID, turnID, domain.EventUserMessage, domain.UserMessagePayload{Content: goal})
+	e.stream.Publish(ctx, sessionID, turnID, domain.EventUserMessage, userMessagePayload(goal, attachments))
 
 	e.turnLog.Create(turnID, sessionID, projectID, agent.ID, goal)
 	_ = e.turns.Create(ctx, domain.TurnLog{ID: turnID, SessionID: sessionID, AgentID: agent.ID, Goal: goal, Status: domain.TurnRunning})
@@ -532,7 +534,7 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 	e.mu.Unlock()
 	messages = append(messages, prevMsgs...)
 
-	messages = append(messages, Message{Role: RoleUser, Content: goal})
+	messages = append(messages, userMessageFromAttachments(goal, attachments))
 
 	workDir := e.resolveWorkDir(ctx, projectID)
 

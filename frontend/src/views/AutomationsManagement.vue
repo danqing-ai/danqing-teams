@@ -14,6 +14,7 @@ const agents = useGlobalAgentsStore()
 const selectedId = ref<string | null>(null)
 const isCreating = ref(false)
 const saving = ref(false)
+const listFilter = ref<'current' | 'paused' | 'all'>('current')
 
 const triggerOptions = computed<{ value: AutomationTrigger; label: string }[]>(() => [
   { value: 'schedule', label: t('automations.schedule') },
@@ -35,9 +36,12 @@ const form = ref<Automation>({
   prompt: '',
 })
 
-const sortedAutomations = computed(() =>
-  [...automations.items].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')),
-)
+const sortedAutomations = computed(() => {
+  let list = [...automations.items]
+  if (listFilter.value === 'current') list = list.filter((a) => a.enabled)
+  else if (listFilter.value === 'paused') list = list.filter((a) => !a.enabled)
+  return list.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
+})
 const selected = computed(() => automations.items.find((a) => a.id === selectedId.value))
 const hasSelection = computed(() => isCreating.value || !!selectedId.value)
 const headerTitle = computed(() => {
@@ -146,7 +150,7 @@ function onKeydown(e: KeyboardEvent) {
 <template>
   <WorkspaceShell
     :title="$t('automations.title')"
-    :count="sortedAutomations.length"
+    :count="automations.items.length"
     :count-label="$t('automations.title')"
     :create-label="$t('automations.newAutomation')"
     :has-selection="hasSelection"
@@ -154,6 +158,11 @@ function onKeydown(e: KeyboardEvent) {
     @keydown="onKeydown"
   >
     <template #rail>
+      <div class="automations-filter">
+        <button type="button" :class="{ 'is-active': listFilter === 'current' }" @click="listFilter = 'current'">{{ $t('automations.filterCurrent') }}</button>
+        <button type="button" :class="{ 'is-active': listFilter === 'paused' }" @click="listFilter = 'paused'">{{ $t('automations.filterPaused') }}</button>
+        <button type="button" :class="{ 'is-active': listFilter === 'all' }" @click="listFilter = 'all'">{{ $t('automations.filterAll') }}</button>
+      </div>
       <DqEmpty v-if="!sortedAutomations.length" class="resource-rail__empty" :description="$t('automations.noAutomations')" />
       <nav v-else class="resource-rail__list" :aria-label="$t('automations.automationList')">
         <button
@@ -269,3 +278,28 @@ function onKeydown(e: KeyboardEvent) {
     </template>
   </WorkspaceShell>
 </template>
+
+<style scoped>
+.automations-filter {
+  display: flex;
+  gap: 4px;
+  padding: 8px 10px 4px;
+}
+
+.automations-filter button {
+  flex: 1;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dq-label-tertiary);
+  font-size: var(--dq-font-size-caption);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.automations-filter button.is-active {
+  background: color-mix(in srgb, var(--dq-accent) 12%, transparent);
+  color: var(--dq-accent);
+}
+</style>

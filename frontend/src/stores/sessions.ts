@@ -141,19 +141,29 @@ export const useSessionsStore = defineStore('sessions', () => {
     }
   }
 
-  async function createSession(content: string, projectId?: string | null) {
+  async function createSession(
+    content: string,
+    projectId?: string | null,
+    attachments?: Array<{
+      type: string
+      name?: string
+      mimeType?: string
+      data: string
+    }>,
+  ) {
     loading.value = true
     try {
       const agentId = selectedAgentId.value || defaultAgentId()
       if (!agentId) {
         throw new Error(i18n.global.t('sessions.noAgent'))
       }
-      const body = {
+      const body: Record<string, unknown> = {
         agentId,
         modelId: selectedModelId.value,
         content,
         projectId: projectId ?? undefined,
       }
+      if (attachments?.length) body.attachments = attachments
       const t = await fetchJSON<Session>('/sessions', {
         method: 'POST',
         body: JSON.stringify(body),
@@ -245,13 +255,23 @@ export const useSessionsStore = defineStore('sessions', () => {
     }
   }
 
-  async function sendTurn(userInput: string) {
-    if (!currentSessionId.value || !userInput.trim() || loading.value) return
+  async function sendTurn(
+    userInput: string,
+    attachments?: Array<{
+      type: string
+      name?: string
+      mimeType?: string
+      data: string
+    }>,
+  ) {
+    const hasAtts = Boolean(attachments?.length)
+    if (!currentSessionId.value || (!userInput.trim() && !hasAtts) || loading.value) return
     loading.value = true
     try {
       const body: Record<string, unknown> = { userInput: userInput.trim() }
       if (selectedAgentId.value) body.agentId = selectedAgentId.value
       body.modelId = selectedModelId.value
+      if (hasAtts) body.attachments = attachments
       await fetchJSON(`/sessions/${currentSessionId.value}/turns`, {
         method: 'POST',
         body: JSON.stringify(body),

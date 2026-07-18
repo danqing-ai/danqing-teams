@@ -23,17 +23,27 @@ type Session struct {
 	UpdatedAt time.Time     `json:"updatedAt"`
 }
 
+// UserAttachment is a multimodal part attached to a user message (vision images).
+type UserAttachment struct {
+	Type     string `json:"type"`               // "image"
+	Name     string `json:"name,omitempty"`
+	MimeType string `json:"mimeType,omitempty"` // image/png|jpeg|webp|gif
+	Data     string `json:"data,omitempty"`     // raw base64 (data: URL prefix allowed)
+}
+
 type CreateSessionRequest struct {
-	Content   string `json:"content"`
-	AgentID   string `json:"agentId,omitempty"`
-	ProjectID string `json:"projectId,omitempty"`
-	ModelID   string `json:"modelId,omitempty"`
+	Content     string           `json:"content"`
+	AgentID     string           `json:"agentId,omitempty"`
+	ProjectID   string           `json:"projectId,omitempty"`
+	ModelID     string           `json:"modelId,omitempty"`
+	Attachments []UserAttachment `json:"attachments,omitempty"`
 }
 
 type SendMessageRequest struct {
-	UserInput string `json:"userInput"`
-	AgentID   string `json:"agentId,omitempty"`
-	ModelID   string `json:"modelId,omitempty"`
+	UserInput   string           `json:"userInput"`
+	AgentID     string           `json:"agentId,omitempty"`
+	ModelID     string           `json:"modelId,omitempty"`
+	Attachments []UserAttachment `json:"attachments,omitempty"`
 }
 
 type UpdateSessionRequest struct {

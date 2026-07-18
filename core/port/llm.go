@@ -5,9 +5,19 @@ import (
 	"danqing-teams/core/domain"
 )
 
+// ChatContentPart is a multimodal content block (text or image) for vision models.
+type ChatContentPart struct {
+	Type     string // "text" | "image"
+	Text     string
+	MimeType string // image/* for image parts
+	Data     string // raw base64 for image parts
+	Name     string
+}
+
 type ChatMessage struct {
 	Role       string
-	Content    string
+	Content    string            // text-only shortcut; ignored for content when Parts is set for user msgs with images
+	Parts      []ChatContentPart // optional multimodal parts (user images)
 	ToolCalls  []ChatToolCall
 	ToolCallID string
 	Name       string

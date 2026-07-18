@@ -48,12 +48,21 @@ const (
 	RoleTool      Role = "tool"
 )
 
+// ContentPart is a multimodal block on a message (vision images).
+type ContentPart struct {
+	Type     string `json:"type"` // "image"
+	MimeType string `json:"mimeType,omitempty"`
+	Data     string `json:"data,omitempty"` // raw base64
+	Name     string `json:"name,omitempty"`
+}
+
 type Message struct {
-	Role       Role       `json:"role"`
-	Content    string     `json:"content,omitempty"`
-	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string     `json:"tool_call_id,omitempty"`
-	Name       string     `json:"name,omitempty"`
+	Role       Role          `json:"role"`
+	Content    string        `json:"content,omitempty"`
+	Parts      []ContentPart `json:"parts,omitempty"`
+	ToolCalls  []ToolCall    `json:"tool_calls,omitempty"`
+	ToolCallID string        `json:"tool_call_id,omitempty"`
+	Name       string        `json:"name,omitempty"`
 }
 
 type ToolCall struct {
@@ -65,13 +74,62 @@ type ToolCall struct {
 func toPortMessages(msgs []Message) []port.ChatMessage {
 	out := make([]port.ChatMessage, len(msgs))
 	for i, m := range msgs {
+		var parts []port.ChatContentPart
+		if len(m.Parts) > 0 {
+			parts = make([]port.ChatContentPart, len(m.Parts))
+			for j, p := range m.Parts {
+				parts[j] = port.ChatContentPart{
+					Type: p.Type, MimeType: p.MimeType, Data: p.Data, Name: p.Name,
+				}
+			}
+		}
 		out[i] = port.ChatMessage{
-			Role: string(m.Role), Content: m.Content,
+			Role: string(m.Role), Content: m.Content, Parts: parts,
 			ToolCalls:  toPortToolCalls(m.ToolCalls),
 			ToolCallID: m.ToolCallID, Name: m.Name,
 		}
 	}
 	return out
+}
+
+func userMessageFromAttachments(goal string, atts []domain.UserAttachment) Message {
+	msg := Message{Role: RoleUser, Content: goal}
+	if len(atts) == 0 {
+		return msg
+	}
+	parts := make([]ContentPart, 0, len(atts))
+	for _, a := range atts {
+		if a.Type != "image" || a.Data == "" {
+			continue
+		}
+		parts = append(parts, ContentPart{
+			Type: "image", MimeType: a.MimeType, Data: a.Data, Name: a.Name,
+		})
+	}
+	msg.Parts = parts
+	return msg
+}
+
+func userMessagePayload(goal string, atts []domain.UserAttachment) domain.UserMessagePayload {
+	p := domain.UserMessagePayload{Content: goal}
+	if len(atts) == 0 {
+		return p
+	}
+	p.Attachments = make([]domain.UserMessageAttachment, 0, len(atts))
+	for _, a := range atts {
+		if a.Type != "image" || a.Data == "" {
+			continue
+		}
+		mime := a.MimeType
+		if mime == "" {
+			mime = "image/png"
+		}
+		p.Attachments = append(p.Attachments, domain.UserMessageAttachment{
+			Type: "image", Name: a.Name, MimeType: mime,
+			DataURL: "data:" + mime + ";base64," + a.Data,
+		})
+	}
+	return p
 }
 
 func toPortToolCalls(calls []ToolCall) []port.ChatToolCall {

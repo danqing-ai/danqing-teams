@@ -6,8 +6,8 @@ import (
 )
 
 type Engine interface {
-	StartSession(ctx context.Context, s domain.Session)
-	StartTurn(ctx context.Context, sessionID, userInput, agentID, modelID string) (string, error)
+	StartSession(ctx context.Context, s domain.Session, attachments []domain.UserAttachment)
+	StartTurn(ctx context.Context, sessionID, userInput, agentID, modelID string, attachments []domain.UserAttachment) (string, error)
 	ResumeTurn(ctx context.Context, sessionID, turnID string)
 	CancelTurn(ctx context.Context, turnID string)
 	ListTurns(sessionID string) []domain.TurnLog
