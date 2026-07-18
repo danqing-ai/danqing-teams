@@ -26,24 +26,24 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: ${{ env.REPO_DIR }}
 
       - name: Checkout dq-ui
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: danqing-ai/dq-ui
           path: dq-ui
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: ${{ env.REPO_DIR }}/go.sum
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -92,7 +92,7 @@ jobs:
           make pack-macos-desktop RELEASE_VERSION="$RELEASE_VERSION"
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: danqing-teams-desktop-macos
           path: |
@@ -106,24 +106,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: ${{ env.REPO_DIR }}
 
       - name: Checkout dq-ui
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: danqing-ai/dq-ui
           path: dq-ui
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: ${{ env.REPO_DIR }}/go.sum
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -166,7 +166,7 @@ jobs:
           make pack-linux-server RELEASE_VERSION="$RELEASE_VERSION"
 
       - name: Upload Linux server artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: danqing-teams-server-linux
           path: ${{ env.REPO_DIR }}/out/dist/${{ env.APP_NAME }}-linux-*.tar.gz
@@ -180,24 +180,24 @@ jobs:
         shell: bash
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: ${{ env.REPO_DIR }}
 
       - name: Checkout dq-ui
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: danqing-ai/dq-ui
           path: dq-ui
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: ${{ env.REPO_DIR }}/go.sum
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -256,7 +256,7 @@ jobs:
           make pack-windows-desktop RELEASE_VERSION="$RELEASE_VERSION"
 
       - name: Upload Windows desktop artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: danqing-teams-desktop-windows
           path: |
@@ -273,24 +273,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: ${{ env.REPO_DIR }}
 
       - name: Download macOS artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: danqing-teams-desktop-macos
           path: release-assets/macos
 
       - name: Download Linux server artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: danqing-teams-server-linux
           path: release-assets/linux
 
       - name: Download Windows desktop artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: danqing-teams-desktop-windows
           path: release-assets/windows
