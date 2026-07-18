@@ -3,11 +3,42 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	"danqing-teams/core/domain"
 	"danqing-teams/core/port"
 )
+
+// ValidSkillResourcePrefixes are the allowed top-level dirs for skill resource files.
+var ValidSkillResourcePrefixes = []string{"scripts/", "references/", "assets/"}
+
+// NormalizeSkillResourcePath cleans and validates a skill resource relative path.
+func NormalizeSkillResourcePath(path string) (string, error) {
+	p := strings.TrimSpace(path)
+	p = strings.TrimPrefix(p, "/")
+	p = strings.ReplaceAll(p, "\\", "/")
+	if p == "" {
+		return "", fmt.Errorf("path required")
+	}
+	if strings.Contains(p, "..") {
+		return "", fmt.Errorf("invalid path: must not contain \"..\"")
+	}
+	ok := false
+	for _, prefix := range ValidSkillResourcePrefixes {
+		if strings.HasPrefix(p, prefix) {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return "", fmt.Errorf("invalid resource path %q: must be under scripts/, references/, or assets/", p)
+	}
+	if strings.HasSuffix(p, "/") {
+		return "", fmt.Errorf("invalid path: must be a file, not a directory")
+	}
+	return p, nil
+}
 
 type SkillManager struct {
 	store             port.SkillRepo
@@ -95,7 +126,29 @@ func (m *SkillManager) File(ctx context.Context, skillID, path string) (domain.S
 }
 
 func (m *SkillManager) UpsertFile(ctx context.Context, f domain.SkillFile) error {
+	path, err := NormalizeSkillResourcePath(f.Path)
+	if err != nil {
+		return err
+	}
+	f.Path = path
+	if f.SkillID == "" {
+		return fmt.Errorf("skillId required")
+	}
+	if f.ID == "" {
+		f.ID = f.SkillID + ":" + f.Path
+	}
+	if f.Size == 0 {
+		f.Size = int64(len(f.Content))
+	}
 	return m.filesRepo.Upsert(ctx, f)
+}
+
+func (m *SkillManager) DeleteFile(ctx context.Context, skillID, path string) error {
+	path, err := NormalizeSkillResourcePath(path)
+	if err != nil {
+		return err
+	}
+	return m.filesRepo.Delete(ctx, skillID, path)
 }
 
 func (m *SkillManager) DeleteFiles(ctx context.Context, skillID string) error {

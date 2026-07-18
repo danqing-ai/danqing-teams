@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,26 +36,28 @@ func (i *SkillImporter) Import(dirPath string) (*domain.Skill, []domain.SkillFil
 	if err != nil {
 		return nil, nil, err
 	}
+	if skill == nil {
+		return nil, nil, fmt.Errorf("invalid SKILL.md: missing or empty name in frontmatter")
+	}
 	skill.SourcePath = dirPath
 
 	var files []domain.SkillFile
 	for _, sub := range []string{"scripts", "references", "assets"} {
 		subDir := filepath.Join(dirPath, sub)
-		entries, err := os.ReadDir(subDir)
-		if err != nil {
-			continue
-		}
-		for _, entry := range entries {
-			if entry.IsDir() {
-				continue
+		_ = filepath.WalkDir(subDir, func(fullPath string, d os.DirEntry, walkErr error) error {
+			if walkErr != nil || d.IsDir() {
+				return nil
 			}
-			relPath := sub + "/" + entry.Name()
-			fullPath := filepath.Join(subDir, entry.Name())
+			rel, err := filepath.Rel(dirPath, fullPath)
+			if err != nil {
+				return nil
+			}
+			relPath := filepath.ToSlash(rel)
 			data, err := os.ReadFile(fullPath)
 			if err != nil {
-				continue
+				return nil
 			}
-			info, _ := entry.Info()
+			info, _ := d.Info()
 			size := int64(0)
 			if info != nil {
 				size = info.Size()
@@ -66,7 +69,8 @@ func (i *SkillImporter) Import(dirPath string) (*domain.Skill, []domain.SkillFil
 				Content: data,
 				Size:    size,
 			})
-		}
+			return nil
+		})
 	}
 
 	return skill, files, nil
@@ -104,13 +108,13 @@ func (i *SkillImporter) ParseSkillMD(content string) (*domain.Skill, error) {
 	var fm skillFrontmatter
 	parts := strings.SplitN(content, "---", 3)
 	if len(parts) < 3 {
-		return nil, nil
+		return nil, fmt.Errorf("invalid SKILL.md: missing YAML frontmatter")
 	}
 	if err := yaml.Unmarshal([]byte(strings.TrimSpace(parts[1])), &fm); err != nil {
 		return nil, err
 	}
 	if fm.Name == "" {
-		return nil, nil
+		return nil, fmt.Errorf("invalid SKILL.md: name is required in frontmatter")
 	}
 	return &domain.Skill{
 		ID:            fm.Name,

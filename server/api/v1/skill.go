@@ -117,6 +117,7 @@ func importSkillDir(h *SkillHandler) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		_ = h.Skills.DeleteFiles(c, skill.ID)
 		for _, f := range files {
 			if err := h.Skills.UpsertFile(c, f); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -159,7 +160,13 @@ func listSkillFiles(h *SkillHandler) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, files)
+		// Omit content blobs from listing responses.
+		out := make([]domain.SkillFile, len(files))
+		for i, f := range files {
+			f.Content = nil
+			out[i] = f
+		}
+		c.JSON(http.StatusOK, out)
 	}
 }
 
@@ -176,6 +183,62 @@ func getSkillFile(h *SkillHandler) gin.HandlerFunc {
 		} else {
 			c.Data(http.StatusOK, "application/octet-stream", f.Content)
 		}
+	}
+}
+
+func upsertSkillFile(h *SkillHandler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		skillID := c.Param("id")
+		fpath := strings.TrimPrefix(c.Param("path"), "/")
+		if _, err := h.Skills.Get(c, skillID); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "skill not found"})
+			return
+		}
+		path, err := service.NormalizeSkillResourcePath(fpath)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		var req struct {
+			Content string `json:"content"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		f := domain.SkillFile{
+			ID:      skillID + ":" + path,
+			SkillID: skillID,
+			Path:    path,
+			Content: []byte(req.Content),
+			Size:    int64(len(req.Content)),
+		}
+		if err := h.Skills.UpsertFile(c, f); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, domain.SkillFile{
+			ID:      f.ID,
+			SkillID: skillID,
+			Path:    path,
+			Size:    f.Size,
+		})
+	}
+}
+
+func deleteSkillFile(h *SkillHandler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		skillID := c.Param("id")
+		fpath := strings.TrimPrefix(c.Param("path"), "/")
+		if _, err := h.Skills.Get(c, skillID); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "skill not found"})
+			return
+		}
+		if err := h.Skills.DeleteFile(c, skillID, fpath); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	}
 }
 

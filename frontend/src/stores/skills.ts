@@ -3,6 +3,15 @@ import { ref } from 'vue'
 import { fetchJSON, asArray } from '@/api/client'
 import type { Skill, SkillFile } from '@/types'
 
+function skillFileURL(skillId: string, filePath: string) {
+  const encoded = filePath
+    .split('/')
+    .filter(Boolean)
+    .map(encodeURIComponent)
+    .join('/')
+  return `/skills/${skillId}/files/${encoded}`
+}
+
 export const useSkillsStore = defineStore('skills', () => {
   const items = ref<Skill[]>([])
   const loading = ref(false)
@@ -50,18 +59,33 @@ export const useSkillsStore = defineStore('skills', () => {
       method: 'POST',
       body: JSON.stringify({ path: dirPath }),
     })
-    items.value.push(result.skill)
+    const i = items.value.findIndex((s) => s.id === result.skill.id)
+    if (i >= 0) items.value[i] = result.skill
+    else items.value.push(result.skill)
     return result
   }
 
   async function getFiles(skillId: string) {
-    return fetchJSON<SkillFile[]>(`/skills/${skillId}/files`).catch(() => [] as SkillFile[])
+    return asArray(await fetchJSON<SkillFile[]>(`/skills/${skillId}/files`).catch(() => [] as SkillFile[]))
   }
 
   async function getFileContent(skillId: string, filePath: string): Promise<string> {
-    const resp = await fetch(`/api/v1/skills/${skillId}/files/${encodeURIComponent(filePath)}`)
+    const resp = await fetch(`/api/v1${skillFileURL(skillId, filePath)}`)
     if (!resp.ok) throw new Error('File not found')
     return resp.text()
+  }
+
+  async function upsertFile(skillId: string, filePath: string, content: string) {
+    return fetchJSON<SkillFile>(skillFileURL(skillId, filePath), {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    })
+  }
+
+  async function deleteFile(skillId: string, filePath: string) {
+    await fetchJSON(skillFileURL(skillId, filePath), {
+      method: 'DELETE',
+    })
   }
 
   async function getExportMD(skillId: string) {
@@ -90,6 +114,8 @@ export const useSkillsStore = defineStore('skills', () => {
     importDir,
     getFiles,
     getFileContent,
+    upsertFile,
+    deleteFile,
     getExportMD,
     reset,
   }

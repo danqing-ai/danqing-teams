@@ -179,26 +179,22 @@ func LoadSkillTemplateByID(id string) (*domain.Skill, error) {
 }
 
 // LoadBuiltinSkillFiles reads all resource files (scripts/, references/, assets/)
-// from the embedded FS for a given skill directory name.
+// from the embedded FS for a given skill directory name (including nested files).
 func LoadBuiltinSkillFiles(skillID string) ([]domain.SkillFile, error) {
 	skillDir := "skills/" + skillID
 	var files []domain.SkillFile
 	for _, sub := range []string{"scripts", "references", "assets"} {
 		subDir := skillDir + "/" + sub
-		entries, err := fs.ReadDir(SkillTemplates, subDir)
-		if err != nil {
-			continue
-		}
-		for _, entry := range entries {
-			if entry.IsDir() {
-				continue
+		_ = fs.WalkDir(SkillTemplates, subDir, func(fullPath string, d fs.DirEntry, walkErr error) error {
+			if walkErr != nil || d.IsDir() {
+				return nil
 			}
-			relPath := sub + "/" + entry.Name()
-			data, err := fs.ReadFile(SkillTemplates, subDir+"/"+entry.Name())
+			relPath := strings.TrimPrefix(fullPath, skillDir+"/")
+			data, err := fs.ReadFile(SkillTemplates, fullPath)
 			if err != nil {
-				continue
+				return nil
 			}
-			info, _ := entry.Info()
+			info, _ := d.Info()
 			var size int64
 			if info != nil {
 				size = info.Size()
@@ -210,7 +206,8 @@ func LoadBuiltinSkillFiles(skillID string) ([]domain.SkillFile, error) {
 				Content: data,
 				Size:    size,
 			})
-		}
+			return nil
+		})
 	}
 	return files, nil
 }

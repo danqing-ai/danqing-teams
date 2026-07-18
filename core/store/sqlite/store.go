@@ -221,6 +221,11 @@ func (r *skillFileRepo) Upsert(ctx context.Context, f domain.SkillFile) error {
 	return r.s.db.WithContext(ctx).Model(&existing).Updates(&m).Error
 }
 
+func (r *skillFileRepo) Delete(ctx context.Context, skillID, path string) error {
+	id := skillID + ":" + path
+	return r.s.db.WithContext(ctx).Delete(&skillFileModel{}, "id = ?", id).Error
+}
+
 func (r *skillFileRepo) DeleteBySkill(ctx context.Context, skillID string) error {
 	return r.s.db.WithContext(ctx).Delete(&skillFileModel{}, "skill_id = ?", skillID).Error
 }

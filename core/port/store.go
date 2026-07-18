@@ -36,6 +36,7 @@ type SkillFileRepo interface {
 	ListBySkill(ctx context.Context, skillID string) ([]domain.SkillFile, error)
 	Get(ctx context.Context, skillID, path string) (domain.SkillFile, error)
 	Upsert(ctx context.Context, f domain.SkillFile) error
+	Delete(ctx context.Context, skillID, path string) error
 	DeleteBySkill(ctx context.Context, skillID string) error
 }
 

@@ -22,6 +22,13 @@ const showImportDialog = ref(false)
 const importPath = ref('')
 const skillFiles = ref<SkillFile[]>([])
 const viewingFile = ref<SkillFile | null>(null)
+const showViewerDialog = ref(false)
+const showFileEditor = ref(false)
+const fileEditorMode = ref<'create' | 'edit'>('edit')
+const fileEditorPath = ref('')
+const fileEditorContent = ref('')
+const fileEditorSaving = ref(false)
+const fileEditorOriginalPath = ref('')
 
 const skillForm = ref<Skill>(emptySkill())
 
@@ -76,8 +83,6 @@ const skillTabs = computed(() => [
     value: 'tools' as const,
   },
 ])
-
-const showViewerDialog = ref(false)
 
 const metadataEntries = computed(() => {
   return Object.entries(skillForm.value.metadata ?? {}).map(([k, v]) => ({ key: k, value: v }))
@@ -169,6 +174,7 @@ async function resetSelected() {
   try {
     const s = await store.reset(selectedSkill.value.id)
     selectSkill(s.id)
+    skillFiles.value = await store.getFiles(s.id)
     toast.success(t('skills.reset'))
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('skills.resetFailed'))
@@ -241,7 +247,7 @@ async function viewFileContent(file: SkillFile) {
     const content = await store.getFileContent(file.skillId, file.path)
     viewingFile.value = { ...file, content }
     showViewerDialog.value = true
-  } catch (e) {
+  } catch {
     toast.error(t('skills.loadFileFailed'))
   }
 }
@@ -253,9 +259,113 @@ function onViewerClose(open: boolean) {
   }
 }
 
+function startCreateFile() {
+  if (!selectedId.value || isCreating.value) {
+    toast.warning(t('skills.emptySelection'))
+    return
+  }
+  fileEditorMode.value = 'create'
+  fileEditorPath.value = 'references/'
+  fileEditorOriginalPath.value = ''
+  fileEditorContent.value = ''
+  showFileEditor.value = true
+}
+
+async function startEditFile(file: SkillFile) {
+  try {
+    const content = await store.getFileContent(file.skillId, file.path)
+    fileEditorMode.value = 'edit'
+    fileEditorPath.value = file.path
+    fileEditorOriginalPath.value = file.path
+    fileEditorContent.value = content
+    showFileEditor.value = true
+  } catch {
+    toast.error(t('skills.loadFileFailed'))
+  }
+}
+
+function closeFileEditor() {
+  showFileEditor.value = false
+  fileEditorPath.value = ''
+  fileEditorContent.value = ''
+  fileEditorOriginalPath.value = ''
+}
+
+async function saveFileEditor() {
+  if (!selectedId.value) return
+  const path = fileEditorPath.value.trim()
+  if (!path) {
+    toast.warning(t('skills.filePathPlaceholder'))
+    return
+  }
+  fileEditorSaving.value = true
+  try {
+    if (
+      fileEditorMode.value === 'edit' &&
+      fileEditorOriginalPath.value &&
+      fileEditorOriginalPath.value !== path
+    ) {
+      await store.deleteFile(selectedId.value, fileEditorOriginalPath.value)
+    }
+    await store.upsertFile(selectedId.value, path, fileEditorContent.value)
+    skillFiles.value = await store.getFiles(selectedId.value)
+    toast.success(
+      fileEditorMode.value === 'create' ? t('skills.fileCreated') : t('skills.fileSaved'),
+    )
+    closeFileEditor()
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('skills.saveFileFailed'))
+  } finally {
+    fileEditorSaving.value = false
+  }
+}
+
+async function removeFile(file: SkillFile) {
+  if (!selectedId.value) return
+  try {
+    await confirm(t('skills.deleteFileConfirm', { path: file.path }), t('skills.deleteFileTitle'), {
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  try {
+    await store.deleteFile(selectedId.value, file.path)
+    skillFiles.value = await store.getFiles(selectedId.value)
+    toast.success(t('skills.fileDeleted'))
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('skills.saveFileFailed'))
+  }
+}
+
+async function exportSelected() {
+  if (!selectedSkill.value) return
+  try {
+    const md = await store.getExportMD(selectedSkill.value.id)
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'SKILL.md'
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success(t('skills.exportSuccess'))
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('skills.exportFailed'))
+  }
+}
+
+function onFileEditorClose(open: boolean) {
+  if (!open) closeFileEditor()
+}
+
 function onKeydown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key === 's') {
     e.preventDefault()
+    if (showFileEditor.value) {
+      saveFileEditor()
+      return
+    }
     save()
   }
 }
@@ -421,6 +531,15 @@ function formatSize(bytes: number): string {
 
         <!-- Files Tab -->
         <section v-show="activeTab === 'files'" class="resource-section">
+          <div class="resource-section__toolbar">
+            <DqButton
+              size="small"
+              :disabled="isCreating || !selectedId"
+              @click="startCreateFile"
+            >
+              {{ $t('skills.addFile') }}
+            </DqButton>
+          </div>
           <div v-if="!skillFiles.length" class="resource-section__empty">
             <DqEmpty :description="$t('skills.noFiles')" />
           </div>
@@ -432,6 +551,14 @@ function formatSize(bytes: number): string {
               </div>
               <div class="resource-list-card__actions">
                 <DqButton size="small" @click="viewFileContent(file)">{{ $t('skills.view') }}</DqButton>
+                <DqButton size="small" @click="startEditFile(file)">{{ $t('skills.edit') }}</DqButton>
+                <button
+                  type="button"
+                  class="resource-list-card__action resource-list-card__action--danger"
+                  @click="removeFile(file)"
+                >
+                  {{ $t('common.delete') }}
+                </button>
               </div>
             </div>
           </div>
@@ -467,6 +594,7 @@ function formatSize(bytes: number): string {
         <span class="resource-workspace__hint">{{ $t('common.saveShortcut') }}</span>
         <div class="resource-workspace__footer-actions">
           <DqButton v-if="isCreating" @click="isCreating = false; selectedId = null">{{ $t('common.cancel') }}</DqButton>
+          <DqButton v-if="!isCreating && selectedSkill" @click="exportSelected">{{ $t('skills.export') }}</DqButton>
           <DqButton v-if="!isCreating && selectedSkill?.builtin" @click="resetSelected">{{ $t('common.reset') }}</DqButton>
           <DqButton v-if="!isCreating" @click="removeSelected">{{ $t('common.delete') }}</DqButton>
           <DqButton type="primary" :disabled="saving" @click="save">
@@ -480,6 +608,48 @@ function formatSize(bytes: number): string {
   <!-- File Viewer Dialog -->
   <DqDialog v-model:open="showViewerDialog" :title="viewingFile?.path ?? ''" variant="glass" width="700px" :closable="true" @update:open="onViewerClose">
     <pre class="file-content">{{ viewingFile?.content }}</pre>
+  </DqDialog>
+
+  <!-- File Editor Dialog -->
+  <DqDialog
+    v-model:open="showFileEditor"
+    :title="fileEditorMode === 'create' ? $t('skills.addFileTitle') : $t('skills.editFileTitle')"
+    variant="glass"
+    width="720px"
+    :closable="true"
+    @update:open="onFileEditorClose"
+  >
+    <div class="import-form">
+      <label class="import-field">
+        <span class="import-field__label">{{ $t('skills.filePath') }}</span>
+        <DqInput
+          v-model="fileEditorPath"
+          class="resource-input-mono"
+          :placeholder="$t('skills.filePathPlaceholder')"
+          :disabled="fileEditorMode === 'edit'"
+          spellcheck="false"
+        />
+        <span class="import-field__hint">{{ $t('skills.filePathHint') }}</span>
+      </label>
+      <label class="import-field">
+        <span class="import-field__label">{{ $t('skills.fileContent') }}</span>
+        <DqInput
+          v-model="fileEditorContent"
+          type="textarea"
+          :rows="16"
+          :placeholder="$t('skills.fileContentPlaceholder')"
+          spellcheck="false"
+        />
+      </label>
+    </div>
+    <template #footer>
+      <div class="import-actions">
+        <DqButton @click="closeFileEditor">{{ $t('common.cancel') }}</DqButton>
+        <DqButton type="primary" :disabled="fileEditorSaving" @click="saveFileEditor">
+          {{ $t('common.save_') }}
+        </DqButton>
+      </div>
+    </template>
   </DqDialog>
 
   <!-- Import Dialog -->
@@ -594,6 +764,12 @@ function formatSize(bytes: number): string {
 .resource-section--body .md-editor__textarea {
   min-height: 320px;
   resize: vertical;
+}
+
+.resource-section__toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
 }
 
 .resource-meta-list {

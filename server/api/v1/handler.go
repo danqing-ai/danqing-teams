@@ -131,6 +131,8 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.POST("/skills/:id/reset", resetSkill(h.SkillHandler))
 	api.GET("/skills/:id/export", exportSkillMD(h.SkillHandler))
 	api.GET("/skills/:id/files", listSkillFiles(h.SkillHandler))
+	api.PUT("/skills/:id/files/*path", upsertSkillFile(h.SkillHandler))
+	api.DELETE("/skills/:id/files/*path", deleteSkillFile(h.SkillHandler))
 	api.GET("/skills/:id/files/*path", getSkillFile(h.SkillHandler))
 
 	api.GET("/version", getVersion())
