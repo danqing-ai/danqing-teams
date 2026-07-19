@@ -14,7 +14,7 @@ import RightWorkspacePanel from '@/components/center/RightWorkspacePanel.vue'
 import ElementAnnotatePopover from '@/components/center/ElementAnnotatePopover.vue'
 import { renderMarkdown } from '@/utils/markdown-render'
 import { toast } from '@/utils/feedback'
-import { apiBaseUrl } from '@/utils/desktop'
+import { apiBaseUrl, saveBlobAs } from '@/utils/desktop'
 import { fromInspectPayload, type InspectElementPayload } from '@/types/element-attachment'
 import { fetchJSON } from '@/api/client'
 import { formatTokenCount, useSessionContextUsage } from '@/composables/useSessionContextUsage'
@@ -1326,16 +1326,25 @@ async function downloadTurnLog(turnId: string) {
     const base = apiBaseUrl()
     const url = `${base}/api/v1/sessions/${sessions.currentSessionId}/turns/${turnId}/log`
     const res = await fetch(url)
-    if (!res.ok) throw new Error('download failed')
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }))
+      throw new Error((err as { error?: string }).error || `download failed (${res.status})`)
+    }
     const blob = await res.blob()
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `${turnId}.zip`
-    a.click()
-    URL.revokeObjectURL(a.href)
+    const result = await saveBlobAs(blob, `${turnId}.zip`, {
+      filters: [{ name: 'Zip', extensions: ['zip'] }],
+    })
+    if (!result.ok) return // user cancelled save dialog
+    if (result.method === 'download') {
+      toast.success('已保存到浏览器默认下载目录')
+    } else if (result.path) {
+      toast.success(`已保存：${result.path}`)
+    } else {
+      toast.success('Turn Log 已保存')
+    }
   } catch (e) {
     console.error('download turn log failed', e)
-    toast('下载失败')
+    toast.error(e instanceof Error ? e.message : '下载失败')
   }
 }
 

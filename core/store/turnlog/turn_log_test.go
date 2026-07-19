@@ -1,6 +1,7 @@
 package turnlog
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
 	"path/filepath"
@@ -132,6 +133,90 @@ func TestCreateReopensWithoutDuplicateStart(t *testing.T) {
 	}
 	if starts != 1 {
 		t.Fatalf("want exactly 1 start entry after resume, got %d", starts)
+	}
+}
+
+func TestLoadTurnLogZipFallsBackToStreamEvents(t *testing.T) {
+	root := t.TempDir()
+	s := NewTurnLogStore(testProjector(root))
+
+	// No JSONL on disk — only stream events (historical turns / migration gaps).
+	payload, _ := json.Marshal(domain.TurnStartedPayload{
+		TurnID: "turn-old", AgentID: "default", Goal: "hello",
+	})
+	events := []domain.StreamEvent{
+		{Seq: 1, Type: domain.EventTurnStarted, SessionID: "sess-1", TurnID: "turn-old", Payload: payload},
+		{Seq: 2, Type: domain.EventUserMessage, SessionID: "sess-1", TurnID: "turn-old", Payload: []byte(`{"content":"hello"}`)},
+		{Seq: 3, Type: domain.EventTurnEnded, SessionID: "sess-1", TurnID: "turn-old", Payload: []byte(`{"status":"completed"}`)},
+	}
+
+	zipBytes, err := s.LoadTurnLogZip("turn-old", events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]bool{}
+	for _, f := range zr.File {
+		names[f.Name] = true
+	}
+	if !names["manifest.json"] || !names["events.jsonl"] {
+		t.Fatalf("zip contents: %v", names)
+	}
+	if names["turn-old.jsonl"] {
+		t.Fatal("expected no jsonl when file missing")
+	}
+
+	var mf []TurnLogNode
+	for _, f := range zr.File {
+		if f.Name != "manifest.json" {
+			continue
+		}
+		rc, _ := f.Open()
+		defer rc.Close()
+		if err := json.NewDecoder(rc).Decode(&mf); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(mf) != 1 || mf[0].TurnID != "turn-old" || !mf[0].Missing {
+		t.Fatalf("manifest: %+v", mf)
+	}
+	if mf[0].AgentID != "default" || mf[0].Goal != "hello" {
+		t.Fatalf("meta from events: %+v", mf[0])
+	}
+}
+
+func TestLoadTurnLogZipIncludesJSONLAndEvents(t *testing.T) {
+	root := t.TempDir()
+	s := NewTurnLogStore(testProjector(root))
+	if err := s.Create("turn-z", "sess-1", "proj-a", "agent-1", "goal"); err != nil {
+		t.Fatal(err)
+	}
+	writeToolPair(s, "turn-z", "c1", "read_file")
+	s.EndTurn("turn-z", domain.TurnCompleted)
+
+	payload, _ := json.Marshal(domain.TurnStartedPayload{
+		TurnID: "turn-z", AgentID: "agent-1", Goal: "goal",
+	})
+	events := []domain.StreamEvent{
+		{Seq: 1, Type: domain.EventTurnStarted, SessionID: "sess-1", TurnID: "turn-z", Payload: payload},
+	}
+	zipBytes, err := s.LoadTurnLogZip("turn-z", events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]bool{}
+	for _, f := range zr.File {
+		names[f.Name] = true
+	}
+	if !names["manifest.json"] || !names["events.jsonl"] || !names["turn-z.jsonl"] {
+		t.Fatalf("zip contents: %v", names)
 	}
 }
 

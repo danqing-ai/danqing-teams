@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-write-file-bytes"
+description = "Allow writing a file to a user-chosen path (e.g. turn log zip)."
+commands.allow = ["write_file_bytes"]

@@ -273,7 +273,8 @@ type TurnLogNode struct {
 	TurnID   string         `json:"turnId"`
 	AgentID  string         `json:"agentId,omitempty"`
 	Goal     string         `json:"goal,omitempty"`
-	File     string         `json:"file"`
+	File     string         `json:"file,omitempty"`
+	Missing  bool           `json:"missing,omitempty"` // JSONL absent; events may still be present
 	Children []*TurnLogNode `json:"children,omitempty"`
 }
 
@@ -281,39 +282,79 @@ func (s *TurnLogStore) LoadTurnLogZip(turnID string, events []domain.StreamEvent
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, ok := s.loadTurnFileLocked(turnID); !ok {
+	// Build parent->children map and per-turn meta from stream events.
+	childrenOf := make(map[string][]string)
+	metaByTurn := make(map[string]struct{ agentID, goal string })
+	turnsWithEvents := make(map[string]bool)
+	seenChild := make(map[string]bool)
+
+	for _, ev := range events {
+		if ev.TurnID != "" {
+			turnsWithEvents[ev.TurnID] = true
+		}
+		if ev.Type == domain.EventTurnStarted {
+			var p domain.TurnStartedPayload
+			if err := json.Unmarshal(ev.Payload, &p); err == nil {
+				m := metaByTurn[ev.TurnID]
+				if p.AgentID != "" {
+					m.agentID = p.AgentID
+				}
+				if p.Goal != "" {
+					m.goal = p.Goal
+				}
+				metaByTurn[ev.TurnID] = m
+			}
+		}
+		if ev.Type == domain.EventDelegateStarted {
+			var p domain.DelegateStartedPayload
+			if err := json.Unmarshal(ev.Payload, &p); err == nil && p.ChildTurnID != "" {
+				if !seenChild[p.ChildTurnID] {
+					childrenOf[ev.TurnID] = append(childrenOf[ev.TurnID], p.ChildTurnID)
+					seenChild[p.ChildTurnID] = true
+				}
+				m := metaByTurn[p.ChildTurnID]
+				if p.AgentID != "" {
+					m.agentID = p.AgentID
+				}
+				if p.Goal != "" {
+					m.goal = p.Goal
+				}
+				metaByTurn[p.ChildTurnID] = m
+			}
+		}
+	}
+
+	rootTF, rootHasFile := s.loadTurnFileLocked(turnID)
+	if !rootHasFile && !turnsWithEvents[turnID] {
 		return nil, fmt.Errorf("turn log not found: %s", turnID)
 	}
 
-	// Build parent->children map from stream events (delegate.started)
-	childrenOf := make(map[string][]string)
-	for _, ev := range events {
-		if ev.Type != domain.EventDelegateStarted {
-			continue
-		}
-		var p domain.DelegateStartedPayload
-		if err := json.Unmarshal(ev.Payload, &p); err != nil {
-			continue
-		}
-		if p.ChildTurnID != "" {
-			childrenOf[ev.TurnID] = append(childrenOf[ev.TurnID], p.ChildTurnID)
-		}
-	}
-
-	// Collect all related turns recursively
+	// Collect related turns: prefer JSONL; fall back to stream-event presence.
 	files := make(map[string]string)
+	turnIDs := make(map[string]bool)
 	var collect func(id string) *TurnLogNode
 	collect = func(id string) *TurnLogNode {
-		tf, exists := s.loadTurnFileLocked(id)
-		if !exists {
+		tf, hasFile := s.loadTurnFileLocked(id)
+		meta := metaByTurn[id]
+		hasEvents := turnsWithEvents[id]
+		if !hasFile && !hasEvents && id != turnID {
 			return nil
 		}
-		files[id] = tf.filePath
-		node := &TurnLogNode{
-			TurnID:  id,
-			AgentID: tf.log.AgentID,
-			Goal:    tf.log.Goal,
-			File:    id + ".jsonl",
+		turnIDs[id] = true
+		node := &TurnLogNode{TurnID: id}
+		if hasFile {
+			files[id] = tf.filePath
+			node.File = id + ".jsonl"
+			node.AgentID = tf.log.AgentID
+			node.Goal = tf.log.Goal
+		} else {
+			node.Missing = true
+		}
+		if node.AgentID == "" {
+			node.AgentID = meta.agentID
+		}
+		if node.Goal == "" {
+			node.Goal = meta.goal
 		}
 		for _, childID := range childrenOf[id] {
 			if child := collect(childID); child != nil {
@@ -324,29 +365,56 @@ func (s *TurnLogStore) LoadTurnLogZip(turnID string, events []domain.StreamEvent
 	}
 
 	rootNode := collect(turnID)
+	if rootTF != nil && rootNode != nil {
+		if rootNode.AgentID == "" {
+			rootNode.AgentID = rootTF.log.AgentID
+		}
+		if rootNode.Goal == "" {
+			rootNode.Goal = rootTF.log.Goal
+		}
+	}
+
+	relatedEvents := make([]domain.StreamEvent, 0)
+	for _, ev := range events {
+		if turnIDs[ev.TurnID] {
+			relatedEvents = append(relatedEvents, ev)
+		}
+	}
+
 	var nodes []*TurnLogNode
 	if rootNode != nil {
 		nodes = append(nodes, rootNode)
 	}
 
-	// Build zip
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 
 	manifest, _ := json.MarshalIndent(nodes, "", "  ")
 	w, _ := zw.Create("manifest.json")
-	w.Write(manifest)
+	_, _ = w.Write(manifest)
+
+	if len(relatedEvents) > 0 {
+		var evBuf bytes.Buffer
+		enc := json.NewEncoder(&evBuf)
+		for _, ev := range relatedEvents {
+			_ = enc.Encode(ev)
+		}
+		w, _ = zw.Create("events.jsonl")
+		_, _ = w.Write(evBuf.Bytes())
+	}
 
 	for id, fp := range files {
 		data, err := os.ReadFile(fp)
 		if err != nil {
 			continue
 		}
-		w, _ := zw.Create(id + ".jsonl")
-		w.Write(data)
+		w, _ = zw.Create(id + ".jsonl")
+		_, _ = w.Write(data)
 	}
 
-	zw.Close()
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
 	return buf.Bytes(), nil
 }
 

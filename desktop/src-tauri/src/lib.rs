@@ -211,13 +211,24 @@ fn open_external(url: String) -> Result<(), String> {
     open::that(&url).map_err(|e| format!("failed to open: {e}"))
 }
 
+/// Write bytes to a path chosen via the save dialog (turn log zip, etc.).
+#[tauri::command]
+fn write_file_bytes(path: String, contents: Vec<u8>) -> Result<(), String> {
+    if let Some(parent) = Path::new(&path).parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(|e| format!("create parent dir: {e}"))?;
+        }
+    }
+    fs::write(&path, contents).map_err(|e| format!("write {path}: {e}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![open_external])
+        .invoke_handler(tauri::generate_handler![open_external, write_file_bytes])
         .setup(|app| {
             handle_first_launch(&app.handle());
             if let Err(e) = spawn_backend(&app.handle()) {
