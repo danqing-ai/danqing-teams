@@ -326,7 +326,7 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) {
 			e.turnLog.Append(turnID, typ, data)
 		}
 
-		sys := buildSystemPrompt(agentPtr.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agentPtr), "")
+		sys := buildSystemPrompt(agentPtr.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agentPtr), "", e.sandboxStatus())
 		messages := []Message{{Role: RoleSystem, Content: sys}}
 		if hits := e.knowledge.Search(agentPtr.KnowledgeIDs, goal, cfg.knowledgeSearchTopK); len(hits) > 0 {
 			content := ""
@@ -547,7 +547,7 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 		checkpointText = checkpoint.Summary
 	}
 
-	sys := buildSystemPrompt(agent.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agent), checkpointText)
+	sys := buildSystemPrompt(agent.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agent), checkpointText, e.sandboxStatus())
 	messages := []Message{
 		{Role: RoleSystem, Content: sys},
 	}
@@ -739,7 +739,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 				e.turnRunner.Log = oldLog
 			}()
 
-			sys := buildSystemPrompt(workerAgent.SystemPrompt, e.turnRunner.SkillList, nil, "")
+			sys := buildSystemPrompt(workerAgent.SystemPrompt, e.turnRunner.SkillList, nil, "", e.sandboxStatus())
 			messages := []Message{
 				{Role: RoleSystem, Content: sys},
 			}
@@ -937,7 +937,7 @@ func (e *Engine) ResolveAskUser(askID, answer string) error {
 
 func (e *Engine) buildTurnMessages(sessionID string, agent domain.Agent, goal string, checkpointText string) []Message {
 	cfg := e.loadRunCfg(context.Background())
-	sys := buildSystemPrompt(agent.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agent), checkpointText)
+	sys := buildSystemPrompt(agent.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agent), checkpointText, e.sandboxStatus())
 	messages := []Message{
 		{Role: RoleSystem, Content: sys},
 	}

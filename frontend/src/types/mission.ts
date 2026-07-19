@@ -189,6 +189,7 @@ export interface ConfigFile {
       mode: 'read-only' | 'workspace-write' | 'danger-full-access'
       network: 'deny' | 'allow' | 'allowlist'
       backend?: string
+      shell?: 'auto' | 'bash' | 'cmd' | string
     }
     browser?: {
       enabled: boolean
@@ -254,6 +255,8 @@ export interface SandboxStatus {
   degradedReason?: string
   platform: string
   capabilities?: string[]
+  shell?: string
+  shellPath?: string
 }
 
 export interface BrowserStatus {
@@ -280,6 +283,7 @@ export interface RuntimeConfigForm {
   sandboxMode: 'read-only' | 'workspace-write' | 'danger-full-access'
   sandboxNetwork: 'deny' | 'allow' | 'allowlist'
   sandboxBackend?: string
+  sandboxShell?: 'auto' | 'bash' | 'cmd' | string
   browserEnabled?: boolean
   browserExecutablePath?: string
   browserCdpUrl?: string

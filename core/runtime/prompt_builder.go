@@ -9,7 +9,7 @@ import (
 	"danqing-teams/core/domain"
 )
 
-func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList []domain.Agent, checkpoint string) string {
+func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList []domain.Agent, checkpoint string, sandboxStatus domain.SandboxStatus) string {
 	var b strings.Builder
 	b.WriteString(agentPersona)
 
@@ -30,14 +30,14 @@ func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList 
 		b.WriteString("\n</compaction-checkpoint>")
 	}
 	b.WriteString("\n\n")
-	b.WriteString(buildRuntimeEnvironment())
+	b.WriteString(buildRuntimeEnvironment(sandboxStatus))
 
 	return b.String()
 }
 
-// buildRuntimeEnvironment returns a static block describing the runtime OS environment.
-// This is injected into the system prompt (never changes during a session).
-func buildRuntimeEnvironment() string {
+// buildRuntimeEnvironment returns a block describing the runtime OS / shell environment.
+// Injected into the system prompt; shell fields come from the same resolve path as exec_shell.
+func buildRuntimeEnvironment(st domain.SandboxStatus) string {
 	osName := runtime.GOOS
 	osLabel := osName
 	switch osName {
@@ -49,16 +49,39 @@ func buildRuntimeEnvironment() string {
 		osLabel = "Windows"
 	}
 	sep := string(filepath.Separator)
-	shell := "sh"
-	if osName == "windows" {
-		shell = "cmd"
+
+	shell := st.Shell
+	if shell == "" {
+		shell = "sh"
+		if osName == "windows" {
+			shell = "cmd"
+		}
 	}
-	return "<runtime-environment>\n" +
-		"OS: " + osName + " (" + osLabel + ")\n" +
-		"Path separator: " + sep + "\n" +
-		"Shell: " + shell + "\n" +
-		"Note: exec_shell runs under the OS sandbox when enabled (workspace-write by default).\n" +
-		"</runtime-environment>"
+
+	var b strings.Builder
+	b.WriteString("<runtime-environment>\n")
+	b.WriteString("OS: " + osName + " (" + osLabel + ")\n")
+	b.WriteString("Path separator: " + sep + "\n")
+	b.WriteString("Shell: " + shell + "\n")
+	if st.ShellPath != "" {
+		b.WriteString("Shell path: " + st.ShellPath + "\n")
+	}
+	if st.Shell == "bash (WSL2)" {
+		b.WriteString("via: wsl -e bash -lc\n")
+	}
+	if st.Backend != "" {
+		b.WriteString("Sandbox backend: " + string(st.Backend) + "\n")
+	}
+	switch {
+	case st.Shell == "cmd":
+		b.WriteString("Note: Git Bash not detected; exec_shell uses cmd.exe syntax, or install Git for Windows / set runtime.sandbox.backend=wsl2 for bash.\n")
+	case strings.HasPrefix(st.Shell, "bash"):
+		b.WriteString("Note: exec_shell invokes the Shell above under the OS sandbox when enabled (workspace-write by default). Prefer POSIX shell syntax. Avoid cmd.exe builtins unless necessary.\n")
+	default:
+		b.WriteString("Note: exec_shell runs under the OS sandbox when enabled (workspace-write by default).\n")
+	}
+	b.WriteString("</runtime-environment>")
+	return b.String()
 }
 
 func buildSkillMetadata(skills []domain.Skill) string {

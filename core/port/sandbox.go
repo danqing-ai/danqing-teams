@@ -9,7 +9,7 @@ import (
 
 // SandboxRunOptions configures a single sandboxed process invocation.
 type SandboxRunOptions struct {
-	// Command is the shell command string (passed to sh -c / cmd /c).
+	// Command is the shell command string (passed to sh -c, bash -lc, or cmd /c).
 	Command string
 	// WorkDir is the project workspace root (bind / write root).
 	WorkDir string

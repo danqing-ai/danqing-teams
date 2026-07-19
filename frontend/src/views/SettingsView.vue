@@ -112,6 +112,7 @@ const runtimeForm = ref({
   sandboxMode: 'workspace-write' as 'read-only' | 'workspace-write' | 'danger-full-access',
   sandboxNetwork: 'deny' as 'deny' | 'allow' | 'allowlist',
   sandboxBackend: '',
+  sandboxShell: 'auto',
   browserEnabled: true,
   browserExecutablePath: '',
   browserCdpUrl: '',
@@ -133,7 +134,16 @@ const sandboxStatusText = computed(() => {
   const st = runtimeConfig.sandboxStatus
   if (!st) return ''
   const caps = st.capabilities?.length ? ` (${st.capabilities.join(', ')})` : ''
-  return `${st.backend}${caps}`
+  const shell = st.shell ? ` · ${st.shell}` : ''
+  const path = st.shellPath ? ` @ ${st.shellPath}` : ''
+  return `${st.backend}${caps}${shell}${path}`
+})
+
+const showGitBashHint = computed(() => {
+  const st = runtimeConfig.sandboxStatus
+  if (!st || st.platform !== 'windows') return false
+  if (st.backend === 'wsl2') return false
+  return !st.shell || st.shell === 'cmd'
 })
 
 const browserStatusText = computed(() => {
@@ -730,6 +740,17 @@ const hasFooterActions = computed(() => {
                   </DqSelect>
                 </div>
               </div>
+              <div class="settings-form-row">
+                <div class="settings-field settings-field--half">
+                  <span class="settings-field__label">{{ $t('settings.sandboxShell') }}</span>
+                  <DqSelect v-model="runtimeForm.sandboxShell">
+                    <DqOption value="auto" :label="$t('settings.sandboxShellAuto')" />
+                    <DqOption value="bash" :label="$t('settings.sandboxShellBash')" />
+                    <DqOption value="cmd" :label="$t('settings.sandboxShellCmd')" />
+                  </DqSelect>
+                </div>
+              </div>
+              <p class="settings-form-group__desc">{{ $t('settings.sandboxShellDesc') }}</p>
               <div v-if="sandboxStatusText" class="settings-sandbox-status">
                 <span class="settings-field__label">{{ $t('settings.sandboxStatus') }}</span>
                 <code class="settings-sandbox-status__value">{{ sandboxStatusText }}</code>
@@ -738,6 +759,9 @@ const hasFooterActions = computed(() => {
                   class="settings-sandbox-status__degraded"
                 >
                   {{ $t('settings.sandboxDegraded') }}: {{ runtimeConfig.sandboxStatus.degradedReason }}
+                </p>
+                <p v-if="showGitBashHint" class="settings-sandbox-status__degraded">
+                  {{ $t('settings.sandboxShellHint') }}
                 </p>
               </div>
             </template>

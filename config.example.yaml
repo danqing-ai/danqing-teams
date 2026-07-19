@@ -24,11 +24,13 @@ runtime:
   # Modes: read-only | workspace-write | danger-full-access
   # Network: deny | allow | allowlist (allowlist treated as allow in v1)
   # Backend: empty = auto-probe; or seatbelt | landlock | bwrap | win-token | wsl2 | host-weak
-	sandbox:
+  # Shell (Windows host/win-token only): auto | bash | cmd — auto prefers system Git Bash; WSL2 always uses bash inside WSL
+  sandbox:
     enabled: true
     mode: "workspace-write"
     network: "deny"
     backend: ""
+    shell: "auto"
   # Headless browser for web_fetch JS rendering (chromedp + system Chrome/Edge).
   # Does not ship a browser binary. Leave cdp_url empty to auto-launch a local browser.
   browser:

@@ -3,11 +3,11 @@ package builtin
 import (
 	"context"
 	"fmt"
-	"os/exec"
-	"runtime"
 	"time"
 
+	"danqing-teams/core/domain"
 	"danqing-teams/core/port"
+	"danqing-teams/core/runtime/sandbox"
 )
 
 func hostRunShell(ctx context.Context, opts port.SandboxRunOptions) ([]byte, error) {
@@ -17,11 +17,9 @@ func hostRunShell(ctx context.Context, opts port.SandboxRunOptions) ([]byte, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.CommandContext(ctx, "cmd", "/c", opts.Command)
-	} else {
-		cmd = exec.CommandContext(ctx, "sh", "-c", opts.Command)
+	cmd, err := sandbox.HostShellCommand(ctx, opts.Command, domain.ConfigSandboxSection{})
+	if err != nil {
+		return nil, err
 	}
 	cmd.Dir = opts.WorkDir
 	if opts.Env != nil {

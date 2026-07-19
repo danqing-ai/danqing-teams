@@ -97,7 +97,7 @@ type winTokenRunner struct{}
 
 func (winTokenRunner) name() domain.SandboxBackend { return domain.SandboxBackendWinToken }
 
-func (winTokenRunner) run(ctx context.Context, opts port.SandboxRunOptions, _ domain.ConfigSandboxSection) ([]byte, error) {
+func (winTokenRunner) run(ctx context.Context, opts port.SandboxRunOptions, cfg domain.ConfigSandboxSection) ([]byte, error) {
 	workdir, err := filepath.Abs(opts.WorkDir)
 	if err != nil {
 		return nil, fmt.Errorf("sandbox: workdir: %w", err)
@@ -107,19 +107,23 @@ func (winTokenRunner) run(ctx context.Context, opts port.SandboxRunOptions, _ do
 	if err := windows.OpenProcessToken(windows.CurrentProcess(),
 		windows.TOKEN_DUPLICATE|windows.TOKEN_QUERY|windows.TOKEN_ASSIGN_PRIMARY|windows.TOKEN_ADJUST_DEFAULT|windows.TOKEN_ADJUST_SESSIONID,
 		&primary); err != nil {
-		return runHost(ctx, opts)
+		return runHost(ctx, opts, cfg, domain.SandboxBackendHostWeak)
 	}
 	defer primary.Close()
 
 	restricted, err := createRestrictedToken(primary)
 	if err != nil {
-		return runHost(ctx, opts)
+		return runHost(ctx, opts, cfg, domain.SandboxBackendHostWeak)
 	}
 	defer restricted.Close()
 
 	ctx, cancel := context.WithTimeout(ctx, opts.Timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "cmd", "/c", opts.Command)
+	sh := resolveShell(cfg, domain.SandboxBackendWinToken)
+	cmd, err := shellCommandFor(ctx, opts.Command, sh)
+	if err != nil {
+		return nil, err
+	}
 	cmd.Dir = workdir
 	cmd.Env = opts.Env
 	cmd.SysProcAttr = &syscall.SysProcAttr{

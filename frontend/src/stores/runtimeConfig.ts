@@ -10,6 +10,7 @@ export interface RuntimeForm {
   sandboxMode: 'read-only' | 'workspace-write' | 'danger-full-access'
   sandboxNetwork: 'deny' | 'allow' | 'allowlist'
   sandboxBackend: string
+  sandboxShell: string
   browserEnabled: boolean
   browserExecutablePath: string
   browserCdpUrl: string
@@ -36,6 +37,7 @@ function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
     sandboxMode: sb?.mode ?? 'workspace-write',
     sandboxNetwork: sb?.network ?? 'deny',
     sandboxBackend: sb?.backend ?? '',
+    sandboxShell: sb?.shell ?? 'auto',
     browserEnabled: br?.enabled ?? true,
     browserExecutablePath: br?.executablePath ?? '',
     browserCdpUrl: br?.cdpUrl ?? '',
@@ -100,6 +102,7 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
           mode: form.sandboxMode,
           network: form.sandboxNetwork,
           backend: form.sandboxBackend || undefined,
+          shell: form.sandboxShell || undefined,
         },
         browser: {
           enabled: form.browserEnabled,

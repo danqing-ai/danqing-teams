@@ -52,6 +52,7 @@ func normalizeConfig(cfg domain.ConfigSandboxSection) domain.ConfigSandboxSectio
 	if cfg.Network == "" {
 		cfg.Network = domain.SandboxNetworkDeny
 	}
+	cfg.Shell = normalizeShellPref(cfg.Shell)
 	return cfg
 }
 
@@ -89,10 +90,10 @@ func (m *Manager) Run(ctx context.Context, opts port.SandboxRunOptions) ([]byte,
 	m.mu.RUnlock()
 
 	if !cfg.Enabled || cfg.Mode == domain.SandboxModeDangerFullAccess || status.Backend == domain.SandboxBackendDisabled {
-		return runHost(ctx, opts)
+		return runHost(ctx, opts, cfg, status.Backend)
 	}
 	if r == nil {
-		return runHost(ctx, opts)
+		return runHost(ctx, opts, cfg, status.Backend)
 	}
 	return r.run(ctx, opts, cfg)
 }
@@ -115,6 +116,7 @@ func (m *Manager) reprobeLocked() {
 	if !cfg.Enabled {
 		st.Backend = domain.SandboxBackendDisabled
 		st.Capabilities = []string{"host"}
+		applyShellStatus(&st, resolveShell(cfg, st.Backend))
 		m.status = st
 		m.runner = hostRunner{}
 		return
@@ -122,6 +124,7 @@ func (m *Manager) reprobeLocked() {
 	if cfg.Mode == domain.SandboxModeDangerFullAccess {
 		st.Backend = domain.SandboxBackendDisabled
 		st.Capabilities = []string{"full-access"}
+		applyShellStatus(&st, resolveShell(cfg, st.Backend))
 		m.status = st
 		m.runner = hostRunner{}
 		return
@@ -132,6 +135,7 @@ func (m *Manager) reprobeLocked() {
 	st.Degraded = degraded
 	st.DegradedReason = reason
 	st.Capabilities = caps
+	applyShellStatus(&st, resolveShell(cfg, backend))
 	m.status = st
 	m.runner = r
 }
@@ -167,14 +171,18 @@ type hostRunner struct{}
 
 func (hostRunner) name() domain.SandboxBackend { return domain.SandboxBackendHostWeak }
 
-func (hostRunner) run(ctx context.Context, opts port.SandboxRunOptions, _ domain.ConfigSandboxSection) ([]byte, error) {
-	return runHost(ctx, opts)
+func (hostRunner) run(ctx context.Context, opts port.SandboxRunOptions, cfg domain.ConfigSandboxSection) ([]byte, error) {
+	return runHost(ctx, opts, cfg, domain.SandboxBackendHostWeak)
 }
 
-func runHost(ctx context.Context, opts port.SandboxRunOptions) ([]byte, error) {
+func runHost(ctx context.Context, opts port.SandboxRunOptions, cfg domain.ConfigSandboxSection, backend domain.SandboxBackend) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, opts.Timeout)
 	defer cancel()
-	cmd := shellCommand(ctx, opts.Command)
+	sh := resolveShell(cfg, backend)
+	cmd, err := shellCommandFor(ctx, opts.Command, sh)
+	if err != nil {
+		return nil, err
+	}
 	cmd.Dir = opts.WorkDir
 	cmd.Env = opts.Env
 	out, err := cmd.CombinedOutput()
@@ -182,13 +190,6 @@ func runHost(ctx context.Context, opts port.SandboxRunOptions) ([]byte, error) {
 		return out, fmt.Errorf("sandbox: command timed out after %s", opts.Timeout)
 	}
 	return out, err
-}
-
-func shellCommand(ctx context.Context, command string) *exec.Cmd {
-	if runtime.GOOS == "windows" {
-		return exec.CommandContext(ctx, "cmd", "/c", command)
-	}
-	return exec.CommandContext(ctx, "sh", "-c", command)
 }
 
 func lookPath(name string) bool {
