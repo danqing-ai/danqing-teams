@@ -324,8 +324,8 @@ async function handleSave() {
     return
   }
   const models = form.value.models
-  if (!models.length) {
-    toast.warning(t('settings.modelsRequired'))
+  if (!models.some((m) => m.enabled)) {
+    toast.warning(t('settings.enabledModelsRequired'))
     return
   }
   const payload = {
@@ -1169,12 +1169,15 @@ const hasFooterActions = computed(() => {
             <DqInput v-model="form.baseUrl" :placeholder="$t('settings.baseUrlPlaceholder')" />
           </label>
 
-          <div class="settings-field settings-field--toolbar">
-            <div class="settings-field__toolbar">
-              <DqButton size="small" :disabled="refreshingModels" @click="handleRefreshModels">
+          <div class="settings-field settings-field--refresh">
+            <div class="settings-field__refresh">
+              <div class="settings-field__refresh-copy">
+                <span class="settings-field__refresh-title">{{ $t('settings.refreshModels') }}</span>
+                <span class="settings-field__hint">{{ $t('settings.refreshHint') }}</span>
+              </div>
+              <DqButton type="primary" :disabled="refreshingModels" @click="handleRefreshModels">
                 {{ refreshingModels ? $t('common.refreshing') : $t('settings.refreshModels') }}
               </DqButton>
-              <span class="settings-field__hint">{{ $t('settings.refreshHint') }}</span>
             </div>
           </div>
 
@@ -1548,18 +1551,39 @@ const hasFooterActions = computed(() => {
   gap: 12px;
 }
 
-.settings-field--toolbar {
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--dq-label-primary) 3%, transparent);
-  border: 1px solid var(--teams-glass-border);
+.settings-field--refresh {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--dq-accent) 10%, var(--dq-bg-elevated));
+  border: 1px solid color-mix(in srgb, var(--dq-accent) 35%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--dq-accent) 8%, transparent);
 }
 
-.settings-field__toolbar {
+.settings-field__refresh {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  gap: 16px;
   flex-wrap: wrap;
+}
+
+.settings-field__refresh-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.settings-field__refresh-title {
+  font-size: var(--dq-font-size-body);
+  font-weight: 600;
+  color: var(--dq-accent);
+  line-height: 1.3;
+}
+
+.settings-field--refresh .settings-field__hint {
+  color: color-mix(in srgb, var(--dq-accent) 55%, var(--dq-label-secondary));
 }
 
 .settings-field__hint {

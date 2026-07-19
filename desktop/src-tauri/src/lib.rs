@@ -1,11 +1,15 @@
 use std::fs::{self, OpenOptions};
 use std::io::Write;
+use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 
 const HELP_URL: &str = "https://github.com/danqing-ai/DanQing-Teams#macos-%E5%AE%89%E8%A3%85";
+const BACKEND_ADDR: &str = "127.0.0.1:7801";
+const BACKEND_READY_TIMEOUT: Duration = Duration::from_secs(45);
+const BACKEND_READY_INTERVAL: Duration = Duration::from_millis(200);
 
 struct SidecarState {
     _child: Mutex<Option<std::process::Child>>,
@@ -105,7 +109,7 @@ fn spawn_backend(app: &AppHandle) -> Result<(), String> {
 
     let mut child = std::process::Command::new(&binary)
         .current_dir(&home)
-        .env("TEAMS_ADDR", "127.0.0.1:7801")
+        .env("TEAMS_ADDR", BACKEND_ADDR)
         .env(
             "TEAMS_DB_PATH",
             home.join("teams.db").to_string_lossy().as_ref(),
@@ -136,17 +140,55 @@ fn spawn_backend(app: &AppHandle) -> Result<(), String> {
         _child: Mutex::new(Some(child)),
     });
 
+    // Emit ready only after the process is actually listening — spawn ≠ HTTP ready
+    // (first launch may spend seconds on binary copy + SQLite migrate).
     let app_handle = app.clone();
+    let log_for_ready = log_path.clone();
     std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(1500));
-        let _ = app_handle.emit("backend-ready", ());
+        if wait_for_backend_listen(BACKEND_ADDR, BACKEND_READY_TIMEOUT, BACKEND_READY_INTERVAL) {
+            eprintln!("[sidecar] backend listening on {BACKEND_ADDR}");
+            let _ = app_handle.emit("backend-ready", ());
+        } else {
+            let tail = fs::read_to_string(&log_for_ready).unwrap_or_default();
+            let tail = tail.chars().rev().take(2000).collect::<String>();
+            let tail: String = tail.chars().rev().collect();
+            eprintln!(
+                "[sidecar] backend did not become ready within {:?}. log tail:\n{tail}",
+                BACKEND_READY_TIMEOUT
+            );
+            let _ = app_handle.emit("backend-failed", ());
+        }
     });
 
     eprintln!(
-        "[sidecar] backend spawned on 127.0.0.1:7801 (log: {})",
+        "[sidecar] backend spawned on {BACKEND_ADDR} (log: {})",
         log_path.display()
     );
     Ok(())
+}
+
+/// Poll until TCP connect succeeds (Gin listen), or timeout.
+fn wait_for_backend_listen(addr: &str, timeout: Duration, interval: Duration) -> bool {
+    let targets: Vec<SocketAddr> = match addr.to_socket_addrs() {
+        Ok(iter) => iter.collect(),
+        Err(e) => {
+            eprintln!("[sidecar] resolve {addr}: {e}");
+            return false;
+        }
+    };
+    if targets.is_empty() {
+        return false;
+    }
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        for target in &targets {
+            if TcpStream::connect_timeout(target, Duration::from_millis(150)).is_ok() {
+                return true;
+            }
+        }
+        std::thread::sleep(interval);
+    }
+    false
 }
 
 /// Open help documentation on first launch (macOS only, due to unsigned app)

@@ -292,11 +292,12 @@ export default {
     protocolType: 'Protocol Type',
     namePlaceholder: 'Enter name',
     modelsRequired: 'Add at least one model (manually or via refresh)',
+    enabledModelsRequired: 'Enable at least one model — refresh the model list or add one manually',
     apiKey: 'API Key',
     baseUrl: 'Base URL',
     nameExample: 'e.g. openai or zhipu',
     refreshModels: 'Refresh Models',
-    refreshHint: 'Optionally fetch models from the API. If listing is unsupported, add model IDs manually',
+    refreshHint: 'After entering the API Key, fetch models from the API. If listing is unsupported, add model IDs manually',
     refreshFailedManualHint: 'Could not fetch models from the API. Enter model names below and save',
     manualModel: 'Add model manually',
     manualModelPlaceholder: 'e.g. deepseek-chat, gpt-4o',
@@ -348,6 +349,12 @@ export default {
     aboutHint: 'In-app updates are available on desktop',
     version: 'Version',
     versionDesc: 'Currently installed application version.',
+  },
+  desktop: {
+    startingBackend: 'Starting backend…',
+    backendStartTimeout:
+      'Backend failed to start in time. Quit and retry; if it persists, check ~/.dq-teams/backend.log',
+    backendStartFailed: 'Failed to start backend',
   },
   updater: {
     check: 'Check for Updates',
