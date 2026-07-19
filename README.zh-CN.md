@@ -196,20 +196,16 @@ make test               # 分层检查 + go test ./...
 make test-integration   # 集成测试
 ```
 
-### Harbor 本地 Agent 对比（冒烟套件）
+### Harbor Agent 对比（Terminal-Bench 2.0）
 
-统一套件：**35** 题（easy 8 / medium 10 / hard 17），经 [Harbor](https://github.com/laude-institute/harbor) + Podman。模型 `deepseek-v4-flash`。通过 = Mean reward ≥ 1.0。非官方 Terminal-Bench / 榜单提交。
+官方 **terminal-bench@2.0**（约 89 题），同步到本地并统一 `FROM dq-harbor-base:local`，经 [Harbor](https://github.com/laude-institute/harbor) + Podman。模型 `deepseek-v4-flash`。通过 = Mean reward ≥ 1.0。非榜单提交（无 ATIF）。
 
-| Agent | 通过 | 说明 |
-|-------|------|------|
-| **DanQing** | **34/35** | `danqing-teams-cli` |
-| OpenCode | **34/35** | 预装 base + `OpenCodePrebuilt` |
-| OpenHands | **34/35** | Harbor `openhands-sdk` |
-
-三方共同失败：`replace-marker`。题单与成绩：[`evals/dq_harbor/README.md`](evals/dq_harbor/README.md)、[`evals/dq_harbor/COMPARE_RESULTS.md`](evals/dq_harbor/COMPARE_RESULTS.md)。
+文档与成绩：[`evals/dq_harbor/README.md`](evals/dq_harbor/README.md)、[`evals/dq_harbor/COMPARE_RESULTS.md`](evals/dq_harbor/COMPARE_RESULTS.md)。
 
 ```bash
 make eval-harbor-base
+make eval-harbor-sync-tb2
+make eval-harbor-bin
 ./evals/dq_harbor/compare_agents.sh
 ```
 
@@ -266,6 +262,10 @@ Tag 触发时会将产物附加到 GitHub Release。
 | 文档 | 说明 |
 |------|------|
 | [docs/core-design.md](docs/core-design.md) | 核心设计：统一 Agent 架构与引擎 |
-| [evals/dq_harbor/README.md](evals/dq_harbor/README.md) | Harbor 本地冒烟评测与 Agent 对比 |
+| [evals/dq_harbor/README.md](evals/dq_harbor/README.md) | Harbor Terminal-Bench 2.0 评测与 Agent 对比 |
 | [AGENTS.md](AGENTS.md) | 贡献者 / Agent 速查 |
 | [config.example.yaml](config.example.yaml) | 完整配置参考 |
+
+## 许可证
+
+[MIT](LICENSE)

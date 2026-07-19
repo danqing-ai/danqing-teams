@@ -196,20 +196,16 @@ make test               # layer check + go test ./...
 make test-integration   # integration tests
 ```
 
-### Harbor local agent compare (smoke suite)
+### Harbor agent compare (Terminal-Bench 2.0)
 
-Unified suite: **35** Harbor tasks (8 easy / 10 medium / 17 hard) via [Harbor](https://github.com/laude-institute/harbor) + Podman. Model `deepseek-v4-flash`. Pass = Mean reward ≥ 1.0. Not an official Terminal-Bench / leaderboard run.
+Official **terminal-bench@2.0** (~89 tasks), synced locally onto **`dq-harbor-base:local`** via [Harbor](https://github.com/laude-institute/harbor) + Podman. Model `deepseek-v4-flash`. Pass = Mean reward ≥ 1.0. Not a leaderboard submission (no ATIF).
 
-| Agent | Pass | Notes |
-|-------|------|-------|
-| **DanQing** | **34/35** | `danqing-teams-cli` |
-| OpenCode | **34/35** | prebaked base + `OpenCodePrebuilt` |
-| OpenHands | **34/35** | Harbor `openhands-sdk` |
-
-Shared fail: `replace-marker`. Task list + scores: [`evals/dq_harbor/README.md`](evals/dq_harbor/README.md), [`evals/dq_harbor/COMPARE_RESULTS.md`](evals/dq_harbor/COMPARE_RESULTS.md).
+Docs + scores: [`evals/dq_harbor/README.md`](evals/dq_harbor/README.md), [`evals/dq_harbor/COMPARE_RESULTS.md`](evals/dq_harbor/COMPARE_RESULTS.md).
 
 ```bash
 make eval-harbor-base
+make eval-harbor-sync-tb2
+make eval-harbor-bin
 ./evals/dq_harbor/compare_agents.sh
 ```
 
@@ -266,6 +262,10 @@ Tag builds are attached to the GitHub Release.
 | Doc | Description |
 |-----|-------------|
 | [docs/core-design.md](docs/core-design.md) | Core design: unified agent architecture & engine |
-| [evals/dq_harbor/README.md](evals/dq_harbor/README.md) | Harbor local smoke eval & agent compare |
+| [evals/dq_harbor/README.md](evals/dq_harbor/README.md) | Harbor Terminal-Bench 2.0 eval & agent compare |
 | [AGENTS.md](AGENTS.md) | Contributor / agent quick reference |
 | [config.example.yaml](config.example.yaml) | Full config reference |
+
+## License
+
+[MIT](LICENSE)
