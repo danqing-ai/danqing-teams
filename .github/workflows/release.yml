@@ -290,19 +290,19 @@ jobs:
           path: ${{ env.REPO_DIR }}
 
       - name: Download macOS artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: danqing-teams-desktop-macos
           path: release-assets/macos
 
       - name: Download Linux server artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: danqing-teams-server-linux
           path: release-assets/linux
 
       - name: Download Windows desktop artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: danqing-teams-desktop-windows
           path: release-assets/windows
@@ -343,7 +343,7 @@ jobs:
             --version "$RELEASE_VERSION"
 
       - name: Attach assets to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             release-assets/macos/**/*.dmg
