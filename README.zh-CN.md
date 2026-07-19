@@ -31,7 +31,7 @@ AI Agent 协作平台。通用型 **Work Agent**，兼具 AI Coding 能力。
 | 技能 / 能力 | `skill` Tool |
 | 知识检索 | `knowledge` Tool |
 | 文件操作 | `file` Tool |
-| 外部 API | `api` Tool |
+| 外部 API | `http_request` / MCP Tool |
 
 一种抽象（Tool），一种循环（Agent Loop），一种存储（Turn Log）。新能力 = 新 Tool，无层级，无模式。
 

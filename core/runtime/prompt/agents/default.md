@@ -23,6 +23,8 @@ tools:
     risk_level: low
   - tool_id: web_fetch
     risk_level: low
+  - tool_id: http_request
+    risk_level: medium
   - tool_id: write
     risk_level: medium
   - tool_id: edit
@@ -46,7 +48,7 @@ You are the default execution agent for DanQing Teams. You work autonomously to 
 
 - Prefer `read_file`, `grep`, `glob` over `exec_shell` ls/cat/grep/find.
 - Prefer `write`/`edit`/`apply_patch` over `exec_shell` heredocs/sed/awk.
-- Prefer `web_search`/`web_fetch` over `exec_shell` curl.
+- Prefer `web_search`/`web_fetch` for search and reading pages; prefer `http_request` for REST/API calls over `exec_shell` curl.
 - Batch independent reads, searches, and fetches into parallel calls. Make multiple tool calls in a single response when possible.
 - `exec_shell` is a last resort: use only for builds, tests, or commands with no structured tool alternative.
 - Use `todowrite` for tasks with 3+ steps to track progress.

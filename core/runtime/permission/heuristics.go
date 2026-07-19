@@ -1,8 +1,11 @@
 package permission
 
 import (
+	"net/http"
 	"regexp"
 	"strings"
+
+	"danqing-teams/core/domain"
 )
 
 var (
@@ -77,4 +80,65 @@ func LooksLikeNetwork(cmd string) bool {
 		}
 	}
 	return false
+}
+
+// sensitiveHTTPHeaderNames elevate http_request risk when present.
+var sensitiveHTTPHeaderNames = map[string]struct{}{
+	"authorization":       {},
+	"proxy-authorization": {},
+	"cookie":              {},
+	"set-cookie":          {},
+	"x-api-key":           {},
+	"api-key":             {},
+	"x-auth-token":        {},
+}
+
+// EffectiveHTTPRequestRisk raises risk for mutating methods or credential headers.
+// Base schema risk stays medium; callers pass handler.RiskLevel() as base.
+func EffectiveHTTPRequestRisk(base domain.RiskLevel, method string, headers map[string]string) domain.RiskLevel {
+	if base == domain.RiskHigh {
+		return domain.RiskHigh
+	}
+	m := strings.ToUpper(strings.TrimSpace(method))
+	if m == "" {
+		m = http.MethodGet
+	}
+	switch m {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return domain.RiskHigh
+	}
+	for k := range headers {
+		if _, ok := sensitiveHTTPHeaderNames[strings.ToLower(strings.TrimSpace(k))]; ok {
+			return domain.RiskHigh
+		}
+	}
+	if base == "" {
+		return domain.RiskMedium
+	}
+	return base
+}
+
+// ParseHTTPHeadersFromArgs extracts string headers from tool-call arguments.
+func ParseHTTPHeadersFromArgs(args map[string]any) map[string]string {
+	if args == nil {
+		return nil
+	}
+	raw, ok := args["headers"]
+	if !ok || raw == nil {
+		return nil
+	}
+	switch h := raw.(type) {
+	case map[string]string:
+		return h
+	case map[string]any:
+		out := make(map[string]string, len(h))
+		for k, v := range h {
+			if s, ok := v.(string); ok {
+				out[k] = s
+			}
+		}
+		return out
+	default:
+		return nil
+	}
 }

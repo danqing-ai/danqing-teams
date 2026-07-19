@@ -369,9 +369,14 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			if p.SessionAllowNetwork != nil {
 				allowNet = p.SessionAllowNetwork(tctx.SessionID)
 			}
+			risk := handler.RiskLevel()
+			if call.Name == "http_request" {
+				method, _ := call.Arguments["method"].(string)
+				risk = permission.EffectiveHTTPRequestRisk(risk, method, permission.ParseHTTPHeadersFromArgs(call.Arguments))
+			}
 			permResult := p.Perm.CheckRequest(permission.Request{
 				ToolName:            call.Name,
-				Risk:                handler.RiskLevel(),
+				Risk:                risk,
 				Command:             cmdStr,
 				Sandbox:             sbStatus,
 				SessionAllowNetwork: allowNet,

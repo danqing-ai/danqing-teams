@@ -169,6 +169,7 @@ func New(cfg Config) *Core {
 	}
 	eng.RegisterTool(&builtin.WebFetch{ConfigFunc: searchCfgFn, Browser: br})
 	eng.RegisterTool(&builtin.WebSearch{ConfigFunc: searchCfgFn})
+	eng.RegisterTool(&builtin.HTTPRequest{ConfigFunc: searchCfgFn})
 	eng.RegisterTool(&builtin.AskUser{})
 	eng.RegisterTool(&builtin.Sleep{})
 	eng.RegisterTool(&builtin.ReadSkill{Skills: skills})

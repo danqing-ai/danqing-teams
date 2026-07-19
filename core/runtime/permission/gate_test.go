@@ -100,3 +100,18 @@ func TestHeuristics(t *testing.T) {
 		t.Fatal("git status should not need net")
 	}
 }
+
+func TestEffectiveHTTPRequestRisk(t *testing.T) {
+	if got := EffectiveHTTPRequestRisk(domain.RiskMedium, "GET", nil); got != domain.RiskMedium {
+		t.Fatalf("GET = %s", got)
+	}
+	if got := EffectiveHTTPRequestRisk(domain.RiskMedium, "POST", nil); got != domain.RiskHigh {
+		t.Fatalf("POST = %s", got)
+	}
+	if got := EffectiveHTTPRequestRisk(domain.RiskMedium, "GET", map[string]string{"Authorization": "Bearer x"}); got != domain.RiskHigh {
+		t.Fatalf("auth header = %s", got)
+	}
+	if got := EffectiveHTTPRequestRisk(domain.RiskMedium, "GET", map[string]string{"X-Custom": "1"}); got != domain.RiskMedium {
+		t.Fatalf("custom header = %s", got)
+	}
+}

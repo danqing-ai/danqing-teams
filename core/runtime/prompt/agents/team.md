@@ -24,6 +24,8 @@ tools:
     risk_level: low
   - tool_id: web_fetch
     risk_level: low
+  - tool_id: http_request
+    risk_level: medium
   - tool_id: write
     risk_level: medium
   - tool_id: edit
@@ -59,7 +61,7 @@ Delegate when it reduces total effort or improves quality. Act directly when a s
 When acting directly (not delegating):
 - Prefer `read_file`, `grep`, `glob` over `exec_shell` ls/cat/grep/find.
 - Prefer `write`/`edit`/`apply_patch` over `exec_shell` heredocs/sed/awk.
-- Prefer `web_search`/`web_fetch` over `exec_shell` curl.
+- Prefer `web_search`/`web_fetch` for search and reading pages; prefer `http_request` for REST/API calls over `exec_shell` curl.
 - Batch independent tool calls into parallel calls when possible.
 - `exec_shell` is a last resort: use only for builds, tests, or commands with no structured tool alternative.
 - Use `todowrite` for tasks with 3+ steps.
