@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# Run all local Harbor tasks under evals/dq_harbor/tasks/ for one agent.
+# Run Terminal-Bench 2.0 tasks under evals/dq_harbor/tasks/ for one agent.
+# Tasks are official TB2, synced via sync_tb2_tasks.sh (Dockerfiles FROM dq-harbor-base:local).
+#
 # Usage:
+#   ./evals/dq_harbor/sync_tb2_tasks.sh
+#   make eval-harbor-base
 #   ./evals/dq_harbor/run_suite.sh oracle
 #   ./evals/dq_harbor/run_suite.sh dq_harbor.agent:DanQingAgent
 #   ./evals/dq_harbor/run_suite.sh opencode
@@ -18,6 +22,7 @@ N_CONCURRENT="${HARBOR_N_CONCURRENT:-1}"
 # OpenCode/OpenHands install (nvm/npm/pip) is slow; give agents more wall time.
 TIMEOUT_MULT="${HARBOR_TIMEOUT_MULT:-1}"
 AGENT_TIMEOUT_MULT="${HARBOR_AGENT_TIMEOUT_MULT:-1}"
+MAX_TASKS="${HARBOR_MAX_TASKS:-${HARBOR_N_TASKS:-}}"
 PODMAN_BIN="${PODMAN_BIN:-$(command -v podman 2>/dev/null || true)}"
 [[ -z "$PODMAN_BIN" && -x /opt/podman/bin/podman ]] && PODMAN_BIN=/opt/podman/bin/podman
 
@@ -29,6 +34,11 @@ fi
 # Default: use prebaked OpenCode agent (skips nvm when base image has it).
 if [[ "$AGENT" == "opencode" ]]; then
   AGENT="${OPENCODE_AGENT:-dq_harbor.agent_opencode:OpenCodePrebuilt}"
+fi
+
+if [[ ! -d "$TASKS_DIR" ]] || ! compgen -G "$TASKS_DIR"/*/task.toml >/dev/null; then
+  echo "no TB2 tasks under $TASKS_DIR — run: ./evals/dq_harbor/sync_tb2_tasks.sh" >&2
+  exit 1
 fi
 
 if [[ "$AGENT" != "oracle" && -z "$MODEL" ]]; then
@@ -86,6 +96,14 @@ fi
 if [[ ${#tasks[@]} -eq 0 ]]; then
   echo "no tasks under $TASKS_DIR" >&2
   exit 1
+fi
+# Optional smoke limit (sorted for stable first-N). Bash 3.2 compatible.
+if [[ -n "$MAX_TASKS" ]]; then
+  limited=()
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && limited+=("$line")
+  done < <(printf '%s\n' "${tasks[@]}" | sort | head -n "$MAX_TASKS")
+  tasks=("${limited[@]}")
 fi
 
 pass=0

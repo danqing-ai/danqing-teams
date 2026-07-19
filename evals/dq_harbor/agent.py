@@ -1,10 +1,11 @@
-"""Harbor BaseInstalledAgent adapter for DanQing Teams (smoke eval).
+"""Harbor BaseInstalledAgent adapter for DanQing Teams.
 
 Usage:
   make eval-harbor-bin
-  PYTHONPATH=evals harbor run --path evals/dq_harbor/tasks/hello-txt \\
-    --agent dq_dq_harbor.agent:DanQingAgent \\
-    --model deepseek/deepseek-chat \\
+  make eval-harbor-sync-tb2
+  PYTHONPATH=evals harbor run --path evals/dq_harbor/tasks/<task> \\
+    --agent dq_harbor.agent:DanQingAgent \\
+    --model deepseek/deepseek-v4-flash \\
     --n-concurrent 1 \\
     --ae TEAMS_API_KEY=$TEAMS_API_KEY \\
     --ae TEAMS_BASE_URL=$TEAMS_BASE_URL

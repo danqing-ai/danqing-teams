@@ -51,11 +51,11 @@ def main() -> int:
 
     all_tasks = sorted({t for p in parsed.values() for t in p["tasks"]})
     lines = [
-        "# Harbor local suite compare",
+        "# Terminal-Bench 2.0 compare",
         "",
         f"Dir: `{root}`",
         "",
-        "Pass = Harbor Mean reward ≥ 1.0",
+        "Synced TB2 + `dq-harbor-base:local`. Pass = Harbor Mean reward ≥ 1.0",
         "",
         "| Task | DanQing | OpenCode | OpenHands |",
         "|------|---------|----------|-----------|",

@@ -32,6 +32,9 @@
 node_modules/
 /desktop/src-tauri/bin/
 /evals/dq_harbor/compare_results/
+/evals/dq_harbor/jobs/
+/evals/dq_harbor/tasks/
+/jobs/
 
 # Python
 __pycache__/

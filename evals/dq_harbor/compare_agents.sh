@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Full-suite compare: DanQing vs OpenCode vs OpenHands on the unified 35-task Harbor suite.
+# Full-suite compare: DanQing vs OpenCode vs OpenHands on Terminal-Bench 2.0 (~89 tasks).
 # Usage (from repo root):
 #   ./evals/dq_harbor/compare_agents.sh
 set -euo pipefail
@@ -47,6 +47,7 @@ OPENHANDS_MODEL="${OPENHANDS_MODEL:-openai/deepseek-v4-flash}"
 OPENCODE_AGENT="${OPENCODE_AGENT:-dq_harbor.agent_opencode:OpenCodePrebuilt}"
 
 make eval-harbor-base
+make eval-harbor-sync-tb2
 make eval-harbor-bin
 
 OUT_DIR="$ROOT/evals/dq_harbor/compare_results/$(date +%Y%m%d_%H%M%S)"

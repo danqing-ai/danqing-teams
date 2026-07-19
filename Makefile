@@ -15,13 +15,14 @@ export DQ_APP_NAME := $(APP_NAME)
 	check-layers test test-integration \
 	build-go build-server build-cli build-tui build-sidecar build build-all clean \
 	pack-prereqs pack-macos-desktop pack-linux-server pack-windows-desktop \
-	eval-harbor-bin eval-harbor-base eval-harbor-smoke eval-harbor-suite eval-harbor-compare
+	eval-harbor-bin eval-harbor-base eval-harbor-sync-tb2 eval-harbor-smoke eval-harbor-suite eval-harbor-compare
 
 EVAL_BIN_DIR := $(OUT_DIR)/eval
 EVAL_CLI_BIN := $(EVAL_BIN_DIR)/danqing-teams-cli
 # Podman on Apple Silicon typically runs linux/arm64; Linux x86 hosts use amd64.
 EVAL_GOARCH ?= $(shell uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
-HARBOR_TASK ?= $(CURDIR)/evals/dq_harbor/tasks/hello-txt
+# First synced TB2 task (after `make eval-harbor-sync-tb2`); override with HARBOR_TASK=...
+HARBOR_TASK ?= $(shell ls -1d $(CURDIR)/evals/dq_harbor/tasks/*/ 2>/dev/null | head -1 | sed 's:/*$$::')
 HARBOR_MODEL ?= $(TEAMS_MODEL)
 # Harbor 0.19 has no built-in "podman" env; use docker API against Podman via DOCKER_HOST.
 HARBOR_ENV ?= docker
@@ -40,7 +41,7 @@ help:
 	@echo ""
 	@echo "Frontend:  frontend-install | frontend-dev | frontend-build | frontend-typecheck"
 	@echo "Test:      check-layers | test | test-integration"
-	@echo "Eval:      eval-harbor-bin | eval-harbor-base | eval-harbor-smoke | eval-harbor-suite | eval-harbor-compare"
+	@echo "Eval:      eval-harbor-bin | eval-harbor-base | eval-harbor-sync-tb2 | eval-harbor-smoke | eval-harbor-suite | eval-harbor-compare"
 	@echo "Build:     build | build-all | build-go | build-server | build-cli | build-tui | build-sidecar | clean"
 	@echo "Release:   pack-macos-desktop | pack-linux-server | pack-windows-desktop"
 
@@ -143,12 +144,18 @@ eval-harbor-base:
 	@chmod +x $(CURDIR)/evals/dq_harbor/build_base_image.sh
 	@$(CURDIR)/evals/dq_harbor/build_base_image.sh
 
-# Local Harbor smoke: oracle verifies the task, then DanQing agent runs it.
-# Requires: Podman (+ DOCKER_HOST), `uv tool install harbor`, and LLM credentials.
-eval-harbor-smoke: eval-harbor-base eval-harbor-bin
+# Download official terminal-bench@2.0 and rewrite task Dockerfiles to FROM dq-harbor-base:local.
+eval-harbor-sync-tb2:
+	@chmod +x $(CURDIR)/evals/dq_harbor/sync_tb2_tasks.sh
+	@$(CURDIR)/evals/dq_harbor/sync_tb2_tasks.sh
+
+# Smoke: oracle then DanQing on one synced TB2 task (HARBOR_TASK or first under tasks/).
+# Requires: Podman, harbor, make eval-harbor-sync-tb2, LLM credentials.
+eval-harbor-smoke: eval-harbor-sync-tb2 eval-harbor-base eval-harbor-bin
 	@test -x "$(PODMAN_BIN)" || (echo "podman not found (tried $(PODMAN_BIN))" >&2; exit 1)
 	@command -v harbor >/dev/null 2>&1 || (echo "harbor not found — install with: uv tool install harbor" >&2; exit 1)
-	@test -n "$(HARBOR_MODEL)" || (echo "Set TEAMS_MODEL or HARBOR_MODEL (e.g. deepseek/deepseek-chat)" >&2; exit 1)
+	@test -n "$(HARBOR_MODEL)" || (echo "Set TEAMS_MODEL or HARBOR_MODEL (e.g. deepseek/deepseek-v4-flash)" >&2; exit 1)
+	@test -n "$(HARBOR_TASK)" || (echo "no tasks — run make eval-harbor-sync-tb2" >&2; exit 1)
 	chmod +x $(HARBOR_TASK)/tests/test.sh $(HARBOR_TASK)/solution/solve.sh
 	@SOCK="$$($(PODMAN_BIN) machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}' 2>/dev/null || true)"; \
 	  if [ -n "$$SOCK" ]; then export DOCKER_HOST="unix://$$SOCK"; fi; \
@@ -169,8 +176,8 @@ eval-harbor-smoke: eval-harbor-base eval-harbor-bin
 		$(if $(ANTHROPIC_API_KEY),--ae ANTHROPIC_API_KEY=$(ANTHROPIC_API_KEY),) \
 		$(if $(OPENAI_BASE_URL),--ae OPENAI_BASE_URL=$(OPENAI_BASE_URL),)
 
-# Run the unified 35-task suite under evals/dq_harbor/tasks/ (oracle, then DanQing).
-eval-harbor-suite: eval-harbor-bin
+# Full Terminal-Bench 2.0 suite (~89 tasks under evals/dq_harbor/tasks/).
+eval-harbor-suite: eval-harbor-sync-tb2 eval-harbor-bin
 	@test -x "$(PODMAN_BIN)" || (echo "podman not found (tried $(PODMAN_BIN))" >&2; exit 1)
 	@command -v harbor >/dev/null 2>&1 || (echo "harbor not found — install with: uv tool install harbor" >&2; exit 1)
 	@test -n "$(HARBOR_MODEL)" || (echo "Set TEAMS_MODEL or HARBOR_MODEL" >&2; exit 1)
@@ -186,7 +193,7 @@ eval-harbor-suite: eval-harbor-bin
 
 # Same suite for a comparison agent, e.g. make eval-harbor-compare HARBOR_COMPARE_AGENT=opencode
 HARBOR_COMPARE_AGENT ?= opencode
-eval-harbor-compare: eval-harbor-base
+eval-harbor-compare: eval-harbor-sync-tb2 eval-harbor-base
 	@test -x "$(PODMAN_BIN)" || (echo "podman not found (tried $(PODMAN_BIN))" >&2; exit 1)
 	@command -v harbor >/dev/null 2>&1 || (echo "harbor not found" >&2; exit 1)
 	@test -n "$(HARBOR_MODEL)" || (echo "Set TEAMS_MODEL or HARBOR_MODEL" >&2; exit 1)

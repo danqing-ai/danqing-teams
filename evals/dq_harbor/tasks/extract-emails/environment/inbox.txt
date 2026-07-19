@@ -1,5 +1,0 @@
-Hello alice@example.com and bob@test.org
-Also alice@example.com again.
-Contact: carol.d@corp.co.uk please.
-Not an email: @missing.local or user@
-Ignore ftp://files.example.com/path

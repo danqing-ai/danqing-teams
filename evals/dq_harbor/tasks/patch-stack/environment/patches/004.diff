@@ -1,8 +1,0 @@
---- a/doc.txt
-+++ b/doc.txt
-@@ -4,5 +4,4 @@
- INSERT
- DELTA
--epsilon
- zeta
- eta

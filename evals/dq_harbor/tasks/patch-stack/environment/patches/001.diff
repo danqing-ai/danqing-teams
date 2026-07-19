@@ -1,8 +1,0 @@
---- a/doc.txt
-+++ b/doc.txt
-@@ -1,4 +1,4 @@
- alpha
--beta
-+BETA
- gamma
- delta
