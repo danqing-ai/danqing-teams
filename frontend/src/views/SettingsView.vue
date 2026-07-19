@@ -5,6 +5,7 @@ import { Setting, Cpu, Search, Brush, Monitor } from '@danqing/dq-shell'
 import { useLLMStore } from '@/stores/llm'
 import { useSearchConfigStore } from '@/stores/searchConfig'
 import { useRuntimeConfigStore } from '@/stores/runtimeConfig'
+import { useMarketConfigStore } from '@/stores/marketConfig'
 import { useModelConfigStore } from '@/stores/modelLimits'
 import { useThemeStore, THEME_OPTIONS } from '@/stores/theme'
 import type { ThemeId } from '@/stores/theme'
@@ -12,15 +13,16 @@ import { toast } from '@/utils/feedback'
 import Skeleton from '@/components/common/Skeleton.vue'
 import { useAppUpdater } from '@/composables/useAppUpdater'
 import { isTauriRuntime } from '@/utils/desktop'
-import type { LLMProviderType, LLMProviderConfig, LLMModelRef, LLMProviderPreset, SearchProvider, ModelConfig } from '@/types/mission'
+import type { LLMProviderType, LLMProviderConfig, LLMModelRef, LLMProviderPreset, SearchProvider, ModelConfig, ConfigMarketSection, MarketSourceConfig } from '@/types/mission'
 
-type SettingsTab = 'runtime' | 'models' | 'modelConfig' | 'search' | 'appearance' | 'about'
+type SettingsTab = 'runtime' | 'models' | 'modelConfig' | 'search' | 'market' | 'appearance' | 'about'
 
 const { t } = useI18n()
 const activeTab = ref<SettingsTab>('models')
 const llm = useLLMStore()
 const searchConfig = useSearchConfigStore()
 const runtimeConfig = useRuntimeConfigStore()
+const marketConfig = useMarketConfigStore()
 const modelConfig = useModelConfigStore()
 const themeStore = useThemeStore()
 const {
@@ -97,6 +99,11 @@ const searchForm = ref({
   proxy: '',
   userAgent: '',
   htmlFallback: true,
+})
+
+const marketForm = ref<ConfigMarketSection>({
+  cacheTtlHours: 6,
+  sources: [],
 })
 
 const runtimeForm = ref({
@@ -178,6 +185,7 @@ onMounted(async () => {
     llm.loadPresets(),
     searchConfig.loadConfig(),
     runtimeConfig.loadConfig(),
+    marketConfig.loadConfig(),
     modelConfig.load(),
   ])
   if (searchConfig.config) {
@@ -195,8 +203,44 @@ onMounted(async () => {
   if (runtimeConfig.config) {
     runtimeForm.value = { ...runtimeConfig.config }
   }
+  if (marketConfig.config) {
+    marketForm.value = {
+      cacheTtlHours: marketConfig.config.cacheTtlHours,
+      sources: marketConfig.config.sources.map((s) => ({ ...s })),
+    }
+  }
   modelConfigForm.value = [...modelConfig.models]
 })
+
+function addMarketSource() {
+  marketForm.value.sources.push(marketConfig.emptySource())
+}
+
+function removeMarketSource(idx: number) {
+  marketForm.value.sources.splice(idx, 1)
+}
+
+async function handleSaveMarket() {
+  const ids = marketForm.value.sources.map((s) => s.id.trim()).filter(Boolean)
+  if (new Set(ids).size !== ids.length) {
+    toast.warning(t('settings.marketSourceId') + ' must be unique')
+    return
+  }
+  try {
+    await marketConfig.saveConfig({
+      cacheTtlHours: marketForm.value.cacheTtlHours,
+      sources: marketForm.value.sources.map((s: MarketSourceConfig) => ({ ...s })),
+    })
+    if (marketConfig.config) {
+      marketForm.value = {
+        cacheTtlHours: marketConfig.config.cacheTtlHours,
+        sources: marketConfig.config.sources.map((s) => ({ ...s })),
+      }
+    }
+  } catch {
+    /* toast in store */
+  }
+}
 
 const displayedModels = computed<LLMModelRef[]>(() => form.value.models)
 
@@ -479,6 +523,7 @@ const menuGroups = computed(() => [
     label: t('settings.groupRuntime'),
     items: [
       { id: 'runtime' as SettingsTab, label: t('settings.runtime'), icon: Setting },
+      { id: 'market' as SettingsTab, label: t('settings.market'), icon: Search },
     ],
   },
   {
@@ -494,6 +539,7 @@ const footerHint = computed(() => {
   switch (activeTab.value) {
     case 'runtime': return t('common.saveShortcut')
     case 'search': return t('common.saveShortcut')
+    case 'market': return t('settings.marketRestartHint')
     case 'models': return t('settings.modelsHint')
     case 'modelConfig': return t('settings.modelConfigHint')
     case 'about': return t('settings.aboutHint')
@@ -523,7 +569,7 @@ const updaterStatusText = computed(() => {
 })
 
 const hasFooterActions = computed(() => {
-  return ['runtime', 'search', 'models', 'modelConfig'].includes(activeTab.value)
+  return ['runtime', 'search', 'market', 'models', 'modelConfig'].includes(activeTab.value)
 })
 </script>
 
@@ -930,6 +976,106 @@ const hasFooterActions = computed(() => {
         </div>
       </div>
 
+      <div v-else-if="activeTab === 'market'" class="settings-section settings-section--wide">
+        <header class="settings-section__head">
+          <h2>{{ $t('settings.market') }}</h2>
+          <p>{{ $t('settings.marketDesc') }}</p>
+        </header>
+
+        <div v-if="marketConfig.loading" class="settings-empty settings-empty--skeleton">
+          <Skeleton variant="title" width="30%" />
+          <Skeleton variant="card" width="100%" />
+        </div>
+
+        <div v-else class="settings-form">
+          <label class="settings-field settings-field--half">
+            <span class="settings-field__label">{{ $t('settings.marketCacheTtl') }}</span>
+            <DqInput v-model.number="marketForm.cacheTtlHours" type="number" min="1" max="168" />
+          </label>
+
+          <div class="settings-form-group">
+            <div class="settings-form-group__head">
+              <span class="settings-form-group__title">{{ $t('settings.marketSources') }}</span>
+              <DqButton size="small" @click="addMarketSource">{{ $t('settings.marketAddSource') }}</DqButton>
+            </div>
+
+            <div v-if="!marketForm.sources.length" class="settings-empty">
+              {{ $t('settings.marketAddSource') }}
+            </div>
+
+            <article
+              v-for="(src, idx) in marketForm.sources"
+              :key="idx"
+              class="market-source-card"
+            >
+              <div class="market-source-card__toolbar">
+                <label class="settings-field settings-field--switch">
+                  <span class="settings-field__label">{{ $t('settings.marketEnabled') }}</span>
+                  <DqSwitch
+                    :model-value="src.enabled"
+                    size="small"
+                    @update:model-value="(v: boolean) => src.enabled = v"
+                  />
+                </label>
+                <DqButton size="small" type="danger" @click="removeMarketSource(idx)">
+                  {{ $t('settings.marketRemoveSource') }}
+                </DqButton>
+              </div>
+
+              <div class="settings-form-row">
+                <label class="settings-field settings-field--half">
+                  <span class="settings-field__label">{{ $t('settings.marketSourceId') }}</span>
+                  <DqInput v-model="src.id" class="resource-input-mono" placeholder="official-github" />
+                </label>
+                <label class="settings-field settings-field--half">
+                  <span class="settings-field__label">{{ $t('settings.marketSourceName') }}</span>
+                  <DqInput v-model="src.name" placeholder="Official (GitHub)" />
+                </label>
+              </div>
+
+              <div class="settings-form-row">
+                <label class="settings-field settings-field--half">
+                  <span class="settings-field__label">{{ $t('settings.marketPlatform') }}</span>
+                  <DqSelect v-model="src.platform">
+                    <DqOption
+                      v-for="opt in marketConfig.platformOptions"
+                      :key="opt.value"
+                      :value="opt.value"
+                      :label="opt.label"
+                    />
+                  </DqSelect>
+                </label>
+                <label class="settings-field settings-field--half">
+                  <span class="settings-field__label">{{ $t('settings.marketPriority') }}</span>
+                  <DqInput v-model.number="src.priority" type="number" />
+                </label>
+              </div>
+
+              <label class="settings-field">
+                <span class="settings-field__label">{{ $t('settings.marketRepo') }}</span>
+                <DqInput v-model="src.repo" :placeholder="$t('settings.marketRepoPlaceholder')" />
+              </label>
+
+              <div class="settings-form-row">
+                <label class="settings-field settings-field--half">
+                  <span class="settings-field__label">{{ $t('settings.marketRef') }}</span>
+                  <DqInput v-model="src.ref" placeholder="main" />
+                </label>
+                <label class="settings-field settings-field--half">
+                  <span class="settings-field__label">{{ $t('settings.marketCatalogPath') }}</span>
+                  <DqInput v-model="src.catalogPath" placeholder="catalog/index.json" />
+                </label>
+              </div>
+
+              <label class="settings-field">
+                <span class="settings-field__label">{{ $t('settings.marketToken') }}</span>
+                <DqInput v-model="src.token" type="password" placeholder="ghp_…" />
+              </label>
+            </article>
+          </div>
+        </div>
+      </div>
+
       <div v-else-if="activeTab === 'modelConfig'" class="settings-section settings-section--wide">
         <header class="settings-section__head">
           <h2>{{ $t('settings.modelConfig') }}</h2>
@@ -1053,6 +1199,9 @@ const hasFooterActions = computed(() => {
           </DqButton>
           <DqButton v-else-if="activeTab === 'search'" type="primary" :disabled="searchConfig.saving" @click="handleSaveSearch">
             {{ searchConfig.saving ? $t('common.saving') : $t('common.save_') }}
+          </DqButton>
+          <DqButton v-else-if="activeTab === 'market'" type="primary" :disabled="marketConfig.saving" @click="handleSaveMarket">
+            {{ marketConfig.saving ? $t('common.saving') : $t('common.save_') }}
           </DqButton>
           <DqButton v-else-if="activeTab === 'models'" type="primary" @click="openNewForm">{{ $t('settings.addProvider') }}</DqButton>
           <DqButton v-else-if="activeTab === 'modelConfig'" @click="addModelEntry">{{ $t('settings.addModelConfig') }}</DqButton>
@@ -1468,6 +1617,14 @@ const hasFooterActions = computed(() => {
   margin-top: 24px;
 }
 
+.settings-form-group__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
 .settings-form-group__title {
   margin: 0 0 4px;
   font-size: var(--dq-font-size-secondary);
@@ -1480,6 +1637,23 @@ const hasFooterActions = computed(() => {
   font-size: var(--dq-font-size-footnote);
   color: var(--dq-label-tertiary);
   line-height: 1.5;
+}
+
+.market-source-card {
+  border: 1px solid var(--teams-glass-border);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.market-source-card__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .settings-sandbox-status {

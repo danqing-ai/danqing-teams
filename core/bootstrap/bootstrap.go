@@ -7,6 +7,7 @@ import (
 
 	"danqing-teams/core/adapter/config"
 	"danqing-teams/core/adapter/llm"
+	gitmarket "danqing-teams/core/adapter/market/git"
 	"danqing-teams/core/domain"
 	"danqing-teams/core/paths"
 	"danqing-teams/core/port"
@@ -46,6 +47,7 @@ type Core struct {
 	SearchConfig  *service.SearchConfigManager
 	Agents        *service.AgentManager
 	Skills        *service.SkillManager
+	Market        *service.MarketManager
 	TurnLogs      *service.TurnLogManager
 	MCPServers    *service.MCPManager
 }
@@ -141,6 +143,9 @@ func New(cfg Config) *Core {
 	ensureBuiltinAgents(agents)
 	ensureBuiltinSkills(skills)
 
+	marketReg := gitmarket.NewRegistry(appCfg.Market.Sources)
+	marketMgr := service.NewMarketManager(configManager, marketReg, skills, agents)
+
 	stream := dqruntime.NewStreamEventManager(st.StreamEvents())
 	checkpointStore := turnlog.NewCheckpointStore(pm.ProjectDir)
 
@@ -183,6 +188,7 @@ func New(cfg Config) *Core {
 		SearchConfig:  searchConfig,
 		Agents:        agents,
 		Skills:        skills,
+		Market:        marketMgr,
 		TurnLogs:      turnLogManager,
 		MCPServers:    mcpManager,
 	}
@@ -215,7 +221,7 @@ func ensureBuiltinAgents(agents *service.AgentManager) {
 		if _, err := agents.Get(ctx, tmpl.Agent.ID); err == nil {
 			continue
 		}
-		agents.Upsert(ctx, tmpl.Agent)
+		_ = agents.Upsert(ctx, tmpl.Agent)
 	}
 }
 

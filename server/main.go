@@ -31,6 +31,9 @@ func main() {
 			Skills:   core.Skills,
 			Importer: service.NewSkillImporter(),
 		},
+		MarketHandler: &apiv1.MarketHandler{
+			Market: core.Market,
+		},
 		TurnLogs:   core.TurnLogs,
 		MCPServers: core.MCPServers,
 		Sandbox:    core.Sandbox,

@@ -27,14 +27,15 @@ type Handler struct {
 	LLMConfig    *service.LLMConfigManager
 	Config       *service.ConfigManager
 	SearchConfig *service.SearchConfigManager
-	Agents       *service.AgentManager
-	Skills       *service.SkillManager
-	SkillHandler *SkillHandler
-	TurnLogs     *service.TurnLogManager
-	MCPServers   *service.MCPManager
-	Sandbox      port.Sandbox
-	Browser      port.Browser
-	Store        port.Repository
+	Agents        *service.AgentManager
+	Skills        *service.SkillManager
+	SkillHandler  *SkillHandler
+	MarketHandler *MarketHandler
+	TurnLogs      *service.TurnLogManager
+	MCPServers    *service.MCPManager
+	Sandbox       port.Sandbox
+	Browser       port.Browser
+	Store         port.Repository
 }
 
 type RouterConfig struct {
@@ -134,6 +135,13 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.PUT("/skills/:id/files/*path", upsertSkillFile(h.SkillHandler))
 	api.DELETE("/skills/:id/files/*path", deleteSkillFile(h.SkillHandler))
 	api.GET("/skills/:id/files/*path", getSkillFile(h.SkillHandler))
+
+	if h.MarketHandler != nil {
+		api.GET("/market/sources", listMarketSources(h.MarketHandler))
+		api.GET("/market/catalog", listMarketCatalog(h.MarketHandler))
+		api.POST("/market/install", installMarketItem(h.MarketHandler))
+		api.POST("/market/uninstall", uninstallMarketItem(h.MarketHandler))
+	}
 
 	api.GET("/version", getVersion())
 

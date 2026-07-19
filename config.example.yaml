@@ -75,6 +75,39 @@ search:
   # When an API provider fails or returns zero results, fall back to DuckDuckGo/Bing HTML (default true).
   html_fallback: true
 
+# Expert / skill market sources. Built-in official GitHub + Gitee sources are
+# applied when this section is empty. Add custom git sources or disable official ones.
+market:
+  cache_ttl_hours: 6
+  sources:
+    - id: official-github
+      name: Official (GitHub)
+      kind: git
+      platform: github
+      repo: https://github.com/danqing-ai/dq-market
+      ref: main
+      catalog_path: catalog/index.json
+      enabled: true
+      priority: 10
+    - id: official-gitee
+      name: Official (Gitee)
+      kind: git
+      platform: gitee
+      repo: danqing/dq-market
+      ref: main
+      catalog_path: catalog/index.json
+      enabled: false
+      priority: 20
+    # Local sibling repo for development (platform: local, repo = absolute path):
+    # - id: local-dq-market
+    #   name: Local dq-market
+    #   kind: git
+    #   platform: local
+    #   repo: /path/to/dq-market
+    #   ref: main
+    #   enabled: true
+    #   priority: 5
+
 # LLM provider presets — shown as quick-start templates when adding a provider.
 # These are defaults; edit or add entries to customise. The frontend "Add Provider"
 # dialog lets users pick from these presets or enter a custom configuration.

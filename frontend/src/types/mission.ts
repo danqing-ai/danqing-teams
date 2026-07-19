@@ -224,6 +224,25 @@ export interface ConfigFile {
     providers: LLMProviderPreset[]
     models?: ModelConfig[]
   }
+  market?: ConfigMarketSection
+}
+
+export interface MarketSourceConfig {
+  id: string
+  name: string
+  kind: string
+  platform?: string
+  repo?: string
+  ref?: string
+  catalogPath?: string
+  token?: string
+  enabled: boolean
+  priority: number
+}
+
+export interface ConfigMarketSection {
+  cacheTtlHours: number
+  sources: MarketSourceConfig[]
 }
 
 export interface SandboxStatus {
@@ -252,6 +271,7 @@ export interface UpdateConfigFileRequest {
   instance?: ConfigFile['instance']
   runtime?: ConfigFile['runtime']
   search?: UpsertSearchConfigRequest
+  market?: ConfigMarketSection
 }
 
 export interface RuntimeConfigForm {

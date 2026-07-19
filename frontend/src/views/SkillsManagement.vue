@@ -6,13 +6,24 @@ import { confirm, toast } from '@/utils/feedback'
 import type { Skill, SkillFile } from '@/types'
 import MdEditor from '@/components/common/MdEditor.vue'
 import WorkspaceShell from '@/components/common/WorkspaceShell.vue'
+import MarketBrowser from '@/components/market/MarketBrowser.vue'
+import MarketCatalogRail from '@/components/market/MarketCatalogRail.vue'
+import { useMarketStore } from '@/stores/market'
 
 type SkillTab = 'info' | 'body' | 'files' | 'tools'
+type PageView = 'library' | 'market'
 
 const { t } = useI18n()
 const store = useSkillsStore()
+const marketStore = useMarketStore()
 
+const pageView = ref<PageView>('library')
+const pageViewOptions = computed(() => [
+  { label: t('market.library'), value: 'library' as const },
+  { label: t('market.tab'), value: 'market' as const },
+])
 const selectedId = ref<string | null>(null)
+const marketSelectedKey = ref<string | null>(null)
 const isCreating = ref(false)
 const saving = ref(false)
 const activeTab = ref<SkillTab>('info')
@@ -53,20 +64,51 @@ const sortedSkills = computed(() =>
   [...store.items].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')),
 )
 const builtinSkills = computed(() =>
-  sortedSkills.value.filter((s) => s.builtin),
+  sortedSkills.value.filter((s) => s.builtin && !s.marketSource),
+)
+const marketSkills = computed(() =>
+  sortedSkills.value.filter((s) => !!s.marketSource),
 )
 const customSkills = computed(() =>
-  sortedSkills.value.filter((s) => !s.builtin),
+  sortedSkills.value.filter((s) => !s.builtin && !s.marketSource),
 )
+
+async function onMarketUninstalled() {
+  await store.load()
+  if (selectedId.value && !store.items.some((s) => s.id === selectedId.value)) {
+    selectedId.value = null
+  }
+}
 const selectedSkill = computed(() =>
   selectedId.value ? store.items.find((s) => s.id === selectedId.value) : null,
 )
-const hasSelection = computed(() => isCreating.value || !!selectedId.value)
+const marketSelected = computed(() => {
+  if (!marketSelectedKey.value) return null
+  return (
+    marketStore.catalog.find(
+      (item) => item.kind === 'skill' && `${item.sourceId}:${item.id}` === marketSelectedKey.value,
+    ) ?? null
+  )
+})
+const hasSelection = computed(
+  () =>
+    (pageView.value === 'market' && !!marketSelectedKey.value) ||
+    isCreating.value ||
+    !!selectedId.value,
+)
 const headerTitle = computed(() => {
+  if (pageView.value === 'market') {
+    return marketSelected.value?.name || t('market.tab')
+  }
   if (isCreating.value) return t('skills.newSkill')
   if (selectedSkill.value) return selectedSkill.value.name || t('skills.untitled')
   return ''
 })
+
+async function onMarketInstalled() {
+  await store.load()
+}
+
 const skillTabs = computed(() => [
   { label: t('common.basicInfo'), value: 'info' as const },
   { label: t('skills.instructions'), value: 'body' as const },
@@ -409,6 +451,10 @@ function formatSize(bytes: number): string {
     <template #rail>
       <div class="resource-rail__section">
         <div class="resource-rail__section-head">
+          <DqSegmented v-model="pageView" block class="resource-rail__page-view" :options="pageViewOptions" />
+        </div>
+        <template v-if="pageView === 'library'">
+        <div class="resource-rail__section-head">
           <span class="resource-rail__section-title">{{ $t('skills.title') }}</span>
           <div class="resource-rail__section-actions">
             <DqIconButton :aria-label="$t('skills.import')" @click="showImportDialog = true">
@@ -470,7 +516,27 @@ function formatSize(bytes: number): string {
               </button>
             </nav>
           </div>
+          <div v-if="marketSkills.length" class="resource-rail__group">
+            <div class="resource-rail__group-title">{{ $t('skills.marketSkills') }}</div>
+            <nav class="resource-rail__list" :aria-label="$t('skills.marketSkills')">
+              <button
+                v-for="skill in marketSkills"
+                :key="skill.id"
+                type="button"
+                class="resource-rail__row"
+                :class="{ 'is-active': selectedSkill?.id === skill.id && !isCreating }"
+                @click="selectSkill(skill.id)"
+              >
+                <span class="resource-rail__avatar">{{ initial(skill.name) }}</span>
+                <span class="resource-rail__meta">
+                  <span class="resource-rail__name">{{ skill.name }}</span>
+                </span>
+              </button>
+            </nav>
+          </div>
         </template>
+        </template>
+        <MarketCatalogRail v-else v-model:selected-key="marketSelectedKey" kind="skill" />
       </div>
     </template>
 
@@ -479,6 +545,7 @@ function formatSize(bytes: number): string {
         <div class="resource-workspace__empty-actions">
           <DqButton @click="startCreate">{{ $t('skills.newSkill') }}</DqButton>
           <DqButton @click="showImportDialog = true">{{ $t('skills.import') }}</DqButton>
+          <DqButton @click="pageView = 'market'">{{ $t('market.tab') }}</DqButton>
         </div>
       </DqEmpty>
     </template>
@@ -487,10 +554,23 @@ function formatSize(bytes: number): string {
       <div class="resource-workspace__identity">
         <h1 class="resource-workspace__title">{{ headerTitle }}</h1>
       </div>
-      <DqSegmented v-model="activeTab" class="resource-workspace__segmented" :options="skillTabs" />
+      <DqSegmented
+        v-if="pageView === 'library'"
+        v-model="activeTab"
+        class="resource-workspace__segmented"
+        :options="skillTabs"
+      />
     </template>
 
     <template #body>
+        <MarketBrowser
+          v-if="pageView === 'market'"
+          kind="skill"
+          :selected-key="marketSelectedKey"
+          @installed="onMarketInstalled"
+          @uninstalled="onMarketUninstalled"
+        />
+        <template v-else>
         <div
           v-if="!isCreating && selectedSkill?.builtin && selectedSkill.templateDiverged"
           class="skill-template-banner"
@@ -627,11 +707,11 @@ function formatSize(bytes: number): string {
             </div>
           </div>
         </section>
-
+        </template>
     </template>
 
     <template #footer>
-      
+      <template v-if="pageView === 'library'">
         <span class="resource-workspace__hint">{{ $t('common.saveShortcut') }}</span>
         <div class="resource-workspace__footer-actions">
           <DqButton v-if="isCreating" @click="isCreating = false; selectedId = null">{{ $t('common.cancel') }}</DqButton>
@@ -642,7 +722,7 @@ function formatSize(bytes: number): string {
             {{ isCreating ? $t('common.create') : $t('common.save') }}
           </DqButton>
         </div>
-      
+      </template>
     </template>
   </WorkspaceShell>
 
@@ -727,6 +807,12 @@ function formatSize(bytes: number): string {
   gap: 4px;
 }
 
+.resource-rail__page-view {
+  width: 100%;
+}
+.resource-rail__section > .resource-rail__section-head:first-child {
+  padding-inline: 10px;
+}
 .resource-rail__section-head {
   display: flex;
   align-items: center;

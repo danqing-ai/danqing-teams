@@ -10,6 +10,7 @@ type ConfigFile struct {
 	Runtime   ConfigRuntimeSection   `json:"runtime" mapstructure:"runtime"`
 	Search    SearchConfig           `json:"search" mapstructure:"search"`
 	LLM       ConfigLLMSection       `json:"llm" mapstructure:"llm"`
+	Market    ConfigMarketSection    `json:"market" mapstructure:"market"`
 }
 
 type ConfigLLMSection struct {
@@ -84,4 +85,5 @@ type UpdateConfigFileRequest struct {
 	Runtime  *ConfigRuntimeSection  `json:"runtime,omitempty"`
 	Search   *UpsertSearchConfigRequest `json:"search,omitempty"`
 	LLM      *ConfigLLMSection      `json:"llm,omitempty"`
+	Market   *ConfigMarketSection   `json:"market,omitempty"`
 }

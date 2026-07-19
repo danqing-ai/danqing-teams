@@ -98,21 +98,35 @@ func (m *skillModel) toolIDs() []string              { return unmarshalSlice[str
 func (m *skillModel) metadata() map[string]string    { return unmarshalMap(m.MetadataJSON) }
 
 func skillToDomain(m skillModel) domain.Skill {
+	meta := m.metadata()
+	marketSrc := ""
+	if meta != nil {
+		marketSrc = meta["market.source"]
+	}
 	return domain.Skill{
 		ID: m.ID, Name: m.Name, Description: m.Description,
 		License: m.License, Compatibility: m.Compatibility,
-		Metadata: m.metadata(), AllowedTools: m.AllowedTools,
+		Metadata: meta, AllowedTools: m.AllowedTools,
 		Keywords: m.keywords(), ToolIDs: m.toolIDs(),
 		SystemHint: m.SystemHint, Body: m.Body, SourcePath: m.SourcePath,
-		Builtin: m.Builtin,
+		Builtin: m.Builtin, MarketSource: marketSrc,
 	}
 }
 
 func skillFromDomain(s domain.Skill) skillModel {
+	meta := s.Metadata
+	if s.MarketSource != "" {
+		if meta == nil {
+			meta = map[string]string{}
+		}
+		if meta["market.source"] == "" {
+			meta["market.source"] = s.MarketSource
+		}
+	}
 	return skillModel{
 		ID: s.ID, Name: s.Name, Description: s.Description,
 		License: s.License, Compatibility: s.Compatibility,
-		MetadataJSON: marshalJSONMap(s.Metadata), AllowedTools: s.AllowedTools,
+		MetadataJSON: marshalJSONMap(meta), AllowedTools: s.AllowedTools,
 		KeywordsJSON: marshalJSON(s.Keywords), ToolIDsJSON: marshalJSON(s.ToolIDs),
 		SystemHint: s.SystemHint, Body: s.Body, SourcePath: s.SourcePath,
 		Builtin: s.Builtin,

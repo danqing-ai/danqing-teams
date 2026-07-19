@@ -10,6 +10,8 @@ export interface Agent {
   tools?: ToolBinding[]
   knowledgeIds?: string[]
   canDelegate?: boolean
+  builtin?: boolean
+  marketSource?: string
 }
 
 export interface CreateAgentPayload {
@@ -55,6 +57,7 @@ export interface Skill {
   body?: string
   sourcePath?: string
   builtin?: boolean
+  marketSource?: string
   templateDiverged?: boolean
 }
 
@@ -187,4 +190,46 @@ export interface ExecutionPlan {
   rationale: string
   evaluatedRisk: RiskLevel
   highRiskItems?: { type: string; id: string; displayName: string }[]
+}
+
+export interface MarketSource {
+  id: string
+  name: string
+  kind: string
+  platform?: string
+  repo?: string
+  ref?: string
+  catalogPath?: string
+  token?: string
+  enabled: boolean
+  priority: number
+}
+
+export interface MarketListing {
+  kind: 'skill' | 'expert' | 'bundle'
+  id: string
+  name: string
+  description?: string
+  keywords?: string[]
+  category?: string
+  version?: string
+  license?: string
+  author?: string
+  path: string
+  skillDeps?: string[]
+  updatedAt?: string
+  compatibility?: string
+  sourceId: string
+  sourceName?: string
+  installed?: boolean
+}
+
+export interface InstallMarketResult {
+  kind: string
+  id: string
+  sourceId: string
+  ref?: string
+  version?: string
+  installed?: string[]
+  skipped?: string[]
 }

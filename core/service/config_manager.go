@@ -66,6 +66,12 @@ func (m *ConfigManager) Update(ctx context.Context, req domain.UpdateConfigFileR
 			cfg.LLM.Models = req.LLM.Models
 		}
 	}
+	if req.Market != nil {
+		cfg.Market = *req.Market
+		if cfg.Market.CacheTTLHours <= 0 {
+			cfg.Market.CacheTTLHours = 6
+		}
+	}
 
 	if err := m.store.Save(ctx, cfg); err != nil {
 		return nil, fmt.Errorf("save config: %w", err)

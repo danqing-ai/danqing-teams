@@ -27,6 +27,11 @@ type Agent struct {
 	Tools        []ToolBinding `json:"tools"`
 	KnowledgeIDs []string     `json:"knowledgeIds"`
 	CanDelegate  bool         `json:"canDelegate"`
+	// Builtin is computed (not a DB column): true when an embedded template exists.
+	Builtin bool `json:"builtin,omitempty"`
+	// MarketSource is computed from YAML frontmatter stored in SystemPrompt
+	// (metadata.market.source); not a DB column.
+	MarketSource string `json:"marketSource,omitempty"`
 }
 
 type ToolBinding struct {

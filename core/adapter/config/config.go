@@ -82,6 +82,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("search.proxy", "")
 	v.SetDefault("search.user_agent", "")
 	v.SetDefault("search.html_fallback", true)
+	v.SetDefault("market.cache_ttl_hours", 6)
 }
 
 func bindEnv(v *viper.Viper) {
@@ -142,7 +143,42 @@ func (l *Loader) Load(_ context.Context) (*domain.ConfigFile, error) {
 	if len(cfg.LLM.Providers) == 0 {
 		cfg.LLM.Providers = defaultLLMPresets()
 	}
+	if cfg.Market.CacheTTLHours <= 0 {
+		cfg.Market.CacheTTLHours = 6
+	}
+	if len(cfg.Market.Sources) == 0 {
+		cfg.Market.Sources = defaultMarketSources()
+	}
 	return &cfg, nil
+}
+
+// defaultMarketSources returns built-in official Git market sources.
+// Users can disable, reorder, or add entries in ~/.dq-teams/config.yaml.
+func defaultMarketSources() []domain.MarketSource {
+	return []domain.MarketSource{
+		{
+			ID:          "official-github",
+			Name:        "Official (GitHub)",
+			Kind:        "git",
+			Platform:    "github",
+			Repo:        "https://github.com/danqing-ai/dq-market",
+			Ref:         "main",
+			CatalogPath: "catalog/index.json",
+			Enabled:     true,
+			Priority:    10,
+		},
+		{
+			ID:          "official-gitee",
+			Name:        "Official (Gitee)",
+			Kind:        "git",
+			Platform:    "gitee",
+			Repo:        "danqing/dq-market",
+			Ref:         "main",
+			CatalogPath: "catalog/index.json",
+			Enabled:     false,
+			Priority:    20,
+		},
+	}
 }
 
 // defaultLLMPresets returns the built-in provider presets for mainstream
@@ -190,6 +226,7 @@ func (l *Loader) Save(_ context.Context, cfg *domain.ConfigFile) error {
 	root["runtime"] = cfg.Runtime
 	root["search"] = cfg.Search
 	root["llm"] = cfg.LLM
+	root["market"] = cfg.Market
 
 	if err := os.MkdirAll(filepath.Dir(l.path), 0755); err != nil {
 		return err

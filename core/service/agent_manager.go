@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	"danqing-teams/core/domain"
@@ -24,11 +25,41 @@ func (m *AgentManager) SetTemplateLoader(fn func(id string) (*domain.Agent, erro
 	m.templateLoader = fn
 }
 
+func (m *AgentManager) enrich(a *domain.Agent) {
+	if a == nil {
+		return
+	}
+	body, meta := DecodeAgentSystemPrompt(a.SystemPrompt)
+	a.SystemPrompt = body
+	a.MarketSource = marketSourceFromMeta(meta)
+	if m.templateLoader != nil {
+		if _, err := m.templateLoader(a.ID); err == nil {
+			a.Builtin = true
+		}
+	}
+}
+
+func (m *AgentManager) prepareStore(a domain.Agent) domain.Agent {
+	body, meta := DecodeAgentSystemPrompt(a.SystemPrompt)
+	if meta == nil {
+		meta = map[string]string{}
+	}
+	if a.MarketSource != "" {
+		meta["market.source"] = a.MarketSource
+	}
+	a.SystemPrompt = EncodeAgentSystemPrompt(body, meta)
+	a.Builtin = false
+	a.MarketSource = ""
+	return a
+}
+
 func (m *AgentManager) Get(ctx context.Context, id string) (*domain.Agent, error) {
 	m.mu.RLock()
 	if a, ok := m.cache[id]; ok {
 		m.mu.RUnlock()
-		return a, nil
+		cp := *a
+		m.enrich(&cp)
+		return &cp, nil
 	}
 	m.mu.RUnlock()
 	a, err := m.store.Get(ctx, id)
@@ -38,19 +69,31 @@ func (m *AgentManager) Get(ctx context.Context, id string) (*domain.Agent, error
 	m.mu.Lock()
 	m.cache[id] = &a
 	m.mu.Unlock()
-	return &a, nil
+	cp := a
+	m.enrich(&cp)
+	return &cp, nil
 }
 
 func (m *AgentManager) List(ctx context.Context) ([]domain.Agent, error) {
-	return m.store.List(ctx)
+	list, err := m.store.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.Agent, len(list))
+	for i := range list {
+		out[i] = list[i]
+		m.enrich(&out[i])
+	}
+	return out, nil
 }
 
 func (m *AgentManager) Upsert(ctx context.Context, a domain.Agent) error {
-	if err := m.store.Upsert(ctx, a); err != nil {
+	stored := m.prepareStore(a)
+	if err := m.store.Upsert(ctx, stored); err != nil {
 		return err
 	}
 	m.mu.Lock()
-	m.cache[a.ID] = &a
+	m.cache[a.ID] = &stored
 	m.mu.Unlock()
 	return nil
 }
@@ -77,11 +120,17 @@ func (m *AgentManager) ResetFromTemplate(ctx context.Context, id string) (*domai
 	if err != nil {
 		return nil, fmt.Errorf("no template found for agent %q: %w", id, err)
 	}
-	if err := m.store.Upsert(ctx, *tmpl); err != nil {
+	tmpl.MarketSource = ""
+	body, _ := DecodeAgentSystemPrompt(tmpl.SystemPrompt)
+	stored := *tmpl
+	stored.SystemPrompt = strings.TrimSpace(body)
+	if err := m.store.Upsert(ctx, stored); err != nil {
 		return nil, err
 	}
 	m.mu.Lock()
-	m.cache[id] = tmpl
+	m.cache[id] = &stored
 	m.mu.Unlock()
-	return tmpl, nil
+	out := stored
+	m.enrich(&out)
+	return &out, nil
 }

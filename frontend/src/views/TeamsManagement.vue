@@ -3,13 +3,17 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import MdEditor from '@/components/common/MdEditor.vue'
 import WorkspaceShell from '@/components/common/WorkspaceShell.vue'
+import MarketBrowser from '@/components/market/MarketBrowser.vue'
+import MarketCatalogRail from '@/components/market/MarketCatalogRail.vue'
 import { useGlobalAgentsStore } from '@/stores/globalAgents'
 import { useSkillsStore } from '@/stores/skills'
 import { useKnowledgeStore } from '@/stores/knowledge'
+import { useMarketStore } from '@/stores/market'
 import { confirm, toast } from '@/utils/feedback'
 import type { Agent, ToolBinding } from '@/types'
 
 type ConfigTab = 'overview' | 'prompt' | 'skills' | 'tools' | 'knowledge'
+type PageView = 'library' | 'market'
 
 type AgentForm = Agent
 
@@ -17,8 +21,15 @@ const { t } = useI18n()
 const globalAgents = useGlobalAgentsStore()
 const skills = useSkillsStore()
 const knowledge = useKnowledgeStore()
+const marketStore = useMarketStore()
 
+const pageView = ref<PageView>('library')
+const pageViewOptions = computed(() => [
+  { label: t('market.library'), value: 'library' as const },
+  { label: t('market.tab'), value: 'market' as const },
+])
 const selectedId = ref<string | null>(null)
+const marketSelectedKey = ref<string | null>(null)
 const isCreating = ref(false)
 const saving = ref(false)
 const activeTab = ref<ConfigTab>('overview')
@@ -50,17 +61,52 @@ const primaryAgents = computed(() =>
   sortedAgents.value.filter((a) => a.mode !== 'subagent'),
 )
 
-const subAgents = computed(() =>
-  sortedAgents.value.filter((a) => a.mode === 'subagent'),
+const builtinAgents = computed(() =>
+  sortedAgents.value.filter((a) => a.mode === 'subagent' && a.builtin && !a.marketSource),
+)
+
+const customAgents = computed(() =>
+  sortedAgents.value.filter((a) => a.mode === 'subagent' && !a.builtin && !a.marketSource),
+)
+
+const marketAgents = computed(() =>
+  sortedAgents.value.filter((a) => a.mode === 'subagent' && !!a.marketSource),
 )
 
 const selectedAgent = computed(() => globalAgents.items.find((a) => a.id === selectedId.value))
-const hasSelection = computed(() => isCreating.value || !!selectedId.value)
+const marketSelected = computed(() => {
+  if (!marketSelectedKey.value) return null
+  return (
+    marketStore.catalog.find(
+      (item) => item.kind === 'expert' && `${item.sourceId}:${item.id}` === marketSelectedKey.value,
+    ) ?? null
+  )
+})
+const hasSelection = computed(
+  () =>
+    (pageView.value === 'market' && !!marketSelectedKey.value) ||
+    isCreating.value ||
+    !!selectedId.value,
+)
 
 const headerTitle = computed(() => {
+  if (pageView.value === 'market') {
+    return marketSelected.value?.name || t('market.tab')
+  }
   if (isCreating.value) return agentForm.value.name.trim() || t('teams.newAgent')
   return selectedAgent.value?.name.trim() || t('teams.untitled')
 })
+
+async function onMarketInstalled() {
+  await Promise.all([globalAgents.load(), skills.load()])
+}
+
+async function onMarketUninstalled() {
+  await Promise.all([globalAgents.load(), skills.load()])
+  if (selectedId.value && !globalAgents.items.some((a) => a.id === selectedId.value)) {
+    selectedId.value = null
+  }
+}
 
 const sectionTabs = computed(() => [
   { id: 'overview' as const, label: t('teams.overview') },
@@ -232,6 +278,10 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
     <template #rail>
       <div class="resource-rail__section">
         <div class="resource-rail__section-head">
+          <DqSegmented v-model="pageView" block class="resource-rail__page-view" :options="pageViewOptions" />
+        </div>
+        <template v-if="pageView === 'library'">
+        <div class="resource-rail__section-head">
           <span class="resource-rail__section-title">{{ $t('teams.workerAgent') }}</span>
           <DqIconButton :aria-label="$t('teams.newAgent')" @click="openCreate">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
@@ -243,7 +293,7 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
         <template v-else>
           <div v-if="primaryAgents.length" class="resource-rail__group">
             <div class="resource-rail__group-title">{{ $t('teams.primaryAgents') }}</div>
-            <nav class="resource-rail__list" :aria-label="$t('teams.primaryList')">
+            <nav class="resource-rail__list" :aria-label="$t('teams.primaryAgents')">
               <button
                 v-for="agent in primaryAgents"
                 :key="agent.id"
@@ -260,11 +310,49 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
               </button>
             </nav>
           </div>
-          <div v-if="subAgents.length" class="resource-rail__group">
-            <div class="resource-rail__group-title">{{ $t('teams.subAgents') }}</div>
-            <nav class="resource-rail__list" :aria-label="$t('teams.subList')">
+          <div v-if="builtinAgents.length" class="resource-rail__group">
+            <div class="resource-rail__group-title">{{ $t('teams.builtinAgents') }}</div>
+            <nav class="resource-rail__list" :aria-label="$t('teams.builtinAgents')">
               <button
-                v-for="agent in subAgents"
+                v-for="agent in builtinAgents"
+                :key="agent.id"
+                type="button"
+                class="resource-rail__row"
+                :class="{ 'is-active': selectedId === agent.id && !isCreating }"
+                @click="selectAgent(agent.id)"
+              >
+                <span class="resource-rail__avatar">{{ agentInitial(agent.name) }}</span>
+                <span class="resource-rail__meta">
+                  <span class="resource-rail__name">{{ agent.name }}</span>
+                  <span class="resource-rail__desc">{{ compactId(agent.id) }}</span>
+                </span>
+              </button>
+            </nav>
+          </div>
+          <div v-if="customAgents.length" class="resource-rail__group">
+            <div class="resource-rail__group-title">{{ $t('teams.customAgents') }}</div>
+            <nav class="resource-rail__list" :aria-label="$t('teams.customAgents')">
+              <button
+                v-for="agent in customAgents"
+                :key="agent.id"
+                type="button"
+                class="resource-rail__row"
+                :class="{ 'is-active': selectedId === agent.id && !isCreating }"
+                @click="selectAgent(agent.id)"
+              >
+                <span class="resource-rail__avatar">{{ agentInitial(agent.name) }}</span>
+                <span class="resource-rail__meta">
+                  <span class="resource-rail__name">{{ agent.name }}</span>
+                  <span class="resource-rail__desc">{{ compactId(agent.id) }}</span>
+                </span>
+              </button>
+            </nav>
+          </div>
+          <div v-if="marketAgents.length" class="resource-rail__group">
+            <div class="resource-rail__group-title">{{ $t('teams.marketAgents') }}</div>
+            <nav class="resource-rail__list" :aria-label="$t('teams.marketAgents')">
+              <button
+                v-for="agent in marketAgents"
                 :key="agent.id"
                 type="button"
                 class="resource-rail__row"
@@ -280,28 +368,44 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
             </nav>
           </div>
         </template>
+        </template>
+        <MarketCatalogRail v-else v-model:selected-key="marketSelectedKey" kind="expert" />
       </div>
     </template>
 
     <template #empty>
       <DqEmpty :description="$t('teams.emptySelection')">
         <p class="resource-workspace__hint">{{ $t('teams.emptySelectionHint') }}</p>
+        <DqButton @click="pageView = 'market'">{{ $t('market.tab') }}</DqButton>
       </DqEmpty>
     </template>
 
     <template #header>
       <div class="resource-workspace__identity">
         <h1 class="resource-workspace__title">{{ headerTitle }}</h1>
-        <div v-if="!isCreating" class="resource-workspace__badges">
+        <div v-if="pageView === 'library' && !isCreating" class="resource-workspace__badges">
           <code v-if="selectedAgent?.id" class="resource-workspace__id">
             {{ compactId(selectedAgent.id) }}
           </code>
         </div>
       </div>
-      <DqSegmented v-model="activeTab" class="resource-workspace__segmented" :options="sectionTabs.map((t) => ({ label: t.label, value: t.id }))" />
+      <DqSegmented
+        v-if="pageView === 'library'"
+        v-model="activeTab"
+        class="resource-workspace__segmented"
+        :options="sectionTabs.map((t) => ({ label: t.label, value: t.id }))"
+      />
     </template>
 
     <template #body>
+      <MarketBrowser
+        v-if="pageView === 'market'"
+        kind="expert"
+        :selected-key="marketSelectedKey"
+        @installed="onMarketInstalled"
+        @uninstalled="onMarketUninstalled"
+      />
+      <template v-else>
       <section v-show="activeTab === 'overview'" class="resource-section">
         <div class="resource-form-grid resource-form-grid--2">
           <label class="resource-field">
@@ -426,23 +530,32 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
           </div>
         </div>
       </section>
+      </template>
     </template>
 
     <template #footer>
-      <span class="resource-workspace__hint">{{ $t('common.saveShortcut') }}</span>
-      <div class="resource-workspace__footer-actions">
-        <DqButton v-if="isCreating" @click="isCreating = false; selectedId = null">{{ $t('common.cancel') }}</DqButton>
-        <DqButton v-if="!isCreating" @click="removeSelected">{{ $t('common.delete') }}</DqButton>
-        <DqButton v-if="!isCreating" @click="resetSelected">{{ $t('common.reset') }}</DqButton>
-        <DqButton type="primary" :disabled="saving" @click="save">
-          {{ isCreating ? $t('teams.createAgent') : $t('common.save') }}
-        </DqButton>
-      </div>
+      <template v-if="pageView === 'library'">
+        <span class="resource-workspace__hint">{{ $t('common.saveShortcut') }}</span>
+        <div class="resource-workspace__footer-actions">
+          <DqButton v-if="isCreating" @click="isCreating = false; selectedId = null">{{ $t('common.cancel') }}</DqButton>
+          <DqButton v-if="!isCreating" @click="removeSelected">{{ $t('common.delete') }}</DqButton>
+          <DqButton v-if="!isCreating" @click="resetSelected">{{ $t('common.reset') }}</DqButton>
+          <DqButton type="primary" :disabled="saving" @click="save">
+            {{ isCreating ? $t('teams.createAgent') : $t('common.save') }}
+          </DqButton>
+        </div>
+      </template>
     </template>
   </WorkspaceShell>
 </template>
 
 <style scoped>
+.resource-rail__page-view {
+  width: 100%;
+}
+.resource-rail__section > .resource-rail__section-head:first-child {
+  padding-inline: 10px;
+}
 .resource-rail__section {
   display: flex;
   flex-direction: column;

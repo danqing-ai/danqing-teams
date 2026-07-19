@@ -235,7 +235,13 @@ func (m *SkillManager) enrichTemplateStatusBatch(ctx context.Context, skills []d
 }
 
 func (m *SkillManager) enrichTemplateStatus(ctx context.Context, sk *domain.Skill) {
-	if sk == nil || !sk.Builtin {
+	if sk == nil {
+		return
+	}
+	if sk.MarketSource == "" && sk.Metadata != nil {
+		sk.MarketSource = sk.Metadata["market.source"]
+	}
+	if !sk.Builtin {
 		return
 	}
 	diverged, err := m.DivergedFromTemplate(ctx, *sk)
