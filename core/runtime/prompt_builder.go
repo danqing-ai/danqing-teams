@@ -72,6 +72,9 @@ func buildSkillMetadata(skills []domain.Skill) string {
 	for _, sk := range skills {
 		fmt.Fprintf(&b, "  <skill>\n")
 		fmt.Fprintf(&b, "    <path>%s</path>\n", escapeXML(sk.Name))
+		if cat := skillCategory(sk); cat != "" {
+			fmt.Fprintf(&b, "    <category>%s</category>\n", escapeXML(cat))
+		}
 		fmt.Fprintf(&b, "    <description>%s</description>\n", escapeXML(sk.Description))
 		if sk.SystemHint != "" {
 			fmt.Fprintf(&b, "    <hint>%s</hint>\n", escapeXML(sk.SystemHint))
@@ -123,6 +126,14 @@ func skillToolSchemas(skills []domain.Skill, toolBindings []domain.ToolBinding) 
 		}
 	}
 	return schemas
+}
+
+// skillCategory returns metadata.category when set (general | coding | work).
+func skillCategory(sk domain.Skill) string {
+	if sk.Metadata == nil {
+		return ""
+	}
+	return strings.TrimSpace(sk.Metadata["category"])
 }
 
 func escapeXML(s string) string {

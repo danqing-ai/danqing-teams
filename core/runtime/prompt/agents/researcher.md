@@ -5,7 +5,8 @@ description: Information retrieval specialist. Handles web search, knowledge bas
 persona: Information researcher
 mode: subagent
 steps: 8
-skills: []
+skills:
+  - deep-research
 tools:
   - tool_id: read_file
     risk_level: low

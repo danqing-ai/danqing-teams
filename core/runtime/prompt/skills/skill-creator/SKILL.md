@@ -6,6 +6,7 @@ compatibility: Requires DanQing Teams 1.0+
 metadata:
   author: danqing-teams
   version: "1.0"
+  category: general
   based_on: anthropics/skills skill-creator
 ---
 

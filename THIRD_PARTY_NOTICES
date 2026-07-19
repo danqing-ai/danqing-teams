@@ -1,0 +1,45 @@
+# Third-Party Notices — Built-in Skills
+
+DanQing Teams includes built-in Agent Skills that were **adapted (rewritten)** from
+upstream MIT-licensed projects. They are not verbatim copies.
+
+This notice satisfies attribution requirements for those adaptations.
+
+## obra/superpowers (MIT)
+
+- Repository: https://github.com/obra/superpowers
+- Copyright: Jesse Vincent and contributors
+- License: MIT (see upstream LICENSE)
+
+Adapted skills in this product:
+
+| DanQing skill | Upstream reference |
+|---------------|--------------------|
+| `debugging` | `systematic-debugging`, `verification-before-completion` |
+| `test-driven-development` | `test-driven-development` |
+| `writing-plans` | `writing-plans` |
+| `requesting-code-review` | `requesting-code-review` |
+| `brainstorming` | `brainstorming` |
+| `git-workflow` (partial) | `using-git-worktrees`, `finishing-a-development-branch` |
+
+## alirezarezvani/claude-skills (MIT)
+
+- Repository: https://github.com/alirezarezvani/claude-skills
+- Copyright: Alireza Rezvani and contributors
+- License: MIT (see upstream LICENSE)
+
+Adapted skills in this product:
+
+| DanQing skill | Upstream reference |
+|---------------|--------------------|
+| `deep-research` | `research/deep-research/skills/deep-research` |
+| `document-writing` | `markdown-html/skills/md-document` |
+| `playable-slides` | `markdown-html/skills/md-slides` |
+
+## Notes
+
+- Each adapted `SKILL.md` also carries an in-file “Adapted from …” notice and
+  `metadata.adapted_from` / `metadata.upstream_license` fields.
+- Original DanQing content (e.g. core of `git-workflow`, `skill-creator`) remains
+  under this repository’s license; skill-creator additionally notes inspiration from
+  Anthropic’s skill-creator materials where applicable.

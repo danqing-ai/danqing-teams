@@ -1,14 +1,21 @@
 ---
 name: git-workflow
-description: Standard Git workflow operations including branching, committing, rebasing, merging, and pull requests. Use when the user mentions git operations, commits, branches, PRs, or version control workflows.
+description: Standard Git workflow operations including branching, committing, rebasing, merging, worktrees, pull requests, and finishing a branch. Use when the user mentions git operations, commits, branches, PRs, worktrees, or version control workflows.
 license: MIT
 compatibility: Requires git CLI and access to the project repository
 metadata:
   author: danqing-teams
-  version: "1.0"
+  version: "1.1"
+  category: coding
+  adapted_from: "https://github.com/obra/superpowers/tree/main/skills/using-git-worktrees"
+  also_adapted_from: "https://github.com/obra/superpowers/tree/main/skills/finishing-a-development-branch"
+  upstream_license: MIT
 ---
 
 # Git Workflow Skill
+
+> Worktree and branch-finish sections adapted from obra/superpowers (© Jesse Vincent / contributors, MIT); core workflow is DanQing Teams original.
+> Not a verbatim copy of upstream skills.
 
 Standard Git version control operations and best practices.
 
@@ -76,6 +83,36 @@ When ready to submit changes:
 3. Create PR with title following commit convention
 4. Include a summary of changes in the PR description
 5. Reference related issues with `Closes #123` or `Fixes #123`
+
+### Parallel Work with Worktrees
+
+Use when the user needs isolation from the current checkout (long feature, parallel tasks). Ask before creating a worktree unless they already requested one.
+
+```bash
+# Already in a linked worktree?
+git rev-parse --git-dir
+git rev-parse --git-common-dir
+# If paths differ (and not a submodule), you are already isolated — don't nest another.
+
+git worktree add ../repo-feat-x -b feat/x
+# later:
+git worktree remove ../repo-feat-x
+```
+
+Never create worktrees that fight an existing harness-managed workspace. Prefer working in place if the user declines.
+
+### Finishing a Branch
+
+When implementation is done:
+
+1. **Verify** — run the project test suite; stop if failing.
+2. **Detect base** — usually `main` / `master` (confirm with user if unclear).
+3. **Present options** — do not silently merge:
+   1. Merge locally into base
+   2. Push and open a Pull Request
+   3. Keep the branch as-is
+   4. Discard the work (requires explicit user confirmation)
+4. **Execute** the chosen option, then clean up worktrees if you created one.
 
 ## Safety Rules
 

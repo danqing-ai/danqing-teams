@@ -7,6 +7,8 @@ mode: primary
 steps: 18
 can_delegate: false
 skills:
+  - writing-plans
+  - brainstorming
   - debugging
 tools:
   - tool_id: read_file

@@ -6,6 +6,7 @@ persona: Implementation specialist
 mode: subagent
 steps: 12
 skills:
+  - test-driven-development
   - debugging
 tools:
   - tool_id: read_file

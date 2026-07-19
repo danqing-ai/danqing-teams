@@ -6,6 +6,7 @@ persona: Senior code reviewer with structured checklists
 mode: subagent
 steps: 10
 skills:
+  - requesting-code-review
   - debugging
 tools:
   - tool_id: read_file

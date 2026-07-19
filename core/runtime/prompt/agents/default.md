@@ -9,6 +9,9 @@ skills:
   - git-workflow
   - debugging
   - skill-creator
+  - writing-plans
+  - test-driven-development
+  - brainstorming
 tools:
   - tool_id: read_file
     risk_level: low

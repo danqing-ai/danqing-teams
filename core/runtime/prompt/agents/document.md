@@ -5,7 +5,9 @@ description: "[Work] Document creation specialist. Handles report writing, PPT o
 persona: Document writer and editor
 mode: subagent
 steps: 10
-skills: []
+skills:
+  - document-writing
+  - playable-slides
 tools:
   - tool_id: read_file
     risk_level: low

@@ -1,75 +1,70 @@
 ---
 name: debugging
-description: Systematic debugging and troubleshooting methodology. Use when encountering errors, bugs, unexpected behavior, build failures, test failures, or runtime exceptions in any programming language or framework.
+description: Systematic root-cause debugging before proposing fixes, plus evidence-gated completion. Use when encountering errors, bugs, unexpected behavior, build/test failures, or when about to claim something is fixed or passing.
 license: MIT
-compatibility: Requires read_file, exec_shell, grep tools
+compatibility: Requires read_file, grep, and usually exec_shell
 metadata:
   author: danqing-teams
-  version: "1.0"
+  version: "2.0"
+  category: coding
+  adapted_from: "https://github.com/obra/superpowers/tree/main/skills/systematic-debugging"
+  also_adapted_from: "https://github.com/obra/superpowers/tree/main/skills/verification-before-completion"
+  upstream_license: MIT
 ---
 
 # Debugging Skill
 
-Systematic approach to identifying and fixing bugs in software projects.
+> Adapted from obra/superpowers `systematic-debugging` and `verification-before-completion` (© Jesse Vincent / contributors, MIT).
+> Rewritten for DanQing Teams tools and agents; not a verbatim copy.
 
-## Debugging Process
+**Iron law:** no fixes without root-cause investigation first. **Completion law:** no “fixed/passing/done” claims without fresh verification evidence.
 
-### 1. Reproduce the Issue
+## Workflow
 
-- Read any error messages, stack traces, or logs the user has provided.
-- Run the failing command or test to reproduce the error yourself.
-- Note the exact error message, file, and line number.
+### Phase 1 — Root cause (before any fix)
 
-### 2. Isolate the Problem
+1. **Read errors completely** — stack traces, exit codes, first failing assertion.
+2. **Reproduce** — run the failing command/test via `exec_shell` when available. If not reproducible, gather more data; do not guess.
+3. **Locate** — use `grep` / `read_file` / recent git history to find the failing path.
+4. **Trace to source** — where does the bad value/state originate? Fix the source, not only the symptom.
+5. **Multi-layer systems** — if CI → build → runtime or API → service → DB, identify *which boundary* breaks before changing code.
 
-- Identify the precise code path that leads to the error.
-- Use `grep` to find related definitions, callers, or configuration.
-- Narrow down to the smallest reproducible case possible.
+Stop Phase 1 only when you can state the root cause in one sentence with evidence.
 
-### 3. Analyze Root Cause
+### Phase 2 — Minimal fix
 
-- Read the relevant source files thoroughly to understand the logic.
-- Check recent changes or commits that might have introduced the issue.
-- Look for common patterns: null/nil pointer, type mismatch, race condition, missing imports, environment differences.
+- Prefer `edit` / `apply_patch` for targeted changes.
+- Do not “improve” unrelated code while fixing.
+- If the bug needs a regression test, write the failing test first when TDD skill applies.
 
-### 4. Formulate and Test a Fix
+### Phase 3 — Verify (evidence before claims)
 
-- Propose a minimal fix that addresses the root cause, not just the symptom.
-- Prefer `edit` for targeted changes over rewriting entire files.
-- After applying the fix, re-run the failing command to verify.
+Before saying fixed, passing, or complete:
 
-### 5. Validate No Regression
+1. Identify the command that proves the claim (`make test`, `go test ./...`, the original failing command, etc.).
+2. Run it freshly in this turn.
+3. Read full output and exit code.
+4. Claim only what the output supports — quote the evidence.
 
-- Run existing tests if available: `make test` or equivalent.
-- Check that related functionality still works as expected.
-- If the project has lint/typecheck, run those too.
+| Claim | Requires |
+|-------|----------|
+| Bug fixed | Original symptom re-run passes |
+| Tests pass | Fresh test run, 0 failures |
+| Build OK | Fresh build, exit 0 |
 
-## Common Patterns
+### Phase 4 — No regression
 
-### Interpreting Stack Traces
+- Run related tests / lint / typecheck when the project has them.
+- See `references/patterns.md` for language-specific checks.
 
-- Start from the bottom (your code) and work up.
-- Identify the first frame in your project's code base.
-- Read the error message carefully — it often tells you exactly what's wrong.
+## Anti-patterns
 
-### Build Failures
+- Proposing a fix before reproducing or reading the stack trace
+- Symptom patches (“add nil check”) when the real bug is upstream
+- “Should work now” / “looks fine” without running verification
+- Claiming success from a previous run or from memory
+- Thrashing multiple unrelated changes hoping one sticks
 
-- Check the compiler/linker output for the first error (subsequent errors are often cascading).
-- Verify dependencies are installed correctly.
-- Check for missing build tags, platform-specific code, or version mismatches.
+## Stop condition
 
-### Test Failures
-
-- Read the test name and assertion message.
-- Understand what the test is verifying before making changes.
-- Consider whether the test expectation or the implementation needs to change.
-
-### Runtime Errors
-
-- Check log files for context surrounding the error.
-- Verify configuration files and environment variables.
-- For time-sensitive bugs, add timing-related checks.
-
-## Reference Material
-
-See `references/patterns.md` for language-specific debugging patterns.
+Deliver: root cause, change summary, and verification evidence (command + result). Do not claim done without that evidence.
