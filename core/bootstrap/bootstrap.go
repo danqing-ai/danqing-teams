@@ -229,17 +229,19 @@ func ensureBuiltinSkills(skills *service.SkillManager) {
 		skill := tmpl.Skill
 		skill.Builtin = true
 		if existing, err := skills.Get(ctx, skill.ID); err == nil && existing != nil {
-			// Update builtin flag on existing record if needed
+			// Preserve user edits; only backfill the builtin flag if missing.
 			if !existing.Builtin {
-				skills.Upsert(ctx, skill)
+				existing.Builtin = true
+				_ = skills.Upsert(ctx, *existing)
 			}
 		} else {
-			skills.Upsert(ctx, skill)
+			_ = skills.Upsert(ctx, skill)
 		}
-		// Import resource files (scripts, references, assets) into DB
+		// Seed missing resource files only — never overwrite existing ones
+		// (same seed-if-missing policy as skill metadata / body).
 		files, _ := prompt.LoadBuiltinSkillFiles(skill.ID)
 		for _, f := range files {
-			_ = skills.UpsertFile(ctx, f)
+			_ = skills.EnsureFile(ctx, f)
 		}
 	}
 }

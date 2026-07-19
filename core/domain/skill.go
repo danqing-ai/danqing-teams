@@ -14,4 +14,7 @@ type Skill struct {
 	Body          string            `json:"body"`
 	SourcePath    string            `json:"sourcePath,omitempty"`
 	Builtin       bool              `json:"builtin,omitempty"`
+	// TemplateDiverged is computed (not persisted): true when a builtin skill's
+	// stored content or resource files differ from the embedded template.
+	TemplateDiverged bool `json:"templateDiverged,omitempty"`
 }

@@ -103,6 +103,15 @@ export const useSkillsStore = defineStore('skills', () => {
     return updated
   }
 
+  async function refresh(skillId: string) {
+    const updated = await get(skillId)
+    if (!updated) return undefined
+    const i = items.value.findIndex((s) => s.id === skillId)
+    if (i >= 0) items.value[i] = updated
+    else items.value.push(updated)
+    return updated
+  }
+
   return {
     items,
     loading,
@@ -118,5 +127,6 @@ export const useSkillsStore = defineStore('skills', () => {
     deleteFile,
     getExportMD,
     reset,
+    refresh,
   }
 })

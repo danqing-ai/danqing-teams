@@ -123,6 +123,9 @@ export default {
     resetTitle: '重置技能',
     reset: '技能已重置',
     resetFailed: '重置失败',
+    templateDiverged: '与内置模板不一致（本地有修改，或产品已更新内置版本）',
+    templateDivergedHint: '可保留当前内容，或重置到最新内置版本。',
+    resetToTemplate: '重置到最新内置版本',
   },
   toolsPage: {
     title: '工具',

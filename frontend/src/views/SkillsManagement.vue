@@ -142,7 +142,12 @@ async function save() {
       isCreating.value = false
       selectedId.value = skillForm.value.id.trim()
     } else if (selectedId.value) {
-      await store.update(selectedId.value, { ...skillForm.value })
+      const updated = await store.update(selectedId.value, { ...skillForm.value })
+      skillForm.value = {
+        ...updated,
+        keywords: updated.keywords ? [...updated.keywords] : [],
+        toolIds: updated.toolIds ? [...updated.toolIds] : [],
+      }
       toast.success(t('skills.saved'))
     }
   } catch (e) {
@@ -178,6 +183,18 @@ async function resetSelected() {
     toast.success(t('skills.reset'))
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('skills.resetFailed'))
+  }
+}
+
+async function refreshSelectedStatus() {
+  if (!selectedId.value) return
+  const updated = await store.refresh(selectedId.value)
+  if (updated && selectedId.value === updated.id && !isCreating.value) {
+    skillForm.value = {
+      ...updated,
+      keywords: updated.keywords ? [...updated.keywords] : [],
+      toolIds: updated.toolIds ? [...updated.toolIds] : [],
+    }
   }
 }
 
@@ -309,6 +326,7 @@ async function saveFileEditor() {
     }
     await store.upsertFile(selectedId.value, path, fileEditorContent.value)
     skillFiles.value = await store.getFiles(selectedId.value)
+    await refreshSelectedStatus()
     toast.success(
       fileEditorMode.value === 'create' ? t('skills.fileCreated') : t('skills.fileSaved'),
     )
@@ -332,6 +350,7 @@ async function removeFile(file: SkillFile) {
   try {
     await store.deleteFile(selectedId.value, file.path)
     skillFiles.value = await store.getFiles(selectedId.value)
+    await refreshSelectedStatus()
     toast.success(t('skills.fileDeleted'))
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('skills.saveFileFailed'))
@@ -419,7 +438,15 @@ function formatSize(bytes: number): string {
               >
                 <span class="resource-rail__avatar">{{ initial(skill.name) }}</span>
                 <span class="resource-rail__meta">
-                  <span class="resource-rail__name">{{ skill.name }}</span>
+                  <span class="resource-rail__name-row">
+                    <span class="resource-rail__name">{{ skill.name }}</span>
+                    <span
+                      v-if="skill.templateDiverged"
+                      class="resource-rail__dot"
+                      :title="$t('skills.templateDiverged')"
+                      aria-hidden="true"
+                    />
+                  </span>
                 </span>
               </button>
             </nav>
@@ -464,6 +491,20 @@ function formatSize(bytes: number): string {
     </template>
 
     <template #body>
+        <div
+          v-if="!isCreating && selectedSkill?.builtin && selectedSkill.templateDiverged"
+          class="skill-template-banner"
+          role="status"
+        >
+          <div class="skill-template-banner__text">
+            <strong>{{ $t('skills.templateDiverged') }}</strong>
+            <span>{{ $t('skills.templateDivergedHint') }}</span>
+          </div>
+          <DqButton size="small" type="primary" @click="resetSelected">
+            {{ $t('skills.resetToTemplate') }}
+          </DqButton>
+        </div>
+
         <!-- Info Tab -->
         <section v-show="activeTab === 'info'" class="resource-section">
           <div class="resource-form-grid resource-form-grid--3">
@@ -720,6 +761,55 @@ function formatSize(bytes: number): string {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--dq-label-tertiary);
+}
+
+.resource-rail__name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.resource-rail__name-row .resource-rail__name {
+  min-width: 0;
+}
+
+.resource-rail__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dq-system-orange);
+  flex-shrink: 0;
+}
+
+.skill-template-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dq-system-orange) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dq-system-orange) 28%, transparent);
+}
+
+.skill-template-banner__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: var(--dq-font-size-footnote);
+  color: var(--dq-label-primary);
+  line-height: 1.45;
+}
+
+.skill-template-banner__text strong {
+  font-weight: 600;
+}
+
+.skill-template-banner__text span {
+  color: var(--dq-label-secondary);
 }
 
 .resource-workspace__empty-actions {

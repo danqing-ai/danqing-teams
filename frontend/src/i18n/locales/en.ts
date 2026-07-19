@@ -123,6 +123,9 @@ export default {
     resetTitle: 'Reset Skill',
     reset: 'Skill has been reset',
     resetFailed: 'Reset failed',
+    templateDiverged: 'Out of sync with the built-in template (local edits, or a newer built-in version)',
+    templateDivergedHint: 'Keep your current version, or reset to the latest built-in template.',
+    resetToTemplate: 'Reset to latest built-in',
   },
   toolsPage: {
     title: 'Tools',

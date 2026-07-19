@@ -1,8 +1,10 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
@@ -64,7 +66,10 @@ func (m *SkillManager) List(ctx context.Context) ([]domain.Skill, error) {
 	if m.cachedList {
 		result := m.listCache
 		m.mu.RUnlock()
-		return result, nil
+		out := make([]domain.Skill, len(result))
+		copy(out, result)
+		m.enrichTemplateStatusBatch(ctx, out)
+		return out, nil
 	}
 	m.mu.RUnlock()
 	list, err := m.store.List(ctx)
@@ -75,14 +80,19 @@ func (m *SkillManager) List(ctx context.Context) ([]domain.Skill, error) {
 	m.listCache = list
 	m.cachedList = true
 	m.mu.Unlock()
-	return list, nil
+	out := make([]domain.Skill, len(list))
+	copy(out, list)
+	m.enrichTemplateStatusBatch(ctx, out)
+	return out, nil
 }
 
 func (m *SkillManager) Get(ctx context.Context, id string) (*domain.Skill, error) {
 	m.mu.RLock()
 	if s, ok := m.cache[id]; ok {
 		m.mu.RUnlock()
-		return s, nil
+		cp := *s
+		m.enrichTemplateStatus(ctx, &cp)
+		return &cp, nil
 	}
 	m.mu.RUnlock()
 	sk, err := m.store.Get(ctx, id)
@@ -92,10 +102,17 @@ func (m *SkillManager) Get(ctx context.Context, id string) (*domain.Skill, error
 	m.mu.Lock()
 	m.cache[id] = &sk
 	m.mu.Unlock()
-	return &sk, nil
+	cp := sk
+	m.enrichTemplateStatus(ctx, &cp)
+	return &cp, nil
 }
 
 func (m *SkillManager) Upsert(ctx context.Context, s domain.Skill) error {
+	// Never clear builtin via a partial client update.
+	if existing, err := m.store.Get(ctx, s.ID); err == nil && existing.Builtin {
+		s.Builtin = true
+	}
+	s.TemplateDiverged = false
 	if err := m.store.Upsert(ctx, s); err != nil {
 		return err
 	}
@@ -143,6 +160,20 @@ func (m *SkillManager) UpsertFile(ctx context.Context, f domain.SkillFile) error
 	return m.filesRepo.Upsert(ctx, f)
 }
 
+// EnsureFile inserts a skill resource file only when the path does not already
+// exist. Existing content (including user edits) is left untouched.
+func (m *SkillManager) EnsureFile(ctx context.Context, f domain.SkillFile) error {
+	path, err := NormalizeSkillResourcePath(f.Path)
+	if err != nil {
+		return err
+	}
+	f.Path = path
+	if _, err := m.filesRepo.Get(ctx, f.SkillID, f.Path); err == nil {
+		return nil
+	}
+	return m.UpsertFile(ctx, f)
+}
+
 func (m *SkillManager) DeleteFile(ctx context.Context, skillID, path string) error {
 	path, err := NormalizeSkillResourcePath(path)
 	if err != nil {
@@ -176,13 +207,14 @@ func (m *SkillManager) ResetFromTemplate(ctx context.Context, id string) (*domai
 		return nil, fmt.Errorf("no template found for skill %q: %w", id, err)
 	}
 	tmpl.Builtin = true
+	tmpl.TemplateDiverged = false
 	if err := m.store.Upsert(ctx, *tmpl); err != nil {
 		return nil, err
 	}
 	// Reset resource files from template if available
 	if m.fileTemplateLoader != nil {
 		files, err := m.fileTemplateLoader(id)
-		if err == nil && len(files) > 0 {
+		if err == nil {
 			_ = m.filesRepo.DeleteBySkill(ctx, id)
 			for _, f := range files {
 				_ = m.filesRepo.Upsert(ctx, f)
@@ -194,4 +226,110 @@ func (m *SkillManager) ResetFromTemplate(ctx context.Context, id string) (*domai
 	m.cachedList = false
 	m.mu.Unlock()
 	return tmpl, nil
+}
+
+func (m *SkillManager) enrichTemplateStatusBatch(ctx context.Context, skills []domain.Skill) {
+	for i := range skills {
+		m.enrichTemplateStatus(ctx, &skills[i])
+	}
+}
+
+func (m *SkillManager) enrichTemplateStatus(ctx context.Context, sk *domain.Skill) {
+	if sk == nil || !sk.Builtin {
+		return
+	}
+	diverged, err := m.DivergedFromTemplate(ctx, *sk)
+	if err != nil {
+		return
+	}
+	sk.TemplateDiverged = diverged
+}
+
+// DivergedFromTemplate reports whether a builtin skill differs from its
+// embedded template (metadata/body and/or resource files). Non-builtin skills
+// and skills without a template loader are never considered diverged.
+func (m *SkillManager) DivergedFromTemplate(ctx context.Context, sk domain.Skill) (bool, error) {
+	if !sk.Builtin || m.templateLoader == nil {
+		return false, nil
+	}
+	tmpl, err := m.templateLoader(sk.ID)
+	if err != nil {
+		return false, nil
+	}
+	if !skillContentEqual(sk, *tmpl) {
+		return true, nil
+	}
+	if m.fileTemplateLoader == nil {
+		return false, nil
+	}
+	tmplFiles, err := m.fileTemplateLoader(sk.ID)
+	if err != nil {
+		return false, nil
+	}
+	storedFiles, err := m.filesRepo.ListBySkill(ctx, sk.ID)
+	if err != nil {
+		return false, err
+	}
+	return !skillFilesEqual(storedFiles, tmplFiles), nil
+}
+
+func skillContentEqual(a, b domain.Skill) bool {
+	if a.Name != b.Name ||
+		a.Description != b.Description ||
+		a.License != b.License ||
+		a.Compatibility != b.Compatibility ||
+		a.AllowedTools != b.AllowedTools ||
+		a.SystemHint != b.SystemHint ||
+		a.Body != b.Body {
+		return false
+	}
+	if !mapsEqual(a.Metadata, b.Metadata) {
+		return false
+	}
+	if !stringSlicesEqual(a.Keywords, b.Keywords) {
+		return false
+	}
+	if !stringSlicesEqual(a.ToolIDs, b.ToolIDs) {
+		return false
+	}
+	return true
+}
+
+func skillFilesEqual(stored, tmpl []domain.SkillFile) bool {
+	if len(stored) != len(tmpl) {
+		return false
+	}
+	byPath := make(map[string][]byte, len(stored))
+	for _, f := range stored {
+		byPath[f.Path] = f.Content
+	}
+	for _, f := range tmpl {
+		content, ok := byPath[f.Path]
+		if !ok || !bytes.Equal(content, f.Content) {
+			return false
+		}
+	}
+	return true
+}
+
+func mapsEqual(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	if len(a) == 0 {
+		return true
+	}
+	for k, v := range a {
+		if b[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) == 0 && len(b) == 0 {
+		return true
+	}
+	return slices.Equal(a, b)
 }

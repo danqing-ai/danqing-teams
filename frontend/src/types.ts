@@ -55,6 +55,7 @@ export interface Skill {
   body?: string
   sourcePath?: string
   builtin?: boolean
+  templateDiverged?: boolean
 }
 
 export interface ToolBinding {

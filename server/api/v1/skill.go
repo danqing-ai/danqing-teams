@@ -76,7 +76,12 @@ func updateSkill(h *SkillHandler) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, sk)
+		out, err := h.Skills.Get(c, id)
+		if err != nil || out == nil {
+			c.JSON(http.StatusOK, sk)
+			return
+		}
+		c.JSON(http.StatusOK, out)
 	}
 }
 
