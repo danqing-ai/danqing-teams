@@ -12,7 +12,7 @@ AI Agent 协作平台。通用型 **Work Agent**，兼具 AI Coding 能力。
 
 | 调研报告 | 交互演示 | 网页小游戏 |
 |---------|---------|-----------|
-| ![市场报告](docs/screenshots/ui-market-report.jpg) | ![烹饪演示](docs/screenshots/ui-cooking-demo.jpg) | ![贪吃蛇](docs/screenshots/ui-snake-game.jpg) |
+| ![市场报告](docs/screenshots/ui-market-report.png) | ![烹饪演示](docs/screenshots/ui-cooking-demo.png) | ![贪吃蛇](docs/screenshots/ui-snake-game.png) |
 
 - **调研报告** — 网页抓取、结构化写作、HTML 实时预览
 - **交互演示** — 分步烹饪演示，含播放控制与计时

@@ -12,7 +12,7 @@ Three-pane workspace: project sidebar · agent execution log · live browser pre
 
 | Research & report | Interactive demo | Mini-game |
 |-------------------|------------------|-----------|
-| ![Market report](docs/screenshots/ui-market-report.jpg) | ![Cooking demo](docs/screenshots/ui-cooking-demo.jpg) | ![Snake game](docs/screenshots/ui-snake-game.jpg) |
+| ![Market report](docs/screenshots/ui-market-report.png) | ![Cooking demo](docs/screenshots/ui-cooking-demo.png) | ![Snake game](docs/screenshots/ui-snake-game.png) |
 
 - **Research & report** — web fetch, structured writing, live HTML preview
 - **Interactive demo** — step-by-step culinary demo with playback controls
