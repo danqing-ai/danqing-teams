@@ -22,63 +22,71 @@ is already in the image (avoids flaky GitHub downloads per trial).
 
 ## Task suite
 
-| Task | Difficulty | What it measures |
-|------|------------|------------------|
-| [`hello-txt`](tasks/hello-txt/) | easy | Write a file |
-| [`sum-csv`](tasks/sum-csv/) | easy | CSV sum → `total.txt` |
-| [`write-json`](tasks/write-json/) | easy | Typed JSON config |
-| [`sort-names`](tasks/sort-names/) | easy | Filter blanks + sort |
-| [`count-words`](tasks/count-words/) | easy | Word count |
-| [`invert-kv`](tasks/invert-kv/) | easy | Invert `key=value` map |
-| [`dedupe-lines`](tasks/dedupe-lines/) | easy | Unique lines, first-seen order |
-| [`mkdir-tree`](tasks/mkdir-tree/) | easy | Create directory layout + files |
-| [`fix-python`](tasks/fix-python/) | medium | Fix `calc.py` → print `42` |
-| [`fix-shell`](tasks/fix-shell/) | medium | Fix broken bash script |
-| [`replace-marker`](tasks/replace-marker/) | medium | Multi-file search/replace + count |
-| [`extract-emails`](tasks/extract-emails/) | medium | Regex extract + unique sort |
-| [`fibonacci`](tasks/fibonacci/) | medium | Write `fib.py` CLI |
-| [`bump-version`](tasks/bump-version/) | medium | Bump JSON patch version |
-| [`merge-logs`](tasks/merge-logs/) | medium | Merge/sort timestamped logs |
-| [`csv-filter`](tasks/csv-filter/) | medium | Filter CSV rows by age |
-| [`markdown-toc`](tasks/markdown-toc/) | medium | Markdown heading TOC |
-| [`ini-flatten`](tasks/ini-flatten/) | medium | INI → flat `KEY=VALUE` env |
-| [`topo-sort`](tasks/topo-sort/) | hard | Lex-smallest topological order |
-| [`interval-merge`](tasks/interval-merge/) | hard | Merge overlapping intervals |
-| [`pii-redact`](tasks/pii-redact/) | hard | Redact email / phone / SSN-like |
-| [`json-deep-merge`](tasks/json-deep-merge/) | hard | Recursive JSON merge |
-| [`csv-pivot`](tasks/csv-pivot/) | hard | Pivot CSV sums by region×product |
-| [`binary-search-fix`](tasks/binary-search-fix/) | hard | Fix buggy binary search |
-| [`diff-apply`](tasks/diff-apply/) | hard | Apply unified diff |
-| [`rename-symbol`](tasks/rename-symbol/) | hard | Cross-file Python rename |
-| [`hash-chain`](tasks/hash-chain/) | hard | Repair corrupted hash chain |
-| [`anagram-groups`](tasks/anagram-groups/) | hard | Group anagrams |
-| [`path-normalize`](tasks/path-normalize/) | hard | Normalize POSIX paths |
-| [`log-window`](tasks/log-window/) | hard | Filter log lines by time window |
-| [`lru-trace`](tasks/lru-trace/) | hard | LRU cache simulation + hit/miss |
-| [`route-lpm`](tasks/route-lpm/) | hard | IPv4 longest-prefix-match routing |
-| [`expr-eval`](tasks/expr-eval/) | hard | Integer expr parser (precedence/unary) |
-| [`patch-stack`](tasks/patch-stack/) | hard | Apply sequential unified diffs |
-| [`bank-safe`](tasks/bank-safe/) | hard | Banker's algorithm safe sequence |
+Single suite under [`tasks/`](tasks/): **35 tasks** (8 easy · 10 medium · 17 hard).  
+`run_suite.sh` / `compare_agents.sh` iterate every directory. All tasks pass Harbor `oracle`.
 
-**35 tasks** under [`tasks/`](tasks/). Suite runners iterate every directory there. All tasks pass Harbor `oracle`.
+### Easy (8)
+
+| Task | What it measures |
+|------|------------------|
+| [`hello-txt`](tasks/hello-txt/) | Write a file |
+| [`sum-csv`](tasks/sum-csv/) | CSV sum → `total.txt` |
+| [`write-json`](tasks/write-json/) | Typed JSON config |
+| [`sort-names`](tasks/sort-names/) | Filter blanks + sort |
+| [`count-words`](tasks/count-words/) | Word count |
+| [`invert-kv`](tasks/invert-kv/) | Invert `key=value` map |
+| [`dedupe-lines`](tasks/dedupe-lines/) | Unique lines, first-seen order |
+| [`mkdir-tree`](tasks/mkdir-tree/) | Create directory layout + files |
+
+### Medium (10)
+
+| Task | What it measures |
+|------|------------------|
+| [`fix-python`](tasks/fix-python/) | Fix `calc.py` → print `42` |
+| [`fix-shell`](tasks/fix-shell/) | Fix broken bash script |
+| [`replace-marker`](tasks/replace-marker/) | Multi-file search/replace + count |
+| [`extract-emails`](tasks/extract-emails/) | Regex extract + unique sort |
+| [`fibonacci`](tasks/fibonacci/) | Write `fib.py` CLI |
+| [`bump-version`](tasks/bump-version/) | Bump JSON patch version |
+| [`merge-logs`](tasks/merge-logs/) | Merge/sort timestamped logs |
+| [`csv-filter`](tasks/csv-filter/) | Filter CSV rows by age |
+| [`markdown-toc`](tasks/markdown-toc/) | Markdown heading TOC |
+| [`ini-flatten`](tasks/ini-flatten/) | INI → flat `KEY=VALUE` env |
+
+### Hard (17)
+
+| Task | What it measures |
+|------|------------------|
+| [`topo-sort`](tasks/topo-sort/) | Lex-smallest topological order |
+| [`interval-merge`](tasks/interval-merge/) | Merge overlapping intervals |
+| [`pii-redact`](tasks/pii-redact/) | Redact email / phone / SSN-like |
+| [`json-deep-merge`](tasks/json-deep-merge/) | Recursive JSON merge |
+| [`csv-pivot`](tasks/csv-pivot/) | Pivot CSV sums by region×product |
+| [`binary-search-fix`](tasks/binary-search-fix/) | Fix buggy binary search |
+| [`diff-apply`](tasks/diff-apply/) | Apply unified diff |
+| [`rename-symbol`](tasks/rename-symbol/) | Cross-file Python rename |
+| [`hash-chain`](tasks/hash-chain/) | Repair corrupted hash chain |
+| [`anagram-groups`](tasks/anagram-groups/) | Group anagrams |
+| [`path-normalize`](tasks/path-normalize/) | Normalize POSIX paths |
+| [`log-window`](tasks/log-window/) | Filter log lines by time window |
+| [`lru-trace`](tasks/lru-trace/) | LRU cache simulation + hit/miss |
+| [`route-lpm`](tasks/route-lpm/) | IPv4 longest-prefix-match routing |
+| [`expr-eval`](tasks/expr-eval/) | Integer expr parser (precedence/unary) |
+| [`patch-stack`](tasks/patch-stack/) | Apply sequential unified diffs |
+| [`bank-safe`](tasks/bank-safe/) | Banker's algorithm safe sequence |
 
 ## Latest compare results
 
-Model: **`deepseek-v4-flash`**. Engine: Podman. Pass = Mean reward ≥ 1.0. Full table: [`COMPARE_RESULTS.md`](COMPARE_RESULTS.md).
-
-Baseline on the previous **16-task** suite (before +14 medium/hard):
+Model: **`deepseek-v4-flash`**. Engine: Podman. Pass = Mean reward ≥ 1.0.  
+Full per-task table: [`COMPARE_RESULTS.md`](COMPARE_RESULTS.md).
 
 | Agent | Pass | Fail | Total |
 |-------|------|------|-------|
-| **DanQing** | **15** | 1 | 16 |
-| OpenCode (prebuilt) | **15** | 1 | 16 |
-| OpenHands SDK | **15** | 1 | 16 |
+| **DanQing** | **34** | 1 | 35 |
+| OpenCode (prebuilt) | **34** | 1 | 35 |
+| OpenHands SDK | **34** | 1 | 35 |
 
-Shared fail: `replace-marker`.
-
-**+14 medium/hard** (2026-07-19): DanQing **14/14**, OpenCode (prebuilt) **14/14**.
-
-**+5 hard** (2026-07-19): `lru-trace`, `route-lpm`, `expr-eval`, `patch-stack`, `bank-safe` (oracle OK; agent compare pending). Details: [`COMPARE_RESULTS.md`](COMPARE_RESULTS.md).
+Shared fail: `replace-marker` only.
 
 ```bash
 make eval-harbor-base

@@ -198,15 +198,15 @@ make test-integration   # 集成测试
 
 ### Harbor 本地 Agent 对比（冒烟套件）
 
-35 个文件/编程任务，经 [Harbor](https://github.com/laude-institute/harbor) + Podman。同一模型（`deepseek-v4-flash`）。通过 = Mean reward ≥ 1.0。非官方 Terminal-Bench / 榜单提交。下表为扩展前 16 题基线。
+统一套件：**35** 题（easy 8 / medium 10 / hard 17），经 [Harbor](https://github.com/laude-institute/harbor) + Podman。模型 `deepseek-v4-flash`。通过 = Mean reward ≥ 1.0。非官方 Terminal-Bench / 榜单提交。
 
 | Agent | 通过 | 说明 |
 |-------|------|------|
-| **DanQing** | **15/16** | `danqing-teams-cli` |
-| OpenCode | **15/16** | 预装 base + `OpenCodePrebuilt` |
-| OpenHands | **15/16** | Harbor `openhands-sdk` |
+| **DanQing** | **34/35** | `danqing-teams-cli` |
+| OpenCode | **34/35** | 预装 base + `OpenCodePrebuilt` |
+| OpenHands | **34/35** | Harbor `openhands-sdk` |
 
-三方共同失败：`replace-marker`。详情：[`evals/dq_harbor/COMPARE_RESULTS.md`](evals/dq_harbor/COMPARE_RESULTS.md)。
+三方共同失败：`replace-marker`。题单与成绩：[`evals/dq_harbor/README.md`](evals/dq_harbor/README.md)、[`evals/dq_harbor/COMPARE_RESULTS.md`](evals/dq_harbor/COMPARE_RESULTS.md)。
 
 ```bash
 make eval-harbor-base

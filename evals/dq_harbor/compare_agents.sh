@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Full-suite compare: DanQing vs OpenCode vs OpenHands on local Harbor tasks.
+# Full-suite compare: DanQing vs OpenCode vs OpenHands on the unified 35-task Harbor suite.
 # Usage (from repo root):
 #   ./evals/dq_harbor/compare_agents.sh
 set -euo pipefail

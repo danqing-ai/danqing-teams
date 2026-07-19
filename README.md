@@ -198,15 +198,15 @@ make test-integration   # integration tests
 
 ### Harbor local agent compare (smoke suite)
 
-35 file/coding tasks via [Harbor](https://github.com/laude-institute/harbor) + Podman. Same model (`deepseek-v4-flash`). Pass = Mean reward ≥ 1.0. Not an official Terminal-Bench / leaderboard run. Baseline scores below are from the prior 16-task suite.
+Unified suite: **35** Harbor tasks (8 easy / 10 medium / 17 hard) via [Harbor](https://github.com/laude-institute/harbor) + Podman. Model `deepseek-v4-flash`. Pass = Mean reward ≥ 1.0. Not an official Terminal-Bench / leaderboard run.
 
 | Agent | Pass | Notes |
 |-------|------|-------|
-| **DanQing** | **15/16** | `danqing-teams-cli` |
-| OpenCode | **15/16** | prebaked base + `OpenCodePrebuilt` |
-| OpenHands | **15/16** | Harbor `openhands-sdk` |
+| **DanQing** | **34/35** | `danqing-teams-cli` |
+| OpenCode | **34/35** | prebaked base + `OpenCodePrebuilt` |
+| OpenHands | **34/35** | Harbor `openhands-sdk` |
 
-Shared fail: `replace-marker`. Details: [`evals/dq_harbor/COMPARE_RESULTS.md`](evals/dq_harbor/COMPARE_RESULTS.md).
+Shared fail: `replace-marker`. Task list + scores: [`evals/dq_harbor/README.md`](evals/dq_harbor/README.md), [`evals/dq_harbor/COMPARE_RESULTS.md`](evals/dq_harbor/COMPARE_RESULTS.md).
 
 ```bash
 make eval-harbor-base

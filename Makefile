@@ -169,7 +169,7 @@ eval-harbor-smoke: eval-harbor-base eval-harbor-bin
 		$(if $(ANTHROPIC_API_KEY),--ae ANTHROPIC_API_KEY=$(ANTHROPIC_API_KEY),) \
 		$(if $(OPENAI_BASE_URL),--ae OPENAI_BASE_URL=$(OPENAI_BASE_URL),)
 
-# Run every task under evals/dq_harbor/tasks/ for DanQing (after oracle check on hello-txt).
+# Run the unified 35-task suite under evals/dq_harbor/tasks/ (oracle, then DanQing).
 eval-harbor-suite: eval-harbor-bin
 	@test -x "$(PODMAN_BIN)" || (echo "podman not found (tried $(PODMAN_BIN))" >&2; exit 1)
 	@command -v harbor >/dev/null 2>&1 || (echo "harbor not found — install with: uv tool install harbor" >&2; exit 1)
