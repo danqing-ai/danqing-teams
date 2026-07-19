@@ -28,6 +28,19 @@ skill-name/
 └── assets/           # Optional: templates, images, data files
 ```
 
+### Where to put custom skills
+
+Place a skill directory (with `SKILL.md`) under one of these roots. They are scanned on every new turn and merged into `<available_skills>` without writing to the database:
+
+| Path | Scope |
+|------|-------|
+| `~/.agents/skills/` | User |
+| `~/.dq-teams/skills/` | User |
+| `<projectRoot>/.agents/skills/` | Project |
+| `<projectRoot>/.dq-teams/skills/` | Project |
+
+Later paths override the same skill ID. Prefer project `.dq-teams/skills/` for repo-specific workflows.
+
 ### SKILL.md Format
 
 ```yaml

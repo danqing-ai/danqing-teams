@@ -22,8 +22,6 @@ tools:
     risk_level: medium
   - tool_id: search_kb
     risk_level: low
-  - tool_id: read_skill
-    risk_level: low
 knowledge: []
 ---
 

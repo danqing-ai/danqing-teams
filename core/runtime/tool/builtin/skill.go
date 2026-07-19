@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"danqing-teams/core/domain"
 	"danqing-teams/core/service"
 )
 
 // ReadSkill reads a skill's instructions or its bundled resource files.
-// All data is served from the DB (single runtime data source).
+// Prefers per-turn filesystem skills (scanned on New Turn); falls back to DB.
 //
 // Path convention:
 //   - "git-workflow"              → returns the skill's body (instructions)
@@ -19,6 +20,18 @@ import (
 //   - Valid resource subdirectories: scripts/, references/, assets/
 type ReadSkill struct {
 	Skills *service.SkillManager
+
+	mu       sync.RWMutex
+	fsSkills map[string]domain.Skill
+	fsFiles  map[string][]domain.SkillFile
+}
+
+// SetTurnFS updates the filesystem skill overlay for the current turn.
+func (h *ReadSkill) SetTurnFS(skills map[string]domain.Skill, files map[string][]domain.SkillFile) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.fsSkills = skills
+	h.fsFiles = files
 }
 
 func (h *ReadSkill) Name() string                { return "read_skill" }
@@ -71,8 +84,8 @@ func (h *ReadSkill) Execute(ctx context.Context, input map[string]any) (domain.T
 		resPath = parts[1]
 	}
 
-	sk, err := h.Skills.Get(ctx, skillID)
-	if err != nil {
+	sk, files, fromFS := h.lookup(ctx, skillID)
+	if sk == nil {
 		return domain.ToolResult{}, fmt.Errorf("skill %q not found", skillID)
 	}
 
@@ -89,18 +102,20 @@ func (h *ReadSkill) Execute(ctx context.Context, input map[string]any) (domain.T
 		return domain.ToolResult{}, fmt.Errorf("invalid resource path %q: must be under scripts/, references/, or assets/", resPath)
 	}
 
-	// Look up resource file from DB
-	files, err := h.Skills.Files(ctx, skillID)
-	if err != nil {
-		return domain.ToolResult{}, fmt.Errorf("failed to list files for skill %q: %w", skillID, err)
+	if !fromFS && h.Skills != nil {
+		var err error
+		files, err = h.Skills.Files(ctx, skillID)
+		if err != nil {
+			return domain.ToolResult{}, fmt.Errorf("failed to list files for skill %q: %w", skillID, err)
+		}
 	}
+
 	for _, f := range files {
 		if f.Path == resPath {
 			return domain.ToolResult{Content: string(f.Content)}, nil
 		}
 	}
 
-	// List available files as hint
 	var available []string
 	for _, f := range files {
 		available = append(available, skillID+"/"+f.Path)
@@ -110,6 +125,27 @@ func (h *ReadSkill) Execute(ctx context.Context, input map[string]any) (domain.T
 			path, skillID, strings.Join(available, ", "))
 	}
 	return domain.ToolResult{}, fmt.Errorf("resource %q not found in skill %q (no resource files available)", path, skillID)
+}
+
+// lookup prefers the turn filesystem overlay, then the DB SkillManager.
+func (h *ReadSkill) lookup(ctx context.Context, skillID string) (*domain.Skill, []domain.SkillFile, bool) {
+	h.mu.RLock()
+	if sk, ok := h.fsSkills[skillID]; ok {
+		files := h.fsFiles[skillID]
+		h.mu.RUnlock()
+		cp := sk
+		return &cp, files, true
+	}
+	h.mu.RUnlock()
+
+	if h.Skills == nil {
+		return nil, nil, false
+	}
+	sk, err := h.Skills.Get(ctx, skillID)
+	if err != nil || sk == nil {
+		return nil, nil, false
+	}
+	return sk, nil, false
 }
 
 func isValidResourcePath(p string) bool {

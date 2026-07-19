@@ -57,6 +57,7 @@ type Engine struct {
 	askUserWait   map[string]chan string
 	cancel        map[string]context.CancelFunc
 	agentChain    []string
+	readSkill     *builtin.ReadSkill
 }
 
 type approvalMeta struct {
@@ -162,6 +163,9 @@ func (e *Engine) sessionAllowsNetwork(sessionID string) bool {
 }
 
 func (e *Engine) RegisterTool(h tool.Handler) {
+	if rs, ok := h.(*builtin.ReadSkill); ok {
+		e.readSkill = rs
+	}
 	e.toolCatalog.Register(h)
 }
 
@@ -472,7 +476,8 @@ func (e *Engine) ListTurns(sessionID string) []domain.TurnLog {
 }
 
 func (e *Engine) setupRegistry(s domain.Session, agent domain.Agent) *tool.Registry {
-	skills := e.resolveAgentSkills(agent)
+	workDir := e.resolveWorkDir(context.Background(), s.ProjectID)
+	skills := e.resolveAgentSkills(agent, workDir)
 	e.turnRunner.SkillList = skills
 	e.turnRunner.ToolBindings = agent.Tools
 
@@ -506,9 +511,17 @@ func (e *Engine) delegatableAgents(agent domain.Agent) []domain.Agent {
 	return result
 }
 
-// resolveAgentSkills returns only the skills bound to the given agent.
-// If the agent has no SkillIDs configured, all skills are returned for backward compatibility.
-func (e *Engine) resolveAgentSkills(agent domain.Agent) []domain.Skill {
+// resolveAgentSkills returns Agent-bound DB skills merged with filesystem skills
+// scanned from user/project skill dirs for workDir (later dirs override by ID).
+// Filesystem skills are auto-included; they are not written to the database.
+func (e *Engine) resolveAgentSkills(agent domain.Agent, workDir string) []domain.Skill {
+	bound := e.boundDBSkills(agent)
+	fsSkills, fsFiles := service.ScanFilesystemSkills(workDir)
+	e.setTurnFSSkills(fsSkills, fsFiles)
+	return service.MergeSkillsByID(bound, fsSkills)
+}
+
+func (e *Engine) boundDBSkills(agent domain.Agent) []domain.Skill {
 	all, _ := e.skills.List(context.Background())
 	if len(agent.SkillIDs) == 0 {
 		return nil
@@ -524,6 +537,16 @@ func (e *Engine) resolveAgentSkills(agent domain.Agent) []domain.Skill {
 		}
 	}
 	return result
+}
+
+func (e *Engine) setTurnFSSkills(skills []domain.Skill, files map[string][]domain.SkillFile) {
+	byID := make(map[string]domain.Skill, len(skills))
+	for _, sk := range skills {
+		byID[sk.ID] = sk
+	}
+	if e.readSkill != nil {
+		e.readSkill.SetTurnFS(byID, files)
+	}
 }
 
 func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, projectID string, agent domain.Agent, reg *tool.Registry, attachments []domain.UserAttachment) (domain.Report, error) {
@@ -668,6 +691,17 @@ func (e *Engine) maybeCompact(ctx context.Context, sessionID, turnID string, tur
 	}
 }
 
+// alwaysOnBuiltinTools are mounted for every agent without requiring ToolBindings.
+var alwaysOnBuiltinTools = []string{"read_skill"}
+
+func (e *Engine) mountAlwaysOnBuiltins(reg *tool.Registry) {
+	for _, id := range alwaysOnBuiltinTools {
+		if h, ok := e.toolCatalog.Get(id); ok {
+			reg.Register(h)
+		}
+	}
+}
+
 func (e *Engine) mountBuiltinTools(reg *tool.Registry, bindings []domain.ToolBinding) {
 	for _, b := range bindings {
 		if b.ToolID == "" || b.MCPServer != "" {
@@ -799,6 +833,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 		delegator,
 	)
 	reg.CopyMCPServersFrom(e.toolCatalog)
+	e.mountAlwaysOnBuiltins(reg)
 	e.mountBuiltinTools(reg, agent.Tools)
 	reg.MountFromBindings(agent.Tools)
 	return reg
@@ -813,6 +848,7 @@ func (e *Engine) buildWorkerRegistry(agent domain.Agent) *tool.Registry {
 		},
 	)
 	reg.CopyMCPServersFrom(e.toolCatalog)
+	e.mountAlwaysOnBuiltins(reg)
 	e.mountBuiltinTools(reg, agent.Tools)
 	reg.MountFromBindings(agent.Tools)
 	return reg

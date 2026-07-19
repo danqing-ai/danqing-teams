@@ -226,6 +226,19 @@ make eval-harbor-base
 
 User data lives under `~/.dq-teams/` for server, CLI, TUI, and desktop. On first launch, data may migrate from `~/Library/Application Support/com.danqing.teams/` or `./data/teams.db`.
 
+### Custom skill directories
+
+Each new turn scans these Agentskills directories (`skill-name/SKILL.md`) in memory — **not written to SQLite** — and merges them into that turn's `<available_skills>`:
+
+| Path | Scope |
+|------|-------|
+| `~/.agents/skills/` | User |
+| `~/.dq-teams/skills/` | User |
+| `<projectRoot>/.agents/skills/` | Project |
+| `<projectRoot>/.dq-teams/skills/` | Project |
+
+Later paths override earlier ones on skill ID collision (project `.dq-teams` wins). Disk changes apply on the next turn.
+
 ## Desktop (Tauri)
 
 Thin shell around the Go backend (sidecar). For day-to-day use:

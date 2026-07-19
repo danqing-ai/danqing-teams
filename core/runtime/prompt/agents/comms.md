@@ -17,8 +17,6 @@ tools:
     risk_level: medium
   - tool_id: edit
     risk_level: medium
-  - tool_id: read_skill
-    risk_level: low
 knowledge: []
 ---
 

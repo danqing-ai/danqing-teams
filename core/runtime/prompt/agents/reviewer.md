@@ -15,8 +15,6 @@ tools:
     risk_level: low
   - tool_id: glob
     risk_level: low
-  - tool_id: read_skill
-    risk_level: low
 knowledge: []
 ---
 

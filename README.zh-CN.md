@@ -226,6 +226,19 @@ make eval-harbor-base
 
 Server、CLI、TUI、桌面端默认共用 `~/.dq-teams/`。首次启动可能从 `~/Library/Application Support/com.danqing.teams/` 或 `./data/teams.db` 迁移已有数据。
 
+### 自定义技能目录
+
+每个 New Turn 会实时扫描以下目录（Agentskills：`skill-name/SKILL.md`），**不写入数据库**，自动并入该 turn 的 `<available_skills>`：
+
+| 路径 | 范围 |
+|------|------|
+| `~/.agents/skills/` | 用户 |
+| `~/.dq-teams/skills/` | 用户 |
+| `<项目根>/.agents/skills/` | 项目 |
+| `<项目根>/.dq-teams/skills/` | 项目 |
+
+同名技能后者覆盖前者（项目 `.dq-teams` 优先最高）。改磁盘后下一 turn 生效。
+
 ## 桌面端（Tauri）
 
 薄壳 + Go sidecar。日常开发：

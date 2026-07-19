@@ -76,9 +76,14 @@ Server, CLI, TUI, and desktop all use the same home by default:
   config.yaml
   teams.db
   data/          # projects, turn logs
+  skills/        # optional user custom skills (scanned each turn)
   bin/           # desktop sidecar binary
   backend.log    # desktop sidecar log
 ```
+
+Custom skills (Agentskills layout) are also read from `~/.agents/skills/`,
+`<project>/.dq-teams/skills/`, and `<project>/.agents/skills/` on each new turn
+(memory only, not SQLite).
 
 On first launch, existing data may be migrated from
 `~/Library/Application Support/com.danqing.teams/` or `./data/teams.db`.

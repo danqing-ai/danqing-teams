@@ -19,8 +19,6 @@ tools:
     risk_level: high
   - tool_id: todowrite
     risk_level: low
-  - tool_id: read_skill
-    risk_level: low
 knowledge: []
 ---
 

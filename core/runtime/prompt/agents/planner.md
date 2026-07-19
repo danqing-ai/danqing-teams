@@ -21,8 +21,6 @@ tools:
     risk_level: low
   - tool_id: web_fetch
     risk_level: low
-  - tool_id: read_skill
-    risk_level: low
 knowledge: []
 ---
 
