@@ -241,7 +241,33 @@ func (e *Engine) CancelTurn(ctx context.Context, turnID string) {
 	e.mu.Unlock()
 	if ok {
 		cancel()
+		return
 	}
+
+	// Child/delegate turns share the parent context and are not registered in
+	// e.cancel. Cancelling by child ID (or healing a zombie "running" child after
+	// the parent already ended) must still clear DB status so the UI leaves
+	// the Composer "running" state.
+	t, err := e.turns.Get(context.Background(), turnID)
+	if err != nil || t.Status != domain.TurnRunning {
+		return
+	}
+	turns, _ := e.turns.ListBySession(context.Background(), t.SessionID)
+	for _, other := range turns {
+		if other.ID == turnID || other.Status != domain.TurnRunning {
+			continue
+		}
+		e.mu.Lock()
+		c, found := e.cancel[other.ID]
+		e.mu.Unlock()
+		if found {
+			c()
+		}
+	}
+	_ = e.turns.UpdateStatus(context.Background(), turnID, domain.TurnCancelled)
+	e.stream.Publish(context.Background(), t.SessionID, turnID, domain.EventTurnFailed, domain.ErrorPayload{
+		Message: "cancelled", Kind: "cancelled",
+	})
 }
 
 func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) {
@@ -740,13 +766,25 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 			e.stream.Publish(ctx, sessionID, childTurnID, domain.EventUserMessage, domain.UserMessagePayload{Content: goal})
 
 			rep, _, err := e.turnRunner.Run(ctx, childCtx)
-			e.turnLog.EndTurn(childTurnID, turnStatus(err, rep))
-			status := string(rep.Status)
+			finalStatus := turnStatus(err, rep)
+			e.turnLog.EndTurn(childTurnID, finalStatus)
+			// Parent cancel leaves ctx cancelled; persist/publish with Background
+			// so the child turn does not stay stuck as "running" in the UI.
+			bg := context.Background()
+			_ = e.turns.UpdateStatus(bg, childTurnID, finalStatus)
+			status := string(finalStatus)
 			if err != nil {
-				status = "failed"
+				kind := "turn"
+				msg := err.Error()
+				if errors.Is(err, context.Canceled) {
+					kind = "cancelled"
+					msg = "cancelled"
+				}
+				e.stream.Publish(bg, sessionID, childTurnID, domain.EventTurnFailed, domain.ErrorPayload{
+					Message: msg, Kind: kind,
+				})
 			}
-			_ = e.turns.UpdateStatus(ctx, childTurnID, turnStatus(err, rep))
-			e.stream.Publish(ctx, sessionID, parentTurnID, domain.EventDelegateCompleted, domain.DelegateCompletedPayload{
+			e.stream.Publish(bg, sessionID, parentTurnID, domain.EventDelegateCompleted, domain.DelegateCompletedPayload{
 				AgentID: workerAgent.ID, Status: status, Summary: rep.Summary,
 			})
 			return rep, err

@@ -101,9 +101,25 @@ export const useSessionsStore = defineStore('sessions', () => {
     return map
   })
 
+  /** Child turn IDs from delegate.started — not registered in engine cancel map. */
+  const childTurnIds = computed(() => {
+    const ids = new Set<string>()
+    for (const ev of streamEvents.value) {
+      if (ev.type !== 'delegate.started') continue
+      const payload = ev.payload as { childTurnId?: string } | null
+      const id = payload?.childTurnId
+      if (id) ids.add(id)
+    }
+    return ids
+  })
+
+  /** Prefer root/parent running turns for cancel; fall back to any running turn. */
   const runningTurnId = computed(() => {
-    const running = turns.value.find((t) => t.status === 'running')
-    return running?.id ?? null
+    const children = childTurnIds.value
+    const root = turns.value.find((t) => t.status === 'running' && !children.has(t.id))
+    if (root) return root.id
+    const any = turns.value.find((t) => t.status === 'running')
+    return any?.id ?? null
   })
 
   async function loadCatalog() {
@@ -289,8 +305,20 @@ export const useSessionsStore = defineStore('sessions', () => {
   }
 
   async function cancelTurn(turnId: string) {
-    await fetchJSON(`/sessions/${currentSessionId.value}/turns/${turnId}`, { method: 'DELETE' })
-    await loadTurns(currentSessionId.value!)
+    const sid = currentSessionId.value
+    if (!sid) return
+    await fetchJSON(`/sessions/${sid}/turns/${turnId}`, { method: 'DELETE' })
+    await loadTurns(sid)
+    // Heal zombie child turns left "running" after parent cancel (pre-fix race).
+    const leftovers = turns.value.filter((t) => t.status === 'running')
+    for (const t of leftovers) {
+      try {
+        await fetchJSON(`/sessions/${sid}/turns/${t.id}`, { method: 'DELETE' })
+      } catch {
+        /* ignore */
+      }
+    }
+    if (leftovers.length) await loadTurns(sid)
   }
 
   async function resumeTurn(turnId: string) {
