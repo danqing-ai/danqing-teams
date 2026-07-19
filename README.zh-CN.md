@@ -198,15 +198,21 @@ make test-integration   # 集成测试
 
 ### Harbor Agent 对比（Terminal-Bench 2.0）
 
-官方 **terminal-bench@2.0**（约 89 题），同步到本地并统一 `FROM dq-harbor-base:local`，经 [Harbor](https://github.com/laude-institute/harbor) + Podman。模型 `deepseek-v4-flash`。通过 = Mean reward ≥ 1.0。非榜单提交（无 ATIF）。
+官方 **terminal-bench@2.0**（**89** 题）。**题不进 git**，需本机同步到 **`dq-harbor-base:local`**，再用 Harbor + Podman 跑。通过 = Mean reward ≥ 1.0。非榜单提交。
 
-文档与成绩：[`evals/dq_harbor/README.md`](evals/dq_harbor/README.md)、[`evals/dq_harbor/COMPARE_RESULTS.md`](evals/dq_harbor/COMPARE_RESULTS.md)。
+完整步骤：[`evals/dq_harbor/README.md`](evals/dq_harbor/README.md)。成绩：[`evals/dq_harbor/COMPARE_RESULTS.md`](evals/dq_harbor/COMPARE_RESULTS.md)。
 
 ```bash
-make eval-harbor-base
-make eval-harbor-sync-tb2
+# 依赖：Podman、`uv tool install 'harbor>=0.20'`、LLM 凭证
+podman machine start                                    # macOS 如需要
+make eval-harbor-base                                   # dq-harbor-base:local
+GH_TOKEN=$(gh auth token) make eval-harbor-sync-tb2     # → evals/dq_harbor/tasks/（89 题，gitignore）
 make eval-harbor-bin
-./evals/dq_harbor/compare_agents.sh
+
+export TEAMS_MODEL=deepseek/deepseek-v4-flash TEAMS_API_KEY=... TEAMS_BASE_URL=https://api.deepseek.com
+make eval-harbor-smoke                                  # 1 题冒烟
+# make eval-harbor-suite                                # 全量 89：oracle 再 DanQing
+./evals/dq_harbor/compare_agents.sh                     # DanQing / OpenCode / OpenHands
 ```
 
 ## 环境变量

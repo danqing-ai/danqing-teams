@@ -198,15 +198,21 @@ make test-integration   # integration tests
 
 ### Harbor agent compare (Terminal-Bench 2.0)
 
-Official **terminal-bench@2.0** (~89 tasks), synced locally onto **`dq-harbor-base:local`** via [Harbor](https://github.com/laude-institute/harbor) + Podman. Model `deepseek-v4-flash`. Pass = Mean reward ≥ 1.0. Not a leaderboard submission (no ATIF).
+Official **terminal-bench@2.0** (**89** tasks). Tasks are **not in git** — sync locally onto **`dq-harbor-base:local`**, then run via Harbor + Podman. Pass = Mean reward ≥ 1.0. Not a leaderboard submission.
 
-Docs + scores: [`evals/dq_harbor/README.md`](evals/dq_harbor/README.md), [`evals/dq_harbor/COMPARE_RESULTS.md`](evals/dq_harbor/COMPARE_RESULTS.md).
+Full how-to: [`evals/dq_harbor/README.md`](evals/dq_harbor/README.md). Scores: [`evals/dq_harbor/COMPARE_RESULTS.md`](evals/dq_harbor/COMPARE_RESULTS.md).
 
 ```bash
-make eval-harbor-base
-make eval-harbor-sync-tb2
+# Prerequisites: Podman, `uv tool install 'harbor>=0.20'`, LLM credentials
+podman machine start                                    # macOS if needed
+make eval-harbor-base                                   # dq-harbor-base:local
+GH_TOKEN=$(gh auth token) make eval-harbor-sync-tb2     # → evals/dq_harbor/tasks/ (89, gitignored)
 make eval-harbor-bin
-./evals/dq_harbor/compare_agents.sh
+
+export TEAMS_MODEL=deepseek/deepseek-v4-flash TEAMS_API_KEY=... TEAMS_BASE_URL=https://api.deepseek.com
+make eval-harbor-smoke                                  # 1-task smoke
+# make eval-harbor-suite                                # full 89: oracle then DanQing
+./evals/dq_harbor/compare_agents.sh                     # DanQing vs OpenCode vs OpenHands
 ```
 
 ## Environment
