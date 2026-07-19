@@ -1,0 +1,3 @@
+Contact Ada at ada@example.com or 415-555-0100.
+SSN 123-45-6789 must stay private.
+No change: 12-34-5678 or ada@localhost

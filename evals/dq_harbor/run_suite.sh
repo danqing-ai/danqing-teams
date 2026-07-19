@@ -26,6 +26,11 @@ if [[ -z "$AGENT" ]]; then
   exit 2
 fi
 
+# Default: use prebaked OpenCode agent (skips nvm when base image has it).
+if [[ "$AGENT" == "opencode" ]]; then
+  AGENT="${OPENCODE_AGENT:-dq_harbor.agent_opencode:OpenCodePrebuilt}"
+fi
+
 if [[ "$AGENT" != "oracle" && -z "$MODEL" ]]; then
   echo "Set TEAMS_MODEL or HARBOR_MODEL (required for non-oracle agents)" >&2
   exit 2
@@ -53,18 +58,31 @@ AE_ARGS=()
 [[ -n "${LLM_BASE_URL:-}" ]] && AE_ARGS+=(--ae "LLM_BASE_URL=$LLM_BASE_URL")
 [[ -n "${LLM_MODEL:-}" ]] && AE_ARGS+=(--ae "LLM_MODEL=$LLM_MODEL")
 
+# Custom Harbor agents live under evals/dq_harbor/
+if [[ "$AGENT" == dq_harbor.* ]]; then
+  export PYTHONPATH="$ROOT/evals${PYTHONPATH:+:$PYTHONPATH}"
+fi
 if [[ "$AGENT" == "dq_harbor.agent:DanQingAgent" || "$AGENT" == *DanQingAgent* ]]; then
   BIN="${DANQING_CLI_BIN:-$ROOT/out/eval/danqing-teams-cli}"
   if [[ ! -f "$BIN" ]]; then
     echo "missing $BIN — run: make eval-harbor-bin" >&2
     exit 1
   fi
-  export PYTHONPATH="$ROOT/evals${PYTHONPATH:+:$PYTHONPATH}"
   export DANQING_CLI_BIN="$BIN"
 fi
 
 shopt -s nullglob
-tasks=("$TASKS_DIR"/*/)
+if [[ -n "${HARBOR_TASKS:-}" ]]; then
+  # Space-separated task directory names under tasks/
+  tasks=()
+  for name in $HARBOR_TASKS; do
+    d="$TASKS_DIR/$name"
+    [[ -d "$d" ]] || { echo "unknown task: $name" >&2; exit 2; }
+    tasks+=("$d/")
+  done
+else
+  tasks=("$TASKS_DIR"/*/)
+fi
 if [[ ${#tasks[@]} -eq 0 ]]; then
   echo "no tasks under $TASKS_DIR" >&2
   exit 1

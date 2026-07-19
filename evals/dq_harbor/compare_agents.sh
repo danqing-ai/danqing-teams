@@ -15,6 +15,8 @@ SOCK="$("$PODMAN_BIN" machine inspect --format '{{.ConnectionInfo.PodmanSocket.P
 
 export HARBOR_ENV="${HARBOR_ENV:-docker}"
 export HARBOR_N_CONCURRENT="${HARBOR_N_CONCURRENT:-1}"
+# Full-suite compare: ignore a leftover HARBOR_TASKS filter from the shell.
+unset HARBOR_TASKS
 
 # Prefer DeepSeek from local Teams DB if env not set.
 if [[ -z "${TEAMS_API_KEY:-}" && -f "$HOME/.dq-teams/teams.db" ]]; then
@@ -41,7 +43,10 @@ export LLM_BASE_URL="${LLM_BASE_URL:-$OPENAI_BASE_URL}"
 DANQING_MODEL="${DANQING_MODEL:-$TEAMS_MODEL}"
 COMPAT_MODEL="${COMPAT_MODEL:-deepseek/deepseek-v4-flash}"
 OPENHANDS_MODEL="${OPENHANDS_MODEL:-openai/deepseek-v4-flash}"
+# Prebaked Node/OpenCode image + skip-install agent (see images/base/)
+OPENCODE_AGENT="${OPENCODE_AGENT:-dq_harbor.agent_opencode:OpenCodePrebuilt}"
 
+make eval-harbor-base
 make eval-harbor-bin
 
 OUT_DIR="$ROOT/evals/dq_harbor/compare_results/$(date +%Y%m%d_%H%M%S)"
@@ -82,7 +87,7 @@ run_one "danqing" "dq_harbor.agent:DanQingAgent" "$DANQING_MODEL"
 # Third-party agents need longer timeouts (install + run).
 export HARBOR_TIMEOUT_MULT="${HARBOR_TIMEOUT_MULT:-2}"
 export HARBOR_AGENT_TIMEOUT_MULT="${HARBOR_AGENT_TIMEOUT_MULT:-3}"
-run_one "opencode" "opencode" "$COMPAT_MODEL"
+run_one "opencode" "$OPENCODE_AGENT" "$COMPAT_MODEL"
 # Prefer SDK: full openhands-ai pip install often fails/times out in task containers.
 run_one "openhands" "${OPENHANDS_AGENT:-openhands-sdk}" "$OPENHANDS_MODEL"
 

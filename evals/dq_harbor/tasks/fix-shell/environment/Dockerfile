@@ -1,3 +1,3 @@
-FROM ubuntu:24.04
+FROM dq-harbor-base:local
 WORKDIR /app
 COPY greet.sh /app/greet.sh

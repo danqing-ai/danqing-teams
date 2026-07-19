@@ -1,4 +1,4 @@
-FROM ubuntu:24.04
+FROM dq-harbor-base:local
 WORKDIR /app
 COPY a.log /app/a.log
 COPY b.log /app/b.log

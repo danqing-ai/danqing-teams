@@ -198,20 +198,19 @@ make test-integration   # 集成测试
 
 ### Harbor 本地 Agent 对比（冒烟套件）
 
-16 个文件/编程任务，经 [Harbor](https://github.com/laude-institute/harbor) + Podman。同一模型（`deepseek-v4-flash`）。通过 = Mean reward ≥ 1.0。非官方 Terminal-Bench / 榜单提交。
+35 个文件/编程任务，经 [Harbor](https://github.com/laude-institute/harbor) + Podman。同一模型（`deepseek-v4-flash`）。通过 = Mean reward ≥ 1.0。非官方 Terminal-Bench / 榜单提交。下表为扩展前 16 题基线。
 
-| Agent | 通过 | 失败 | 说明 |
-|-------|------|------|------|
-| **DanQing** | **15** | 1 | 容器内 `danqing-teams-cli` |
-| OpenCode | 12 | 4 | Harbor `opencode`（`deepseek/` provider） |
-| OpenHands | 15 | 1 | Harbor `openhands-sdk` |
+| Agent | 通过 | 说明 |
+|-------|------|------|
+| **DanQing** | **15/16** | `danqing-teams-cli` |
+| OpenCode | **15/16** | 预装 base + `OpenCodePrebuilt` |
+| OpenHands | **15/16** | Harbor `openhands-sdk` |
 
-三方均未过 `replace-marker`。OpenCode 另挂 `fix-python`、`fix-shell`、`sort-names`。
-
-详情：[`evals/dq_harbor/README.md`](evals/dq_harbor/README.md) · 对照表：[`evals/dq_harbor/COMPARE_RESULTS.md`](evals/dq_harbor/COMPARE_RESULTS.md)
+三方共同失败：`replace-marker`。详情：[`evals/dq_harbor/COMPARE_RESULTS.md`](evals/dq_harbor/COMPARE_RESULTS.md)。
 
 ```bash
-./evals/dq_harbor/compare_agents.sh   # DanQing + OpenCode + OpenHands SDK
+make eval-harbor-base
+./evals/dq_harbor/compare_agents.sh
 ```
 
 ## 环境变量

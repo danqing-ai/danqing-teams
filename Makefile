@@ -15,7 +15,7 @@ export DQ_APP_NAME := $(APP_NAME)
 	check-layers test test-integration \
 	build-go build-server build-cli build-tui build-sidecar build build-all clean \
 	pack-prereqs pack-macos-desktop pack-linux-server pack-windows-desktop \
-	eval-harbor-bin eval-harbor-smoke eval-harbor-suite eval-harbor-compare
+	eval-harbor-bin eval-harbor-base eval-harbor-smoke eval-harbor-suite eval-harbor-compare
 
 EVAL_BIN_DIR := $(OUT_DIR)/eval
 EVAL_CLI_BIN := $(EVAL_BIN_DIR)/danqing-teams-cli
@@ -40,7 +40,7 @@ help:
 	@echo ""
 	@echo "Frontend:  frontend-install | frontend-dev | frontend-build | frontend-typecheck"
 	@echo "Test:      check-layers | test | test-integration"
-	@echo "Eval:      eval-harbor-bin | eval-harbor-smoke | eval-harbor-suite | eval-harbor-compare"
+	@echo "Eval:      eval-harbor-bin | eval-harbor-base | eval-harbor-smoke | eval-harbor-suite | eval-harbor-compare"
 	@echo "Build:     build | build-all | build-go | build-server | build-cli | build-tui | build-sidecar | clean"
 	@echo "Release:   pack-macos-desktop | pack-linux-server | pack-windows-desktop"
 
@@ -138,9 +138,14 @@ eval-harbor-bin:
 	GOOS=linux GOARCH=$(EVAL_GOARCH) CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(EVAL_CLI_BIN) ./cli
 	@echo "built $(EVAL_CLI_BIN) (linux/$(EVAL_GOARCH))"
 
+# Shared task image with nvm/Node/OpenCode/Python preinstalled (speeds OpenCode setup).
+eval-harbor-base:
+	@chmod +x $(CURDIR)/evals/dq_harbor/build_base_image.sh
+	@$(CURDIR)/evals/dq_harbor/build_base_image.sh
+
 # Local Harbor smoke: oracle verifies the task, then DanQing agent runs it.
 # Requires: Podman (+ DOCKER_HOST), `uv tool install harbor`, and LLM credentials.
-eval-harbor-smoke: eval-harbor-bin
+eval-harbor-smoke: eval-harbor-base eval-harbor-bin
 	@test -x "$(PODMAN_BIN)" || (echo "podman not found (tried $(PODMAN_BIN))" >&2; exit 1)
 	@command -v harbor >/dev/null 2>&1 || (echo "harbor not found — install with: uv tool install harbor" >&2; exit 1)
 	@test -n "$(HARBOR_MODEL)" || (echo "Set TEAMS_MODEL or HARBOR_MODEL (e.g. deepseek/deepseek-chat)" >&2; exit 1)
@@ -181,7 +186,7 @@ eval-harbor-suite: eval-harbor-bin
 
 # Same suite for a comparison agent, e.g. make eval-harbor-compare HARBOR_COMPARE_AGENT=opencode
 HARBOR_COMPARE_AGENT ?= opencode
-eval-harbor-compare:
+eval-harbor-compare: eval-harbor-base
 	@test -x "$(PODMAN_BIN)" || (echo "podman not found (tried $(PODMAN_BIN))" >&2; exit 1)
 	@command -v harbor >/dev/null 2>&1 || (echo "harbor not found" >&2; exit 1)
 	@test -n "$(HARBOR_MODEL)" || (echo "Set TEAMS_MODEL or HARBOR_MODEL" >&2; exit 1)
@@ -190,4 +195,5 @@ eval-harbor-compare:
 	  if [ -n "$$SOCK" ]; then export DOCKER_HOST="unix://$$SOCK"; fi; \
 	  export PATH="$(dir $(PODMAN_BIN)):$$PATH"; \
 	  HARBOR_ENV=$(HARBOR_ENV) HARBOR_MODEL=$(HARBOR_MODEL) \
+	    PYTHONPATH=$(CURDIR)/evals \
 	    $(CURDIR)/evals/dq_harbor/run_suite.sh $(HARBOR_COMPARE_AGENT)

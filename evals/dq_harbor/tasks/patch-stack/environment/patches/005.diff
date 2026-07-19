@@ -1,0 +1,10 @@
+--- a/doc.txt
++++ b/doc.txt
+@@ -1,2 +1,3 @@
++HEAD
+ alpha
+ BETA
+@@ -6,2 +7,3 @@
+ zeta
+ eta
++TAIL

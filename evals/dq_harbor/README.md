@@ -7,13 +7,18 @@ Container engine: **Podman** (`harbor run --env docker`).
 ## Prerequisites
 
 - [Podman](https://podman.io/) (Linux package or Podman Desktop / `podman machine` on macOS)
-- Python 3.12+ and Harbor: `uv tool install harbor` (or `pip install harbor`)
-  - Need a Harbor build that includes the `podman` environment
+- Python 3.12+ and Harbor **≥ 0.20**: `uv tool install --upgrade 'harbor>=0.20'`
 - LLM API credentials (OpenAI-compatible or Anthropic)
+- Shared base image (Node/nvm + OpenCode + Python), built once:
 
 ```bash
 podman machine start   # macOS if needed
+make eval-harbor-base  # → dq-harbor-base:local
 ```
+
+Task Dockerfiles use `FROM dq-harbor-base:local`. OpenCode runs via
+`dq_harbor.agent_opencode:OpenCodePrebuilt`, which **skips** nvm/npm when OpenCode
+is already in the image (avoids flaky GitHub downloads per trial).
 
 ## Task suite
 
@@ -35,31 +40,54 @@ podman machine start   # macOS if needed
 | [`bump-version`](tasks/bump-version/) | medium | Bump JSON patch version |
 | [`merge-logs`](tasks/merge-logs/) | medium | Merge/sort timestamped logs |
 | [`csv-filter`](tasks/csv-filter/) | medium | Filter CSV rows by age |
+| [`markdown-toc`](tasks/markdown-toc/) | medium | Markdown heading TOC |
+| [`ini-flatten`](tasks/ini-flatten/) | medium | INI → flat `KEY=VALUE` env |
+| [`topo-sort`](tasks/topo-sort/) | hard | Lex-smallest topological order |
+| [`interval-merge`](tasks/interval-merge/) | hard | Merge overlapping intervals |
+| [`pii-redact`](tasks/pii-redact/) | hard | Redact email / phone / SSN-like |
+| [`json-deep-merge`](tasks/json-deep-merge/) | hard | Recursive JSON merge |
+| [`csv-pivot`](tasks/csv-pivot/) | hard | Pivot CSV sums by region×product |
+| [`binary-search-fix`](tasks/binary-search-fix/) | hard | Fix buggy binary search |
+| [`diff-apply`](tasks/diff-apply/) | hard | Apply unified diff |
+| [`rename-symbol`](tasks/rename-symbol/) | hard | Cross-file Python rename |
+| [`hash-chain`](tasks/hash-chain/) | hard | Repair corrupted hash chain |
+| [`anagram-groups`](tasks/anagram-groups/) | hard | Group anagrams |
+| [`path-normalize`](tasks/path-normalize/) | hard | Normalize POSIX paths |
+| [`log-window`](tasks/log-window/) | hard | Filter log lines by time window |
+| [`lru-trace`](tasks/lru-trace/) | hard | LRU cache simulation + hit/miss |
+| [`route-lpm`](tasks/route-lpm/) | hard | IPv4 longest-prefix-match routing |
+| [`expr-eval`](tasks/expr-eval/) | hard | Integer expr parser (precedence/unary) |
+| [`patch-stack`](tasks/patch-stack/) | hard | Apply sequential unified diffs |
+| [`bank-safe`](tasks/bank-safe/) | hard | Banker's algorithm safe sequence |
 
-**16 tasks** under [`tasks/`](tasks/). Suite runners iterate every directory there.
+**35 tasks** under [`tasks/`](tasks/). Suite runners iterate every directory there. All tasks pass Harbor `oracle`.
 
 ## Latest compare results
 
-Run date: **2026-07-18**. Model: **`deepseek-v4-flash`**. Engine: Podman (`--env docker`). Pass = Harbor Mean reward ≥ 1.0.
+Model: **`deepseek-v4-flash`**. Engine: Podman. Pass = Mean reward ≥ 1.0. Full table: [`COMPARE_RESULTS.md`](COMPARE_RESULTS.md).
 
-| Agent | Pass | Fail | Total | Adapter |
-|-------|------|------|-------|---------|
-| **DanQing** | **15** | 1 | 16 | `dq_harbor.agent:DanQingAgent` |
-| OpenCode | 12 | 4 | 16 | `opencode` + `deepseek/deepseek-v4-flash` |
-| OpenHands | 15 | 1 | 16 | `openhands-sdk` + `openai/deepseek-v4-flash` |
+Baseline on the previous **16-task** suite (before +14 medium/hard):
 
-Per-task matrix: [`COMPARE_RESULTS.md`](COMPARE_RESULTS.md). Raw logs (gitignored): `compare_results/20260718_183948/`.
+| Agent | Pass | Fail | Total |
+|-------|------|------|-------|
+| **DanQing** | **15** | 1 | 16 |
+| OpenCode (prebuilt) | **15** | 1 | 16 |
+| OpenHands SDK | **15** | 1 | 16 |
 
-| Failed task | DanQing | OpenCode | OpenHands |
-|-------------|---------|----------|-----------|
-| `replace-marker` | FAIL | FAIL | FAIL |
-| `fix-python` | PASS | FAIL | PASS |
-| `fix-shell` | PASS | FAIL | PASS |
-| `sort-names` | PASS | FAIL | PASS |
+Shared fail: `replace-marker`.
+
+**+14 medium/hard** (2026-07-19): DanQing **14/14**, OpenCode (prebuilt) **14/14**.
+
+**+5 hard** (2026-07-19): `lru-trace`, `route-lpm`, `expr-eval`, `patch-stack`, `bank-safe` (oracle OK; agent compare pending). Details: [`COMPARE_RESULTS.md`](COMPARE_RESULTS.md).
+
+```bash
+make eval-harbor-base
+./evals/dq_harbor/compare_agents.sh
+```
 
 Notes:
 
-- Prefer OpenCode model `deepseek/...` (native provider). `openai/...` + custom `OPENAI_BASE_URL` often hits DeepSeek `/responses` → 404.
+- Prefer OpenCode model `deepseek/...` + `OpenCodePrebuilt` / `make eval-harbor-base`.
 - Prefer Harbor agent `openhands-sdk`. Full `openhands` (`openhands-ai` pip install) frequently fails/timeouts inside task containers.
 - Suite OK/FAIL is judged by Mean reward (Harbor may exit 0 with reward 0).
 
@@ -128,14 +156,18 @@ Results land under repo `jobs/` and `evals/dq_harbor/compare_results/`. Compare 
 
 | Path | Role |
 |------|------|
-| [`agent.py`](agent.py) | Harbor `BaseInstalledAgent` |
+| [`agent.py`](agent.py) | DanQing Harbor agent |
+| [`agent_opencode.py`](agent_opencode.py) | OpenCode with preinstall skip |
+| [`images/base/`](images/base/) | `dq-harbor-base:local` Dockerfile |
+| [`build_base_image.sh`](build_base_image.sh) | Build shared base image |
 | [`run_suite.sh`](run_suite.sh) | Loop all tasks for one agent |
 | [`compare_agents.sh`](compare_agents.sh) | DanQing + OpenCode + OpenHands SDK |
 | [`summarize_compare.py`](summarize_compare.py) | Mean-reward markdown table |
-| [`tasks/*/`](tasks/) | Local Harbor tasks |
+| [`tasks/*/`](tasks/) | Local Harbor tasks (`FROM dq-harbor-base:local`) |
 | [`COMPARE_RESULTS.md`](COMPARE_RESULTS.md) | Latest three-way compare table (tracked) |
 | [`compare_results/`](compare_results/) | Saved suite logs (gitignored) |
 | `make eval-harbor-bin` | linux CLI → `out/eval/danqing-teams-cli` |
+| `make eval-harbor-base` | Build OpenCode-preloaded base image |
 
 ## Turn logs & failure analysis
 
@@ -183,8 +215,11 @@ Default `linux/arm64`. Override: `make eval-harbor-bin EVAL_GOARCH=amd64`.
 | `podman not found` | Install Podman / start machine |
 | `DanQing CLI binary not found` | `make eval-harbor-bin` |
 | `exec format error` | Wrong `EVAL_GOARCH` |
-| Harbor rejects `podman` | Upgrade Harbor |
-| Suite fail on one task | Inspect `~/.harbor/jobs/.../trials/...` |
+| Harbor rejects `podman` | Upgrade Harbor (`uv tool install --upgrade 'harbor>=0.20'`) |
+| `dq-harbor-base:local` missing / pull fail | `make eval-harbor-base` |
+| OpenCode install timeout / nvm GitHub fail | Ensure base image built; agent should log `skipping nvm/npm install` |
+| apt “Release file … not valid yet” | Podman VM clock skew; base Dockerfile already disables Check-Valid-Until |
+| Suite fail on one task | Inspect repo `jobs/<job>/…` |
 
 ## Out of scope
 

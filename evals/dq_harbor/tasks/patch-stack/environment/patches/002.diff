@@ -1,0 +1,8 @@
+--- a/doc.txt
++++ b/doc.txt
+@@ -2,4 +2,5 @@
+ BETA
+ gamma
++INSERT
+ delta
+ epsilon

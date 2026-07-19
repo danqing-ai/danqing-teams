@@ -198,20 +198,19 @@ make test-integration   # integration tests
 
 ### Harbor local agent compare (smoke suite)
 
-16 file/coding tasks via [Harbor](https://github.com/laude-institute/harbor) + Podman. Same model (`deepseek-v4-flash`). Pass = Mean reward ≥ 1.0. Not an official Terminal-Bench / leaderboard run.
+35 file/coding tasks via [Harbor](https://github.com/laude-institute/harbor) + Podman. Same model (`deepseek-v4-flash`). Pass = Mean reward ≥ 1.0. Not an official Terminal-Bench / leaderboard run. Baseline scores below are from the prior 16-task suite.
 
-| Agent | Pass | Fail | Notes |
-|-------|------|------|-------|
-| **DanQing** | **15** | 1 | `danqing-teams-cli` in-container |
-| OpenCode | 12 | 4 | Harbor `opencode` (`deepseek/` provider) |
-| OpenHands | 15 | 1 | Harbor `openhands-sdk` |
+| Agent | Pass | Notes |
+|-------|------|-------|
+| **DanQing** | **15/16** | `danqing-teams-cli` |
+| OpenCode | **15/16** | prebaked base + `OpenCodePrebuilt` |
+| OpenHands | **15/16** | Harbor `openhands-sdk` |
 
-All three failed `replace-marker`. OpenCode also failed `fix-python`, `fix-shell`, `sort-names`.
-
-Details: [`evals/dq_harbor/README.md`](evals/dq_harbor/README.md) · table: [`evals/dq_harbor/COMPARE_RESULTS.md`](evals/dq_harbor/COMPARE_RESULTS.md)
+Shared fail: `replace-marker`. Details: [`evals/dq_harbor/COMPARE_RESULTS.md`](evals/dq_harbor/COMPARE_RESULTS.md).
 
 ```bash
-./evals/dq_harbor/compare_agents.sh   # DanQing + OpenCode + OpenHands SDK
+make eval-harbor-base
+./evals/dq_harbor/compare_agents.sh
 ```
 
 ## Environment

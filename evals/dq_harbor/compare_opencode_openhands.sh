@@ -27,14 +27,18 @@ export LLM_BASE_URL="${LLM_BASE_URL:-$OPENAI_BASE_URL}"
 
 # OpenCode: native deepseek provider
 OPENCODE_MODEL="${OPENCODE_MODEL:-deepseek/deepseek-v4-flash}"
+OPENCODE_AGENT="${OPENCODE_AGENT:-dq_harbor.agent_opencode:OpenCodePrebuilt}"
 # OpenHands SDK (full openhands-ai install fails in task containers)
 OPENHANDS_AGENT="${OPENHANDS_AGENT:-openhands-sdk}"
 OPENHANDS_MODEL="${OPENHANDS_MODEL:-openai/deepseek-v4-flash}"
 
+make eval-harbor-base >/dev/null
+
 OUT_DIR="${1:-$ROOT/evals/dq_harbor/compare_results/20260718_183948}"
 mkdir -p "$OUT_DIR"
 echo "resume dir: $OUT_DIR"
-echo "OPENCODE_MODEL=$OPENCODE_MODEL OPENHANDS_AGENT=$OPENHANDS_AGENT OPENHANDS_MODEL=$OPENHANDS_MODEL"
+echo "OPENCODE_MODEL=$OPENCODE_MODEL OPENCODE_AGENT=$OPENCODE_AGENT"
+echo "OPENHANDS_AGENT=$OPENHANDS_AGENT OPENHANDS_MODEL=$OPENHANDS_MODEL"
 echo "timeout_mult=$HARBOR_TIMEOUT_MULT agent_mult=$HARBOR_AGENT_TIMEOUT_MULT"
 
 run_one() {
@@ -60,7 +64,7 @@ run_one() {
 }
 
 # OpenCode already completed in this OUT_DIR — skip unless FORCE_RERUN=1
-run_one opencode opencode "$OPENCODE_MODEL"
+run_one opencode "$OPENCODE_AGENT" "$OPENCODE_MODEL"
 FORCE_RERUN=1 run_one openhands "$OPENHANDS_AGENT" "$OPENHANDS_MODEL"
 
 python3 "$ROOT/evals/dq_harbor/summarize_compare.py" "$OUT_DIR" | tee "$OUT_DIR/SUMMARY.md"

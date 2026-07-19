@@ -1,5 +1,3 @@
-FROM ubuntu:24.04
-RUN apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 >/dev/null \
-  && rm -rf /var/lib/apt/lists/*
+FROM dq-harbor-base:local
 WORKDIR /app
 COPY calc.py /app/calc.py

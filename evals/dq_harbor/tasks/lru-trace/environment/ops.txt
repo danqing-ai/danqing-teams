@@ -1,0 +1,14 @@
+CAPACITY 3
+PUT a 1
+PUT b 2
+PUT c 3
+GET a
+PUT d 4
+GET b
+PUT a 9
+PUT e 5
+GET c
+GET d
+GET a
+GET e
+GET b

@@ -1,3 +1,3 @@
-FROM ubuntu:24.04
+FROM dq-harbor-base:local
 WORKDIR /app
 COPY people.csv /app/people.csv
