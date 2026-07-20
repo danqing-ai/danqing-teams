@@ -9,7 +9,7 @@ import (
 	"danqing-teams/core/domain"
 )
 
-func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList []domain.Agent, checkpoint string, sandboxStatus domain.SandboxStatus) string {
+func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList []domain.Agent, checkpoint string, activeTodos string, sandboxStatus domain.SandboxStatus) string {
 	var b strings.Builder
 	b.WriteString(agentPersona)
 
@@ -28,6 +28,10 @@ func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList 
 		b.WriteString("<compaction-checkpoint>\n")
 		b.WriteString(checkpoint)
 		b.WriteString("\n</compaction-checkpoint>")
+	}
+	if activeTodos != "" {
+		b.WriteString("\n\n")
+		b.WriteString(activeTodos)
 	}
 	b.WriteString("\n\n")
 	b.WriteString(buildRuntimeEnvironment(sandboxStatus))

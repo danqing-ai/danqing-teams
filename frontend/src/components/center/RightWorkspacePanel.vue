@@ -12,6 +12,7 @@ export type RightTab = 'plan' | 'files' | 'experts' | 'changes' | 'terminal' | '
 
 const props = defineProps<{
   streamEvents: StreamEvent[]
+  planTurnId?: string | null
   projectId: string | null
   changesCount?: number
   expertsRunning?: number
@@ -66,7 +67,7 @@ defineExpose({
     </div>
 
     <div class="right-workspace__body">
-      <PlanPanel v-if="rightTab === 'plan'" :stream-events="streamEvents" />
+      <PlanPanel v-if="rightTab === 'plan'" :stream-events="streamEvents" :plan-turn-id="planTurnId" />
 
       <template v-else-if="rightTab === 'files'">
         <FileTree

@@ -189,12 +189,18 @@ func (m *CompactionManager) Compact(ctx context.Context, sessionID, turnID strin
 		return 0
 	}
 
+	todos := extractLatestTodos(messages)
+	if len(todos) == 0 && prevCP != nil {
+		todos = prevCP.Todos
+	}
+
 	cp := &domain.CompactionCheckpoint{
-		SessionID:      sessionID,
-		TurnID:         turnID,
-		Summary:        summary,
-		TurnCount:      turnCount,
-		TokenEstimate:  tokensBefore,
+		SessionID:     sessionID,
+		TurnID:        turnID,
+		Summary:       summary,
+		Todos:         todos,
+		TurnCount:     turnCount,
+		TokenEstimate: tokensBefore,
 	}
 	m.setCheckpoint(sessionID, cp)
 
@@ -342,6 +348,79 @@ func isToolResultOrPair(messages []Message, idx int, pairs map[int]bool) bool {
 		return true
 	}
 	return messages[idx].Role == RoleTool
+}
+
+// extractLatestTodos walks messages newest-first and returns the last todowrite list.
+func extractLatestTodos(messages []Message) []domain.CompactionTodoItem {
+	for i := len(messages) - 1; i >= 0; i-- {
+		m := messages[i]
+		if m.Role != RoleAssistant {
+			continue
+		}
+		for j := len(m.ToolCalls) - 1; j >= 0; j-- {
+			tc := m.ToolCalls[j]
+			if tc.Name != "todowrite" {
+				continue
+			}
+			if items := parseTodoArgs(tc.Arguments); len(items) > 0 {
+				return items
+			}
+		}
+	}
+	return nil
+}
+
+func parseTodoArgs(args map[string]any) []domain.CompactionTodoItem {
+	if args == nil {
+		return nil
+	}
+	raw, ok := args["todos"]
+	if !ok {
+		return nil
+	}
+	list, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]domain.CompactionTodoItem, 0, len(list))
+	for _, t := range list {
+		m, ok := t.(map[string]any)
+		if !ok {
+			continue
+		}
+		content, _ := m["content"].(string)
+		if content == "" {
+			continue
+		}
+		status, _ := m["status"].(string)
+		if status == "" {
+			status = "pending"
+		}
+		priority, _ := m["priority"].(string)
+		if priority == "" {
+			priority = "medium"
+		}
+		out = append(out, domain.CompactionTodoItem{
+			Content:  content,
+			Status:   status,
+			Priority: priority,
+		})
+	}
+	return out
+}
+
+// formatActiveTodos renders structured todos for system-prompt injection.
+func formatActiveTodos(todos []domain.CompactionTodoItem) string {
+	if len(todos) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("<active-todos>\n")
+	for i, t := range todos {
+		b.WriteString(fmt.Sprintf("%d. [%s] %s (%s)\n", i+1, t.Status, t.Content, t.Priority))
+	}
+	b.WriteString("</active-todos>")
+	return b.String()
 }
 
 func serializeConversation(messages []Message, truncateLen int) string {

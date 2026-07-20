@@ -274,3 +274,146 @@ func TestCompactionCompactAndRecover(t *testing.T) {
 		t.Errorf("Loaded summary = %q, want %q", loaded.Summary, cp.Summary)
 	}
 }
+
+func TestExtractLatestTodos(t *testing.T) {
+	messages := []Message{
+		{Role: RoleUser, Content: "plan it"},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{
+			ID:   "c1",
+			Name: "todowrite",
+			Arguments: map[string]any{
+				"todos": []any{
+					map[string]any{"content": "old", "status": "completed", "priority": "low"},
+				},
+			},
+		}}},
+		{Role: RoleTool, ToolCallID: "c1", Name: "todowrite", Content: "Todo list:..."},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{
+			ID:   "c2",
+			Name: "todowrite",
+			Arguments: map[string]any{
+				"todos": []any{
+					map[string]any{"content": "do A", "status": "in_progress", "priority": "high"},
+					map[string]any{"content": "do B", "status": "pending", "priority": "medium"},
+				},
+			},
+		}}},
+	}
+
+	got := extractLatestTodos(messages)
+	if len(got) != 2 {
+		t.Fatalf("len(todos)=%d, want 2", len(got))
+	}
+	if got[0].Content != "do A" || got[0].Status != "in_progress" || got[0].Priority != "high" {
+		t.Errorf("todo[0]=%+v", got[0])
+	}
+	if got[1].Content != "do B" || got[1].Status != "pending" {
+		t.Errorf("todo[1]=%+v", got[1])
+	}
+}
+
+func TestCompactionPreservesTodos(t *testing.T) {
+	mock := llm.NewMock().AddText(`{"summary":"kept going"}`)
+	stream := NewStreamEventManager(nil)
+	tmpDir := t.TempDir()
+	cpStore := turnlog.NewCheckpointStore(func(pid string) string { return filepath.Join(tmpDir, pid) })
+	mgr := NewCompactionManager(mock, stream, testCompactionConfig(true, 2, 2, 128000, 50), cpStore, nil)
+
+	pad := string(make([]byte, 200))
+	messages := []Message{
+		{Role: RoleSystem, Content: "You are a helpful assistant"},
+		{Role: RoleUser, Content: "Hello, this is a very long message that should exceed the token cut limit so compaction triggers"},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{
+			ID:   "todo-1",
+			Name: "todowrite",
+			Arguments: map[string]any{
+				"todos": []any{
+					map[string]any{"content": "ship feature", "status": "in_progress", "priority": "high"},
+				},
+			},
+		}}},
+		{Role: RoleTool, ToolCallID: "todo-1", Name: "todowrite", Content: "Todo list: ship feature"},
+		{Role: RoleAssistant, Content: "Working on it. " + pad},
+		{Role: RoleUser, Content: "Another long message to ensure enough tokens for the cut point " + pad},
+		{Role: RoleAssistant, Content: "Responding again with " + pad},
+	}
+
+	cutIdx := mgr.Compact(context.Background(), "session-todo", "turn-todo", messages, 3, "mock/test")
+	if cutIdx <= 0 {
+		t.Fatal("Compact should return non-zero cut index")
+	}
+	cp := mgr.Recover(context.Background(), "session-todo")
+	if cp == nil {
+		t.Fatal("expected checkpoint")
+	}
+	if len(cp.Todos) != 1 || cp.Todos[0].Content != "ship feature" {
+		t.Fatalf("Todos=%+v, want ship feature", cp.Todos)
+	}
+}
+
+func TestCompactionInheritsPrevTodos(t *testing.T) {
+	mock := llm.NewMock().
+		AddText(`{"summary":"first"}`).
+		AddText(`{"summary":"second"}`)
+	stream := NewStreamEventManager(nil)
+	tmpDir := t.TempDir()
+	cpStore := turnlog.NewCheckpointStore(func(pid string) string { return filepath.Join(tmpDir, pid) })
+	mgr := NewCompactionManager(mock, stream, testCompactionConfig(true, 2, 2, 128000, 50), cpStore, nil)
+
+	pad := string(make([]byte, 200))
+	withTodo := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleUser, Content: "long user message that should exceed cut " + pad},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{
+			ID:   "t1",
+			Name: "todowrite",
+			Arguments: map[string]any{
+				"todos": []any{
+					map[string]any{"content": "keep me", "status": "pending", "priority": "medium"},
+				},
+			},
+		}}},
+		{Role: RoleTool, ToolCallID: "t1", Name: "todowrite", Content: "ok"},
+		{Role: RoleAssistant, Content: "done " + pad},
+		{Role: RoleUser, Content: "more long content " + pad},
+		{Role: RoleAssistant, Content: "reply " + pad},
+	}
+	if cut := mgr.Compact(context.Background(), "s-inherit", "turn-1", withTodo, 2, "mock/test"); cut <= 0 {
+		t.Fatal("first compact failed")
+	}
+
+	noTodo := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleUser, Content: "continue without rewriting todos " + pad},
+		{Role: RoleAssistant, Content: "still going " + pad},
+		{Role: RoleUser, Content: "another long user turn " + pad},
+		{Role: RoleAssistant, Content: "final " + pad},
+	}
+	if cut := mgr.Compact(context.Background(), "s-inherit", "turn-2", noTodo, 4, "mock/test"); cut <= 0 {
+		t.Fatal("second compact failed")
+	}
+	cp := mgr.Recover(context.Background(), "s-inherit")
+	if cp == nil || len(cp.Todos) != 1 || cp.Todos[0].Content != "keep me" {
+		t.Fatalf("expected inherited todo, got %+v", cp)
+	}
+}
+
+func TestFormatActiveTodosAndSystemPrompt(t *testing.T) {
+	todos := []domain.CompactionTodoItem{
+		{Content: "A", Status: "in_progress", Priority: "high"},
+		{Content: "B", Status: "pending", Priority: "low"},
+	}
+	block := formatActiveTodos(todos)
+	if block == "" || !contains(block, "<active-todos>") || !contains(block, "A") {
+		t.Fatalf("formatActiveTodos=%q", block)
+	}
+
+	sys := buildSystemPrompt("persona", nil, nil, `{"summary":"x"}`, block, domain.SandboxStatus{})
+	if !contains(sys, "<compaction-checkpoint>") {
+		t.Error("expected compaction-checkpoint")
+	}
+	if !contains(sys, "<active-todos>") || !contains(sys, "[in_progress] A (high)") {
+		t.Errorf("expected active-todos in prompt, got %q", sys)
+	}
+}
+

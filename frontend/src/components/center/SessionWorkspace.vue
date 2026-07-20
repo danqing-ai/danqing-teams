@@ -641,6 +641,17 @@ const rootTurns = computed(() => {
     .sort((a, b) => (a.events[0]?.seq ?? 0) - (b.events[0]?.seq ?? 0))
 })
 
+/** Turn whose todowrite PlanPanel should show (drill-in turn, else latest/running root). */
+const planTurnId = computed(() => {
+  if (currentTurnId.value) return currentTurnId.value
+  const roots = rootTurns.value
+  if (!roots.length) return null
+  for (let i = roots.length - 1; i >= 0; i--) {
+    if (!roots[i].status) return roots[i].id
+  }
+  return roots[roots.length - 1].id
+})
+
 const visibleTurns = computed(() => {
   if (!currentTurnId.value) return rootTurns.value
   const turn = turnMap.value[currentTurnId.value]
@@ -1888,6 +1899,7 @@ function onTitleKeydown(e: KeyboardEvent) {
           ref="rightPanelRef"
           v-model:tab="rightTab"
           :stream-events="sessions.streamEvents"
+          :plan-turn-id="planTurnId"
           :project-id="sessions.selectedProjectId"
           :changes-count="workspaceUi.changesCount"
           :experts-running="workspaceUi.expertsRunning"

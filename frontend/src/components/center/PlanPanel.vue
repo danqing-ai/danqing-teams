@@ -4,6 +4,7 @@ import type { StreamEvent } from '@/types/mission'
 
 const props = defineProps<{
   streamEvents: StreamEvent[]
+  planTurnId?: string | null
 }>()
 
 interface TodoItem {
@@ -13,8 +14,10 @@ interface TodoItem {
 }
 
 const todos = computed<TodoItem[]>(() => {
+  const turnId = props.planTurnId
   for (let i = props.streamEvents.length - 1; i >= 0; i--) {
     const ev = props.streamEvents[i]
+    if (turnId && ev.turnId !== turnId) continue
     if (ev.type !== 'tool.running') continue
     const p = ev.payload as Record<string, unknown> | null
     if (p?.name !== 'todowrite') continue
