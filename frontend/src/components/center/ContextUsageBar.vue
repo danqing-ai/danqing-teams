@@ -33,6 +33,22 @@ const hasData = computed(() => usedTokens.value > 0 || compactionHistory.value.l
     class="context-usage"
     :class="[`is-${usageLevel}`, { 'is-empty': !hasData }]"
   >
+    <div v-if="showHistory && compactionHistory.length" class="context-usage__history">
+      <div
+        v-for="c in compactionHistory.slice().reverse()"
+        :key="c.seq"
+        class="context-usage__history-row"
+      >
+        {{ t('sessions.compactionRow', {
+          turns: c.turnsCompacted,
+          before: formatTokenCount(c.tokensBefore),
+          after: formatTokenCount(c.tokensAfter),
+        }) }}
+      </div>
+      <div class="context-usage__history-total">
+        {{ t('sessions.sessionTokensTotal', { n: formatTokenCount(sessionTotalTokens) }) }}
+      </div>
+    </div>
     <div class="context-usage__main" :title="t('sessions.contextUsageHint')">
       <svg class="context-usage__icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
@@ -54,29 +70,13 @@ const hasData = computed(() => usedTokens.value > 0 || compactionHistory.value.l
         {{ t('sessions.compactionCount', { n: compactionHistory.length }) }}
       </button>
     </div>
-    <div v-if="showHistory && compactionHistory.length" class="context-usage__history">
-      <div
-        v-for="c in compactionHistory.slice().reverse()"
-        :key="c.seq"
-        class="context-usage__history-row"
-      >
-        {{ t('sessions.compactionRow', {
-          turns: c.turnsCompacted,
-          before: formatTokenCount(c.tokensBefore),
-          after: formatTokenCount(c.tokensAfter),
-        }) }}
-      </div>
-      <div class="context-usage__history-total">
-        {{ t('sessions.sessionTokensTotal', { n: formatTokenCount(sessionTotalTokens) }) }}
-      </div>
-    </div>
   </div>
 </template>
 
 <style scoped>
 .context-usage {
   flex-shrink: 0;
-  padding: 0 16px 8px;
+  padding: 0 4px 2px;
 }
 
 .context-usage__main {
@@ -152,10 +152,12 @@ const hasData = computed(() => usedTokens.value > 0 || compactionHistory.value.l
 }
 
 .context-usage__history {
-  margin-top: 6px;
+  margin-bottom: 6px;
   padding: 8px 10px;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
+  background: color-mix(in srgb, var(--dq-glass-popover-bg, var(--dq-bg-elevated)) 92%, transparent);
+  border: 1px solid var(--dq-separator-light);
+  backdrop-filter: blur(8px);
   font-size: var(--dq-font-size-caption);
   color: var(--dq-label-secondary);
   line-height: 1.5;

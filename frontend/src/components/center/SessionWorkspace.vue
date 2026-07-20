@@ -1567,8 +1567,6 @@ function onTitleKeydown(e: KeyboardEvent) {
       </div>
     </header>
 
-    <ContextUsageBar />
-
     <div ref="bodyRef" class="session-workspace__body" :style="{ gridTemplateColumns: `${splitPercent}% 8px 1fr` }">
       <div class="session-workspace__stream">
       <div
@@ -1951,6 +1949,7 @@ function onTitleKeydown(e: KeyboardEvent) {
     </div>
 
     <div ref="composerWrapRef" class="session-workspace__composer" :style="composerStyle">
+      <ContextUsageBar />
       <FloatingComposer ref="composerRef" @jump-pending="jumpToFirstPendingApproval" />
     </div>
   </div>
@@ -3605,6 +3604,9 @@ function onTitleKeydown(e: KeyboardEvent) {
   position: fixed;
   bottom: 0;
   z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   padding: 24px 0 18px;
   pointer-events: none;
 }
