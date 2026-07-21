@@ -453,12 +453,6 @@ llm:
       available_efforts: ["off", "high"]
 
     # Moonshot Open Platform aliases (api.moonshot.cn / api.moonshot.ai)
-    - model: kimi-k3
-      context_window: 1000000
-      max_output: 128000
-      temperature: 1.0
-      available_efforts: ["off", "max"]
-
     - model: kimi-k2.7-code
       context_window: 256000
       max_output: 32768

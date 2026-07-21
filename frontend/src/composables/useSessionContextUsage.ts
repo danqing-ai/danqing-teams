@@ -74,9 +74,14 @@ export function useSessionContextUsage(modelId?: Ref<string> | (() => string)) {
 
   const contextWindow = computed(() => {
     const mid = resolveModelId()
+    // selectedModelId is "provider/model" or "provider/model/effort";
+    // model-config entries are usually bare names like "deepseek-v4-pro".
     const parts = mid.split('/')
-    const base = parts.length >= 2 ? `${parts[0]}/${parts[1]}` : mid
-    const cfg = modelConfig.models.find((m) => m.model === base || m.model === mid)
+    const providerModel = parts.length >= 2 ? `${parts[0]}/${parts[1]}` : mid
+    const bareModel = parts.length >= 2 ? parts[1] : mid
+    const cfg = modelConfig.models.find(
+      (m) => m.model === mid || m.model === providerModel || m.model === bareModel,
+    )
     return cfg?.context_window && cfg.context_window > 0 ? cfg.context_window : 128000
   })
 
