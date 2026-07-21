@@ -17,10 +17,13 @@ func (m *TurnLogManager) Create(turnID, sessionID, projectID, agentID, goal stri
 	return m.store.Create(turnID, sessionID, projectID, agentID, goal)
 }
 
-// Append writes a tool_call or tool_result entry to the turn log.
-// Only these two types are consumed by LoadForRecovery for LLM message
-// reconstruction. Do NOT write diagnostic entries (llm_error, step events,
-// permission decisions) — those belong in Stream Events.
+func (m *TurnLogManager) CreateNested(turnID, sessionID, projectID, agentID, goal string) error {
+	return m.store.CreateNested(turnID, sessionID, projectID, agentID, goal)
+}
+
+// Append writes a turn-log entry used for LLM message reconstruction
+// (user, assistant, tool_result, legacy tool_call). Do NOT write diagnostic
+// entries — those belong in Stream Events.
 func (m *TurnLogManager) Append(turnID, typ string, data map[string]any) {
 	m.store.Append(turnID, typ, data)
 }
@@ -37,8 +40,24 @@ func (m *TurnLogManager) ListTurns(sessionID string) []domain.TurnLog {
 	return m.store.ListTurns(sessionID)
 }
 
+func (m *TurnLogManager) ListTurnIDs(sessionID string) []string {
+	return m.store.ListTurnIDs(sessionID)
+}
+
 func (m *TurnLogManager) LoadForRecovery(turnID string) (goal string, entries []map[string]any) {
 	return m.store.LoadForRecovery(turnID)
+}
+
+func (m *TurnLogManager) LoadSessionMessages(sessionID, retainFromTurnID string) []port.ChatMessage {
+	return m.store.LoadSessionMessages(sessionID, retainFromTurnID)
+}
+
+func (m *TurnLogManager) LoadTurnMessages(turnID string) []port.ChatMessage {
+	return m.store.LoadTurnMessages(turnID)
+}
+
+func (m *TurnLogManager) IsNestedToolRun(turnID string) bool {
+	return m.store.IsNestedToolRun(turnID)
 }
 
 func (m *TurnLogManager) LoadRawLog(turnID string) ([]byte, error) {

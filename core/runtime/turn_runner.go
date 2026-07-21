@@ -265,6 +265,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 
 		if isLastStep {
 			messages = append(messages, Message{Role: RoleUser, Content: maxStepsPrompt})
+			p.logUserMessage(maxStepsPrompt)
 		}
 
 		p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepStarted, domain.StepPayload{Step: step})
@@ -281,7 +282,9 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			// Don't terminate — feed the error back to LLM as user message.
 			// doom loop / max steps will catch repeated failures.
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventError, domain.ErrorPayload{Message: err.Error(), Kind: "llm"})
-			messages = append(messages, Message{Role: RoleUser, Content: "[System: LLM call failed — " + err.Error() + ". Please retry or respond in text.]"})
+			retryMsg := "[System: LLM call failed — " + err.Error() + ". Please retry or respond in text.]"
+			messages = append(messages, Message{Role: RoleUser, Content: retryMsg})
+			p.logUserMessage(retryMsg)
 			continue
 		}
 		if resp.Usage != nil {
@@ -304,11 +307,19 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			if tctx.OnReport != nil {
 				tctx.OnReport(finalReport)
 			}
+			if resp.ReasoningContent != "" {
+				p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventAgentThinking, domain.AgentThinkingPayload{Text: resp.ReasoningContent})
+			}
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventAgentMessage, domain.AgentMessagePayload{Text: resp.Content})
 			messages = append(messages, Message{Role: RoleAssistant, Content: resp.Content})
+			p.logAssistantMessage(Message{Role: RoleAssistant, Content: resp.Content})
 			reportCaptured = true
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepEnded, domain.StepPayload{Step: step})
 			break
+		}
+
+		if resp.ReasoningContent != "" {
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventAgentThinking, domain.AgentThinkingPayload{Text: resp.ReasoningContent})
 		}
 
 		processedCalls := make([]ToolCall, 0, len(resp.ToolCalls))
@@ -320,7 +331,9 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		for i, tc := range resp.ToolCalls {
 			assistantToolCalls[i] = ToolCall{ID: tc.ID, Name: tc.Name, Arguments: tc.Arguments}
 		}
-		messages = append(messages, Message{Role: RoleAssistant, ToolCalls: assistantToolCalls})
+		assistantMsg := Message{Role: RoleAssistant, ToolCalls: assistantToolCalls}
+		messages = append(messages, assistantMsg)
+		p.logAssistantMessage(assistantMsg)
 
 		for _, call := range resp.ToolCalls {
 			select {
@@ -347,12 +360,14 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 				})
 				// Synthetic tool result to maintain assistant(tool_calls) ↔ tool pairing.
 				messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: "doom loop detected"})
+				p.logToolResult(call.ID, call.Name, "doom loop detected")
 				reportCaptured = true
 				break
 			}
 
 			if !ok {
 				messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: "unknown tool: " + call.Name + toolErrorHint})
+				p.logToolResult(call.ID, call.Name, "unknown tool: "+call.Name+toolErrorHint)
 				processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
 				continue
 			}
@@ -388,6 +403,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 				CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: "permission denied",
 			})
 			messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: "permission denied" + toolErrorHint})
+			p.logToolResult(call.ID, call.Name, "permission denied"+toolErrorHint)
 			processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
 			continue
 			}
@@ -412,9 +428,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 							CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: "cancelled",
 						})
 						messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: "cancelled"})
-						if p.Log != nil {
-							p.Log("tool_result", map[string]any{"call_id": call.ID, "name": call.Name, "output": "cancelled"})
-						}
+						p.logToolResult(call.ID, call.Name, "cancelled")
 						messages = p.closeUnfinishedToolCalls(tctx, messages, assistantToolCalls)
 						return domain.Report{}, messages, ctx.Err()
 					}
@@ -423,6 +437,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 						CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: "approval wait failed",
 					})
 					messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: msg})
+					p.logToolResult(call.ID, call.Name, msg)
 					processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
 					continue
 				}
@@ -434,6 +449,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 						CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: "approval rejected",
 					})
 					messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: msg})
+					p.logToolResult(call.ID, call.Name, msg)
 					processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
 					continue
 				}
@@ -447,10 +463,6 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolRunning, domain.ToolPart{
 				CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolRunning, Input: call.Arguments,
 			})
-
-			if p.Log != nil {
-				p.Log("tool_call", map[string]any{"call_id": call.ID, "name": call.Name, "input": call.Arguments})
-			}
 
 			args := cloneMap(call.Arguments)
 			if args == nil {
@@ -482,10 +494,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			})
 			messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: errContent})
 			processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
-			// Pair tool_call in turnlog so LoadForRecovery can keep prior pairs.
-			if p.Log != nil {
-				p.Log("tool_result", map[string]any{"call_id": call.ID, "name": call.Name, "output": errContent})
-			}
+			p.logToolResult(call.ID, call.Name, errContent)
 			if errors.Is(err, context.Canceled) || ctx.Err() != nil {
 				messages = p.closeUnfinishedToolCalls(tctx, messages, assistantToolCalls)
 				return domain.Report{}, messages, ctx.Err()
@@ -498,10 +507,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			})
 			messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: result.Content})
 			processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
-
-			if p.Log != nil {
-				p.Log("tool_result", map[string]any{"call_id": call.ID, "name": call.Name, "output": result.Content})
-			}
+			p.logToolResult(call.ID, call.Name, result.Content)
 		}
 		if reportCaptured {
 			break
@@ -553,11 +559,45 @@ func (p *TurnRunner) closeUnfinishedToolCalls(tctx TurnContext, messages []Messa
 			CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: "cancelled",
 		})
 		messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: "cancelled"})
-		if p.Log != nil {
-			p.Log("tool_result", map[string]any{"call_id": call.ID, "name": call.Name, "output": "cancelled"})
-		}
+		p.logToolResult(call.ID, call.Name, "cancelled")
 	}
 	return messages
+}
+
+func (p *TurnRunner) logUserMessage(content string) {
+	if p.Log == nil {
+		return
+	}
+	p.Log("user", map[string]any{"content": content})
+}
+
+func (p *TurnRunner) logAssistantMessage(msg Message) {
+	if p.Log == nil {
+		return
+	}
+	data := map[string]any{}
+	if msg.Content != "" {
+		data["content"] = msg.Content
+	}
+	if len(msg.ToolCalls) > 0 {
+		tcs := make([]map[string]any, 0, len(msg.ToolCalls))
+		for _, tc := range msg.ToolCalls {
+			tcs = append(tcs, map[string]any{
+				"id":        tc.ID,
+				"name":      tc.Name,
+				"arguments": tc.Arguments,
+			})
+		}
+		data["tool_calls"] = tcs
+	}
+	p.Log("assistant", data)
+}
+
+func (p *TurnRunner) logToolResult(callID, name, output string) {
+	if p.Log == nil {
+		return
+	}
+	p.Log("tool_result", map[string]any{"call_id": callID, "name": name, "output": output})
 }
 
 func (p *TurnRunner) trackDoom(turnID, tool, describe string, threshold int) int {

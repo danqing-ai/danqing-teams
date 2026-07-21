@@ -217,6 +217,124 @@ func TestTurnRunnerApprovalRejectContinues(t *testing.T) {
 	validateToolMessagePairs(t, msgs, "approval soft reject")
 }
 
+func TestTurnRunnerPublishesThinkingNotInHistory(t *testing.T) {
+	const thinking = "I should reason carefully about the answer"
+	const answer = "final answer text"
+
+	mockLLM := llm.NewMock().
+		AddToolCallWithReasoning("todowrite", map[string]any{"todos": []any{}}, "planning tool use").
+		AddTextWithReasoning(answer, thinking)
+
+	var published []struct {
+		typ     string
+		payload any
+	}
+	stream := &captureStream{onPublish: func(typ string, payload any) {
+		published = append(published, struct {
+			typ     string
+			payload any
+		}{typ, payload})
+	}}
+	perm := permission.NewGate(nil)
+	reg := tool.NewRegistry()
+	reg.Register(&mockToolHandler{name: "todowrite", risk: domain.RiskLow})
+
+	configStore := &testConfigStore{
+		cfg: &domain.ConfigFile{
+			Runtime: domain.ConfigRuntimeSection{
+				Turn: domain.ConfigTurnSection{
+					DoomLoopThreshold: 5,
+					MaxStepsDefault:   20,
+				},
+			},
+		},
+	}
+
+	var logTypes []string
+	tr := NewTurnRunner(mockLLM, stream, perm, reg, configStore)
+	tr.Log = func(typ string, _ map[string]any) {
+		logTypes = append(logTypes, typ)
+	}
+
+	ctx := context.Background()
+	tctx := TurnContext{
+		SessionID: "test-session",
+		TurnID:    "turn-thinking-1",
+		Agent:     domain.Agent{ID: "test-agent", Steps: 20},
+		Model:     "test-model",
+		MaxSteps:  20,
+		WorkDir:   "/tmp",
+		Messages: []Message{
+			{Role: RoleSystem, Content: "You are a test assistant"},
+			{Role: RoleUser, Content: "think then answer"},
+		},
+	}
+
+	rep, msgs, err := tr.Run(ctx, tctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rep.Status != domain.ReportDone {
+		t.Fatalf("expected ReportDone, got %v: %s", rep.Status, rep.Summary)
+	}
+
+	var thinkingTexts []string
+	var messageTexts []string
+	for _, ev := range published {
+		switch ev.typ {
+		case domain.EventAgentThinking:
+			p, ok := ev.payload.(domain.AgentThinkingPayload)
+			if !ok {
+				t.Fatalf("agent.thinking payload type %T", ev.payload)
+			}
+			thinkingTexts = append(thinkingTexts, p.Text)
+		case domain.EventAgentMessage:
+			p, ok := ev.payload.(domain.AgentMessagePayload)
+			if !ok {
+				t.Fatalf("agent.message payload type %T", ev.payload)
+			}
+			messageTexts = append(messageTexts, p.Text)
+		}
+	}
+	if len(thinkingTexts) != 2 {
+		t.Fatalf("expected 2 agent.thinking events, got %d: %v", len(thinkingTexts), thinkingTexts)
+	}
+	if thinkingTexts[0] != "planning tool use" {
+		t.Errorf("first thinking event = %q", thinkingTexts[0])
+	}
+	if thinkingTexts[1] != thinking {
+		t.Errorf("second thinking event = %q", thinkingTexts[1])
+	}
+	if len(messageTexts) != 1 || messageTexts[0] != answer {
+		t.Fatalf("expected one agent.message with answer, got %v", messageTexts)
+	}
+
+	for _, m := range msgs {
+		if strings.Contains(m.Content, thinking) || strings.Contains(m.Content, "planning tool use") {
+			t.Errorf("history message unexpectedly contains thinking content: role=%s content=%q", m.Role, m.Content)
+		}
+	}
+
+	for _, typ := range logTypes {
+		switch typ {
+		case "assistant", "tool_result", "user":
+			// expected LLM-reconstructable types
+		default:
+			t.Errorf("turn log got unexpected type %q", typ)
+		}
+	}
+
+	for _, req := range mockLLM.Requests {
+		for _, m := range req.Messages {
+			if strings.Contains(m.Content, thinking) || strings.Contains(m.Content, "planning tool use") {
+				t.Errorf("LLM request unexpectedly includes thinking content: role=%s content=%q", m.Role, m.Content)
+			}
+		}
+	}
+
+	validateToolMessagePairs(t, msgs, "thinking")
+}
+
 type mockApprovalGate struct {
 	result chan ApprovalOutcome
 }

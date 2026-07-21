@@ -112,28 +112,40 @@ type MCPServerRepo interface {
 }
 
 // TurnLogStore persists turn-level JSONL entries used exclusively for LLM
-// message reconstruction (turn recovery) and offline debugging (zip download).
+// message reconstruction (session history + turn recovery) and offline
+// debugging (zip download).
 //
 // WHITELIST of allowed entry types:
 //   - "start"        — written by Create (skipped on reopen/resume of existing file)
-//   - "tool_call"    — written by Append before tool Execute
-//   - "tool_result"  — written by Append after tool Execute (success or error)
+//   - "user"         — user / synthetic user messages for LLM replay
+//   - "assistant"    — assistant text and/or batched tool_calls
+//   - "tool_call"    — legacy single tool call (still accepted on read)
+//   - "tool_result"  — tool role result after Execute (success, error, or cancel)
 //   - "end"          — written by EndTurn
 //
 // DO NOT write diagnostic, audit, or telemetry entries here (e.g. llm_error,
 // step events, permission decisions). Those belong in Stream Events
 // (port.EventStream) which serve the UI/SSE timeline.
 //
-// LoadForRecovery enforces this whitelist: only tool_call / tool_result
-// entries participate in message reconstruction; all others are skipped.
-// An unpaired trailing tool_call is dropped so earlier complete pairs survive.
+// LoadSessionMessages rebuilds full ChatMessages from the whitelist above
+// (user / assistant / tool_call / tool_result). Incomplete turns drop an
+// unpaired trailing assistant(tool_calls)/tool_call. Compaction uses
+// retainFromTurnID to bound the replay window.
 type TurnLogStore interface {
 	Create(turnID, sessionID, projectID, agentID, goal string) error
+	// CreateNested writes a nested tool-run log under tool_runs/ (zip/debug only).
+	CreateNested(turnID, sessionID, projectID, agentID, goal string) error
 	Append(turnID, typ string, data map[string]any)
 	EndTurn(turnID string, status domain.TurnStatus)
 	LastStatus(sessionID string) domain.TurnStatus
 	ListTurns(sessionID string) []domain.TurnLog
+	ListTurnIDs(sessionID string) []string
 	LoadForRecovery(turnID string) (goal string, entries []map[string]any)
+	// LoadSessionMessages rebuilds full LLM chat history for a session.
+	// retainFromTurnID: if non-empty, only include that turn and later ones.
+	LoadSessionMessages(sessionID, retainFromTurnID string) []ChatMessage
+	LoadTurnMessages(turnID string) []ChatMessage
+	IsNestedToolRun(turnID string) bool
 	LoadRawLog(turnID string) ([]byte, error)
 	LoadTurnLogZip(turnID string, events []domain.StreamEvent) ([]byte, error)
 }

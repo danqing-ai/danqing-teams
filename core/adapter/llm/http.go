@@ -198,7 +198,11 @@ func (p *HTTPProvider) Chat(ctx context.Context, req port.LLMChatRequest, effort
 				Arguments: args,
 			})
 		}
-		return port.LLMChatResponse{ToolCalls: tcs, Usage: usage}, nil
+		return port.LLMChatResponse{
+			ToolCalls:        tcs,
+			ReasoningContent: choice.ReasoningContent,
+			Usage:            usage,
+		}, nil
 	}
 
 	return port.LLMChatResponse{

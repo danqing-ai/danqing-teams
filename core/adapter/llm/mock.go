@@ -11,9 +11,10 @@ import (
 var _ port.LLMProvider = (*MockProvider)(nil)
 
 type callStep struct {
-	ToolCall string
-	Args     map[string]any
-	Text     string
+	ToolCall  string
+	Args      map[string]any
+	Text      string
+	Reasoning string
 }
 
 type MockProvider struct {
@@ -32,10 +33,24 @@ func (p *MockProvider) AddToolCall(tool string, args map[string]any) *MockProvid
 	return p
 }
 
+func (p *MockProvider) AddToolCallWithReasoning(tool string, args map[string]any, reasoning string) *MockProvider {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.steps = append(p.steps, callStep{ToolCall: tool, Args: args, Reasoning: reasoning})
+	return p
+}
+
 func (p *MockProvider) AddText(content string) *MockProvider {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.steps = append(p.steps, callStep{Text: content})
+	return p
+}
+
+func (p *MockProvider) AddTextWithReasoning(content, reasoning string) *MockProvider {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.steps = append(p.steps, callStep{Text: content, Reasoning: reasoning})
 	return p
 }
 
@@ -61,9 +76,10 @@ func (p *MockProvider) Chat(_ context.Context, req port.LLMChatRequest) (port.LL
 	p.cursor++
 
 	if step.Text != "" {
-		return port.LLMChatResponse{Content: step.Text, Done: true}, nil
+		return port.LLMChatResponse{Content: step.Text, ReasoningContent: step.Reasoning, Done: true}, nil
 	}
 	return port.LLMChatResponse{
+		ReasoningContent: step.Reasoning,
 		ToolCalls: []port.ChatToolCall{{
 			ID: step.ToolCall + "-id", Name: step.ToolCall, Arguments: step.Args,
 		}},

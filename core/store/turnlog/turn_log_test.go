@@ -260,3 +260,125 @@ func TestLoadForRecoveryRehydratesFromDisk(t *testing.T) {
 		t.Fatalf("after disk reopen want 1 start, got %d", starts)
 	}
 }
+
+func TestLoadSessionMessagesRebuildsUserAssistantTools(t *testing.T) {
+	root := t.TempDir()
+	s := NewTurnLogStore(testProjector(root))
+
+	if err := s.Create("turn-a", "sess-hist", "proj-a", "agent-1", "hello"); err != nil {
+		t.Fatal(err)
+	}
+	s.Append("turn-a", "user", map[string]any{"content": "hello"})
+	s.Append("turn-a", "assistant", map[string]any{"content": "hi there"})
+	s.EndTurn("turn-a", domain.TurnCompleted)
+
+	if err := s.Create("turn-b", "sess-hist", "proj-a", "agent-1", "weather"); err != nil {
+		t.Fatal(err)
+	}
+	s.Append("turn-b", "user", map[string]any{"content": "weather"})
+	s.Append("turn-b", "assistant", map[string]any{
+		"tool_calls": []any{
+			map[string]any{"id": "c1", "name": "web_fetch", "arguments": map[string]any{"url": "https://x"}},
+		},
+	})
+	s.Append("turn-b", "tool_result", map[string]any{"call_id": "c1", "name": "web_fetch", "output": "29C"})
+	s.Append("turn-b", "assistant", map[string]any{"content": "It is 29C"})
+	s.EndTurn("turn-b", domain.TurnCompleted)
+
+	msgs := s.LoadSessionMessages("sess-hist", "")
+	if len(msgs) != 6 {
+		t.Fatalf("want 6 messages, got %d: %+v", len(msgs), msgs)
+	}
+	if msgs[0].Role != "user" || msgs[0].Content != "hello" {
+		t.Fatalf("msg0: %+v", msgs[0])
+	}
+	if msgs[1].Role != "assistant" || msgs[1].Content != "hi there" {
+		t.Fatalf("msg1: %+v", msgs[1])
+	}
+	if msgs[5].Role != "assistant" || msgs[5].Content != "It is 29C" {
+		t.Fatalf("msg5: %+v", msgs[5])
+	}
+}
+
+func TestLoadSessionMessagesIncludesFinalAssistant(t *testing.T) {
+	root := t.TempDir()
+	s := NewTurnLogStore(testProjector(root))
+	_ = s.Create("turn-1", "sess-2", "proj-a", "a", "q")
+	s.Append("turn-1", "user", map[string]any{"content": "q"})
+	s.Append("turn-1", "assistant", map[string]any{
+		"tool_calls": []any{map[string]any{"id": "c1", "name": "read_file", "arguments": map[string]any{"path": "x"}}},
+	})
+	s.Append("turn-1", "tool_result", map[string]any{"call_id": "c1", "name": "read_file", "output": "data"})
+	s.Append("turn-1", "assistant", map[string]any{"content": "done"})
+	s.EndTurn("turn-1", domain.TurnCompleted)
+
+	msgs := s.LoadSessionMessages("sess-2", "")
+	if len(msgs) != 4 {
+		t.Fatalf("want 4 msgs, got %d %+v", len(msgs), msgs)
+	}
+	if msgs[3].Role != "assistant" || msgs[3].Content != "done" {
+		t.Fatalf("final assistant: %+v", msgs[3])
+	}
+}
+
+func TestLoadSessionMessagesSkipsNestedToolRunAndHonorsRetain(t *testing.T) {
+	root := t.TempDir()
+	s := NewTurnLogStore(testProjector(root))
+
+	_ = s.Create("turn-1", "sess-3", "proj-a", "a", "one")
+	s.Append("turn-1", "user", map[string]any{"content": "one"})
+	s.Append("turn-1", "assistant", map[string]any{"content": "a1"})
+	s.EndTurn("turn-1", domain.TurnCompleted)
+
+	_ = s.CreateNested("turn-child", "sess-3", "proj-a", "worker", "sub")
+	s.Append("turn-child", "user", map[string]any{"content": "sub"})
+	s.Append("turn-child", "assistant", map[string]any{"content": "child-secret"})
+	s.EndTurn("turn-child", domain.TurnCompleted)
+	if !s.IsNestedToolRun("turn-child") {
+		t.Fatal("expected nested tool-run log under tool_runs/")
+	}
+
+	_ = s.Create("turn-2", "sess-3", "proj-a", "a", "two")
+	s.Append("turn-2", "user", map[string]any{"content": "two"})
+	s.Append("turn-2", "assistant", map[string]any{"content": "a2"})
+	s.EndTurn("turn-2", domain.TurnCompleted)
+
+	all := s.LoadSessionMessages("sess-3", "")
+	for _, m := range all {
+		if m.Content == "child-secret" || m.Content == "sub" {
+			t.Fatalf("nested tool-run leaked into session history: %+v", all)
+		}
+	}
+	if len(all) != 4 {
+		t.Fatalf("want 4 parent msgs, got %d %+v", len(all), all)
+	}
+
+	retained := s.LoadSessionMessages("sess-3", "turn-2")
+	if len(retained) != 2 {
+		t.Fatalf("retain from turn-2: want 2 msgs, got %d %+v", len(retained), retained)
+	}
+	if retained[0].Content != "two" || retained[1].Content != "a2" {
+		t.Fatalf("retained: %+v", retained)
+	}
+}
+
+func TestLoadSessionMessagesLegacyToolCall(t *testing.T) {
+	root := t.TempDir()
+	s := NewTurnLogStore(testProjector(root))
+	_ = s.Create("turn-legacy", "sess-leg", "proj-a", "a", "g")
+	s.Append("turn-legacy", "user", map[string]any{"content": "g"})
+	writeToolPair(s, "turn-legacy", "c1", "read_file")
+	s.Append("turn-legacy", "assistant", map[string]any{"content": "ok"})
+	s.EndTurn("turn-legacy", domain.TurnCompleted)
+
+	msgs := s.LoadSessionMessages("sess-leg", "")
+	if len(msgs) != 4 {
+		t.Fatalf("want 4, got %d %+v", len(msgs), msgs)
+	}
+	if msgs[1].Role != "assistant" || len(msgs[1].ToolCalls) != 1 {
+		t.Fatalf("legacy tool_call -> assistant: %+v", msgs[1])
+	}
+	if msgs[2].Role != "tool" || msgs[2].Content != "ok" {
+		t.Fatalf("tool result: %+v", msgs[2])
+	}
+}

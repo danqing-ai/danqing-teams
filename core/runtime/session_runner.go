@@ -311,10 +311,8 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) {
 		}()
 
 		goal := ""
-		var replayEntries []map[string]any
 		if g, entries := e.turnLog.LoadForRecovery(turnID); g != "" || len(entries) > 0 {
 			goal = g
-			replayEntries = entries
 		}
 		if goal == "" {
 			if t, err := e.turns.Get(ctx, turnID); err == nil && t.Goal != "" {
@@ -338,7 +336,19 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) {
 			e.turnLog.Append(turnID, typ, data)
 		}
 
-		sys := buildSystemPrompt(agentPtr.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agentPtr), "", "", e.sandboxStatus())
+		checkpoint := e.compactionMgr.Recover(turnCtx, sessionID)
+		checkpointText := ""
+		activeTodos := ""
+		retainFrom := ""
+		if checkpoint != nil {
+			if checkpoint.Summary != "" {
+				checkpointText = checkpoint.Summary
+			}
+			activeTodos = formatActiveTodos(checkpoint.Todos)
+			retainFrom = checkpoint.RetainFromTurnID
+		}
+
+		sys := buildSystemPrompt(agentPtr.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agentPtr), checkpointText, activeTodos, e.sandboxStatus())
 		messages := []Message{{Role: RoleSystem, Content: sys}}
 		if hits := e.knowledge.Search(agentPtr.KnowledgeIDs, goal, cfg.knowledgeSearchTopK); len(hits) > 0 {
 			content := ""
@@ -348,58 +358,34 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) {
 			messages = append(messages, Message{Role: RoleSystem, Content: content})
 		}
 
-		e.mu.Lock()
-		prevMsgs := e.turnMessages[sessionID]
-		e.mu.Unlock()
-		messages = append(messages, prevMsgs...)
-
-		messages = append(messages, Message{Role: RoleUser, Content: goal})
-		userIdx := len(messages) - 1
-
-		for _, entry := range replayEntries {
-			typ, _ := entry["type"].(string)
-			switch typ {
-			case "tool_call":
-				data, _ := entry["data"].(map[string]any)
-				name, _ := data["name"].(string)
-				input, _ := data["input"].(map[string]any)
-				callID, _ := data["call_id"].(string)
-				if callID == "" {
-					callID = turnID + "-" + name // fallback for old logs
-				}
-				messages = append(messages, Message{
-					Role:      RoleAssistant,
-					ToolCalls: []ToolCall{{ID: callID, Name: name, Arguments: input}},
-				})
-			case "tool_result":
-				data, _ := entry["data"].(map[string]any)
-				name, _ := data["name"].(string)
-				output, _ := data["output"].(string)
-				callID, _ := data["call_id"].(string)
-				if callID == "" {
-					callID = turnID + "-" + name // fallback for old logs
-				}
-				messages = append(messages, Message{
-					Role: RoleTool, ToolCallID: callID, Name: name, Content: output,
-				})
-			}
+		// Full session history from disk, including this turn's complete tool prefix.
+		history := chatMessagesToRuntime(e.turnLog.LoadSessionMessages(sessionID, retainFrom))
+		messages = append(messages, history...)
+		if !historyHasUserGoal(history, goal) {
+			e.turnLog.Append(turnID, "user", map[string]any{"content": goal})
+			messages = append(messages, Message{Role: RoleUser, Content: goal})
 		}
 
 		workDir := e.resolveWorkDir(turnCtx, s.ProjectID)
 		e.turnRunner.Registry = reg
-		rep, turnMsgs, err := e.turnRunner.Run(turnCtx, TurnContext{
+		rep, _, err := e.turnRunner.Run(turnCtx, TurnContext{
 			SessionID: sessionID, TurnID: turnID, Agent: agentPtr,
 			Model: s.ModelID, MaxSteps: agentPtr.Steps, WorkDir: workDir, ProjectID: s.ProjectID, Messages: messages,
 		})
 
-		e.mu.Lock()
-		e.commitTurnMessages(sessionID, prevMsgs, turnMsgs, userIdx, err)
-		allMsgs := e.turnMessages[sessionID]
-		e.mu.Unlock()
-
+		e.clearSessionTurnMessages(sessionID)
 		e.turnLog.EndTurn(turnID, turnStatus(err, rep))
-		e.afterTurn(sessionID, turnID, agentPtr.ID, rep, err, allMsgs, s.ModelID)
+		e.afterTurn(sessionID, turnID, agentPtr.ID, rep, err, nil, s.ModelID)
 	}()
+}
+
+func historyHasUserGoal(history []Message, goal string) bool {
+	for _, m := range history {
+		if m.Role == RoleUser && m.Content == goal {
+			return true
+		}
+	}
+	return false
 }
 
 func (e *Engine) RecoverRunning(ctx context.Context) {
@@ -438,6 +424,18 @@ func (e *Engine) RecoverRunning(ctx context.Context) {
 	}
 	for _, t := range runningTurns {
 		e.expireOrphanAskUsers(t.SessionID, t.ID)
+
+		// Nested tool-run turns (e.g. mid-flight delegate_agent) are not
+		// parent session turns — fail them like any unfinished tool.
+		if e.turnLog.IsNestedToolRun(t.ID) {
+			log.Printf("[RecoverRunning] turn %s is nested tool run, marking as failed", t.ID)
+			if err := e.turns.UpdateStatus(ctx, t.ID, domain.TurnFailed); err != nil {
+				log.Printf("[RecoverRunning] update turn %s status: %v", t.ID, err)
+			}
+			_ = e.turnLog.CreateNested(t.ID, t.SessionID, "", t.AgentID, t.Goal)
+			e.turnLog.EndTurn(t.ID, domain.TurnFailed)
+			continue
+		}
 
 		// Recoverable only when JSONL exists (start goal and/or complete tool pairs).
 		// DB Goal alone is not enough — injected zombies without work must stay failed.
@@ -663,11 +661,13 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 	checkpoint := e.compactionMgr.Recover(ctx, sessionID)
 	checkpointText := ""
 	activeTodos := ""
+	retainFrom := ""
 	if checkpoint != nil {
 		if checkpoint.Summary != "" {
 			checkpointText = checkpoint.Summary
 		}
 		activeTodos = formatActiveTodos(checkpoint.Todos)
+		retainFrom = checkpoint.RetainFromTurnID
 	}
 
 	sys := buildSystemPrompt(agent.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agent), checkpointText, activeTodos, e.sandboxStatus())
@@ -683,12 +683,12 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 		messages = append(messages, Message{Role: RoleSystem, Content: content})
 	}
 
-	e.mu.Lock()
-	prevMsgs := e.turnMessages[sessionID]
-	e.mu.Unlock()
-	messages = append(messages, prevMsgs...)
+	// Cross-turn history: full LLM messages from turn log (compaction bounds the window).
+	messages = append(messages, chatMessagesToRuntime(e.turnLog.LoadSessionMessages(sessionID, retainFrom))...)
 
-	messages = append(messages, userMessageFromAttachments(goal, attachments))
+	userMsg := userMessageFromAttachments(goal, attachments)
+	e.turnLog.Append(turnID, "user", userMessageLogData(userMsg))
+	messages = append(messages, userMsg)
 	userIdx := len(messages) - 1
 
 	workDir := e.resolveWorkDir(ctx, projectID)
@@ -704,19 +704,59 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 		Messages:  messages,
 	})
 
-	e.mu.Lock()
-	e.commitTurnMessages(sessionID, prevMsgs, turnMsgs, userIdx, err)
-	allMsgs := e.turnMessages[sessionID]
-	e.mu.Unlock()
+	// History lives on disk; drop any in-memory session buffer after the turn.
+	e.clearSessionTurnMessages(sessionID)
+	_ = turnMsgs
+	_ = userIdx
 
-	e.afterTurn(sessionID, turnID, agent.ID, rep, err, allMsgs, modelID)
+	e.afterTurn(sessionID, turnID, agent.ID, rep, err, nil, modelID)
 	return rep, err
 }
 
-// commitTurnMessages stores this turn's contribution into session history.
-// On success, persists user + completed steps. On cancel/fail, keeps only
-// complete tool pairs so the next turn does not lose finished work and does
-// not carry unpaired assistant tool_calls.
+// clearSessionTurnMessages drops in-memory cross-turn history for a session.
+// LLM history is reconstructed from turn logs on the next turn.
+func (e *Engine) clearSessionTurnMessages(sessionID string) {
+	e.mu.Lock()
+	delete(e.turnMessages, sessionID)
+	e.mu.Unlock()
+}
+
+func chatMessagesToRuntime(in []port.ChatMessage) []Message {
+	out := make([]Message, 0, len(in))
+	for _, m := range in {
+		msg := Message{
+			Role:       Role(m.Role),
+			Content:    m.Content,
+			ToolCallID: m.ToolCallID,
+			Name:       m.Name,
+		}
+		if len(m.Parts) > 0 {
+			parts := make([]ContentPart, len(m.Parts))
+			for i, p := range m.Parts {
+				parts[i] = ContentPart{Type: p.Type, MimeType: p.MimeType, Data: p.Data, Name: p.Name}
+			}
+			msg.Parts = parts
+		}
+		if len(m.ToolCalls) > 0 {
+			tcs := make([]ToolCall, len(m.ToolCalls))
+			for i, tc := range m.ToolCalls {
+				tcs[i] = ToolCall{ID: tc.ID, Name: tc.Name, Arguments: tc.Arguments}
+			}
+			msg.ToolCalls = tcs
+		}
+		out = append(out, msg)
+	}
+	return out
+}
+
+func userMessageLogData(msg Message) map[string]any {
+	data := map[string]any{"content": msg.Content}
+	// v1: do not persist base64 image blobs in turn log.
+	return data
+}
+
+// commitTurnMessages is retained for tests that simulate in-memory deltas.
+// Production turns clear memory via clearSessionTurnMessages; history is on disk.
 func (e *Engine) commitTurnMessages(sessionID string, prev []Message, turnMsgs []Message, userIdx int, runErr error) {
 	if userIdx < 0 {
 		userIdx = 0
@@ -767,7 +807,7 @@ func (e *Engine) afterTurn(sessionID, turnID, agentID string, rep domain.Report,
 		Summary: rep.Summary, Status: string(rep.Status),
 	})
 	turns, _ := e.turns.ListBySession(context.Background(), sessionID)
-	e.maybeCompact(context.Background(), sessionID, turnID, len(turns), messages, model, rep.MaxPromptTokens)
+	e.maybeCompact(context.Background(), sessionID, turnID, len(turns), model, rep.MaxPromptTokens)
 }
 
 func (e *Engine) updateSessionStatus(sessionID string, status domain.SessionStatus) {
@@ -780,16 +820,70 @@ func (e *Engine) updateSessionStatus(sessionID string, status domain.SessionStat
 	_ = e.sessions.UpdateSession(context.Background(), s)
 }
 
-func (e *Engine) maybeCompact(ctx context.Context, sessionID, turnID string, turnCount int, messages []Message, model string, maxPromptTokens int) {
-	tokenEstimate := estimateTokenCount(messages)
-	if e.compactionMgr.ShouldCompact(sessionID, turnCount, tokenEstimate, maxPromptTokens, model) {
-		cutIdx := e.compactionMgr.Compact(ctx, sessionID, turnID, messages, turnCount, model)
-		if cutIdx > 0 {
-			e.mu.Lock()
-			e.turnMessages[sessionID] = messages[cutIdx:]
-			e.mu.Unlock()
+func (e *Engine) maybeCompact(ctx context.Context, sessionID, turnID string, turnCount int, model string, maxPromptTokens int) {
+	cp := e.compactionMgr.Recover(ctx, sessionID)
+	retainFrom := ""
+	if cp != nil {
+		retainFrom = cp.RetainFromTurnID
+	}
+	history := chatMessagesToRuntime(e.turnLog.LoadSessionMessages(sessionID, retainFrom))
+	tokenEstimate := estimateTokenCount(history)
+	if !e.compactionMgr.ShouldCompact(sessionID, turnCount, tokenEstimate, maxPromptTokens, model) {
+		return
+	}
+	cfg := e.compactionMgr.loadCfg(ctx)
+	newRetain := e.computeRetainFromTurnID(sessionID, retainFrom, cfg.cutTokens)
+	if newRetain == "" || newRetain == retainFrom {
+		return
+	}
+	// Messages to summarize: turns in [retainFrom, newRetain).
+	var oldMessages []Message
+	for _, id := range e.turnLog.ListTurnIDs(sessionID) {
+		if retainFrom != "" && id < retainFrom {
+			continue
+		}
+		if id >= newRetain {
+			break
+		}
+		oldMessages = append(oldMessages, chatMessagesToRuntime(e.turnLog.LoadTurnMessages(id))...)
+	}
+	if len(oldMessages) == 0 {
+		return
+	}
+	if !e.compactionMgr.CompactToRetain(ctx, sessionID, turnID, oldMessages, turnCount, model, newRetain, tokenEstimate) {
+		return
+	}
+	e.clearSessionTurnMessages(sessionID)
+}
+
+// computeRetainFromTurnID walks turns from newest to oldest until cutTokens of
+// history are retained; returns the oldest turn id in that retained window.
+func (e *Engine) computeRetainFromTurnID(sessionID, currentRetain string, cutTokens int) string {
+	if cutTokens <= 0 {
+		return ""
+	}
+	ids := e.turnLog.ListTurnIDs(sessionID)
+	acc := 0
+	retain := ""
+	for i := len(ids) - 1; i >= 0; i-- {
+		id := ids[i]
+		if currentRetain != "" && id < currentRetain {
+			break
+		}
+		msgs := chatMessagesToRuntime(e.turnLog.LoadTurnMessages(id))
+		if len(msgs) == 0 {
+			continue
+		}
+		for _, m := range msgs {
+			acc += estimateMessageTokens(m)
+		}
+		retain = id
+		if acc >= cutTokens {
+			return retain
 		}
 	}
+	// Not enough tokens to justify dropping anything.
+	return ""
 }
 
 // alwaysOnBuiltinTools are mounted for every agent without requiring ToolBindings.
@@ -888,12 +982,13 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 			messages = append(messages, Message{Role: RoleUser, Content: goal})
 			childCtx.Messages = messages
 
-			// Create turn log for child so LoadTurnLogZip can find it
-			e.turnLog.Create(childTurnID, sessionID, projectID, workerAgent.ID, goal)
+			// Nested tool-run log for zip/debug only — not parent LLM history.
+			e.turnLog.CreateNested(childTurnID, sessionID, projectID, workerAgent.ID, goal)
 			_ = e.turns.Create(ctx, domain.TurnLog{ID: childTurnID, SessionID: sessionID, AgentID: workerAgent.ID, Goal: goal, Status: domain.TurnRunning})
 			e.turnRunner.Log = func(typ string, data map[string]any) {
 				e.turnLog.Append(childTurnID, typ, data)
 			}
+			e.turnLog.Append(childTurnID, "user", map[string]any{"content": goal})
 
 			e.stream.Publish(ctx, sessionID, childTurnID, domain.EventTurnStarted, domain.TurnStartedPayload{
 				TurnID: childTurnID, AgentID: workerAgent.ID, Goal: goal,

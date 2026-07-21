@@ -13,6 +13,9 @@ type CompactionCheckpoint struct {
 	Todos           []CompactionTodoItem `json:"todos,omitempty"`
 	TurnCount       int                  `json:"turnCount"`
 	TokenEstimate   int                  `json:"tokenEstimate"`
+	// RetainFromTurnID is the first turn id to replay after compaction.
+	// Turns strictly before this id are replaced by Summary in the system prompt.
+	RetainFromTurnID string `json:"retainFromTurnId,omitempty"`
 }
 
 // CompactionTodoItem is a structured todowrite entry preserved across compaction.

@@ -227,6 +227,25 @@ function isToolCardExpanded(seq: number) {
   return expandedToolCards.value.has(seq)
 }
 
+const expandedThinking = ref(new Set<number>())
+function toggleThinking(seq: number) {
+  if (expandedThinking.value.has(seq)) {
+    expandedThinking.value.delete(seq)
+  } else {
+    expandedThinking.value.add(seq)
+  }
+  expandedThinking.value = new Set(expandedThinking.value)
+}
+function isThinkingExpanded(seq: number) {
+  return expandedThinking.value.has(seq)
+}
+
+function formatLen(s: string): string {
+  const n = s.length
+  if (n < 1000) return String(n)
+  return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
+}
+
 // ── Collapsible turns ──
 const collapsedTurns = ref(new Set<string>())
 function toggleTurnCollapse(turnId: string) {
@@ -1676,6 +1695,35 @@ function onTitleKeydown(e: KeyboardEvent) {
                       />
                     </template>
 
+                    <template v-else-if="ev.type === 'agent.thinking'">
+                      <div
+                        class="turn__thinking"
+                        :class="{ 'is-expanded': isThinkingExpanded(ev.seq) }"
+                      >
+                        <button type="button" class="turn__thinking-header" @click="toggleThinking(ev.seq)">
+                          <span class="turn__thinking-label">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                            <span>思考</span>
+                          </span>
+                          <span v-if="!isThinkingExpanded(ev.seq)" class="turn__thinking-preview">{{ truncateText(finalText(ev), 80) }}</span>
+                          <span class="turn__thinking-meta">{{ formatLen(finalText(ev)) }}</span>
+                          <svg
+                            class="turn__thinking-chevron"
+                            :class="{ 'is-open': isThinkingExpanded(ev.seq) }"
+                            viewBox="0 0 24 24"
+                            width="14"
+                            height="14"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          ><polyline points="6 9 12 15 18 9"/></svg>
+                        </button>
+                        <div v-if="isThinkingExpanded(ev.seq)" class="turn__thinking-body">{{ finalText(ev) }}</div>
+                      </div>
+                    </template>
+
                     <template v-else-if="ev.type === 'agent.message'">
                       <div class="turn__answer">
                         <div class="turn__answer-label">
@@ -2890,6 +2938,87 @@ function onTitleKeydown(e: KeyboardEvent) {
   border-radius: 8px;
   background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
   border: 1px solid color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
+}
+
+.turn__thinking {
+  margin: 2px 0;
+}
+
+.turn__thinking-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dq-label-tertiary);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.turn__thinking-header:hover {
+  background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
+}
+
+.turn__thinking-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  font-size: var(--dq-font-size-caption);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--dq-label-tertiary);
+}
+
+.turn__thinking-label svg {
+  opacity: 0.55;
+}
+
+.turn__thinking-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--dq-font-size-footnote);
+  color: var(--dq-label-tertiary);
+  opacity: 0.85;
+}
+
+.turn__thinking-meta {
+  flex-shrink: 0;
+  font-size: var(--dq-font-size-caption);
+  color: var(--dq-label-quaternary, var(--dq-label-tertiary));
+  opacity: 0.7;
+}
+
+.turn__thinking-chevron {
+  flex-shrink: 0;
+  opacity: 0.5;
+  transition: transform 0.15s ease;
+}
+
+.turn__thinking-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.turn__thinking-body {
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0 8px 6px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--dq-label-primary) 3%, transparent);
+  font-size: var(--dq-font-size-footnote);
+  line-height: 1.5;
+  color: var(--dq-label-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .turn__answer-label {

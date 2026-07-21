@@ -32,6 +32,10 @@ type AgentMessagePayload struct {
 	Text string `json:"text"`
 }
 
+type AgentThinkingPayload struct {
+	Text string `json:"text"`
+}
+
 type StepPayload struct {
 	Step  int    `json:"step"`
 	Title string `json:"title,omitempty"`

@@ -7,9 +7,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 
 	"danqing-teams/core/domain"
+	"danqing-teams/core/port"
 )
 
 type TurnLogEntry struct {
@@ -40,12 +43,24 @@ func (s *TurnLogStore) sessionsDir(projectID string) string {
 	return filepath.Join(s.projector(projectID), "sessions")
 }
 
-// Create opens a turn log for writing.
+// Create opens a turn log for writing under sessions/{sessionID}/{turnID}.jsonl.
+// These session-level logs are the LLM history source for LoadSessionMessages.
 //
 // If the JSONL already exists (same-process resume after EndTurn, or process
 // restart with the file still on disk), it reopens for append and does NOT
 // write another "start" entry. Otherwise it creates a fresh file with start.
 func (s *TurnLogStore) Create(turnID, sessionID, projectID, agentID, goal string) error {
+	return s.create(turnID, sessionID, projectID, agentID, goal, "")
+}
+
+// CreateNested opens a debug log under sessions/{sessionID}/tool_runs/{turnID}.jsonl
+// for a nested tool execution (e.g. delegate_agent). Nested logs are for zip/debug
+// only and are never replayed as parent session LLM history.
+func (s *TurnLogStore) CreateNested(turnID, sessionID, projectID, agentID, goal string) error {
+	return s.create(turnID, sessionID, projectID, agentID, goal, "tool_runs")
+}
+
+func (s *TurnLogStore) create(turnID, sessionID, projectID, agentID, goal, subdir string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -67,6 +82,9 @@ func (s *TurnLogStore) Create(turnID, sessionID, projectID, agentID, goal string
 	}
 
 	dir := filepath.Join(s.sessionsDir(projectID), sessionID)
+	if subdir != "" {
+		dir = filepath.Join(dir, subdir)
+	}
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
@@ -92,10 +110,8 @@ func (s *TurnLogStore) Create(turnID, sessionID, projectID, agentID, goal string
 
 // Append writes a single entry to the turn's JSONL log.
 //
-// IMPORTANT: Only "tool_call" and "tool_result" types should be written here.
-// These are the only types consumed by LoadForRecovery for LLM message
-// reconstruction. All other entry types (start, end) are written by
-// Create / EndTurn respectively.
+// Allowed types for LLM reconstruction: user, assistant, tool_result,
+// and legacy tool_call. start/end are written by Create / EndTurn.
 //
 // Do NOT call Append with diagnostic or audit types (e.g. "llm_error",
 // "step", "permission_*"). Use Stream Events (port.EventStream) for those.
@@ -148,25 +164,44 @@ func (s *TurnLogStore) ListTurns(sessionID string) []domain.TurnLog {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	ids := s.listTurnIDsLocked(sessionID)
+	out := make([]domain.TurnLog, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := s.loadTurnFileLocked(id); ok {
+			if tf, ok := s.logs[id]; ok {
+				out = append(out, *tf.log)
+			}
+		}
+	}
+	return out
+}
+
+func (s *TurnLogStore) ListTurnIDs(sessionID string) []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.listTurnIDsLocked(sessionID)
+}
+
+func (s *TurnLogStore) listTurnIDsLocked(sessionID string) []string {
 	dir := s.sessionDir(sessionID)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil
 	}
-
-	out := make([]domain.TurnLog, 0)
+	var ids []string
 	for _, entry := range entries {
+		// Only top-level *.jsonl — nested tool_runs/ logs are excluded from
+		// session LLM history replay.
+		if entry.IsDir() {
+			continue
+		}
 		name := entry.Name()
 		if len(name) > 6 && name[len(name)-6:] == ".jsonl" {
-			id := name[:len(name)-6]
-			if _, ok := s.loadTurnFileLocked(id); ok {
-				if tf, ok := s.logs[id]; ok {
-					out = append(out, *tf.log)
-				}
-			}
+			ids = append(ids, name[:len(name)-6])
 		}
 	}
-	return out
+	sort.Strings(ids)
+	return ids
 }
 
 func (s *TurnLogStore) LastStatus(sessionID string) domain.TurnStatus {
@@ -216,9 +251,61 @@ func (s *TurnLogStore) LoadForRecovery(turnID string) (goal string, entries []ma
 	}
 	goal = tf.log.Goal
 
-	f, err := os.Open(tf.filePath)
+	all := s.readEntriesLocked(tf.filePath)
+	entries = trimIncompleteTurnEntries(all)
+	return goal, entries
+}
+
+// LoadSessionMessages rebuilds full LLM chat history from session turn JSONL.
+// If retainFromTurnID is non-empty, only that turn and later turns are included
+// (compaction window). Tool loops are preserved — window size is compaction's job.
+func (s *TurnLogStore) LoadSessionMessages(sessionID, retainFromTurnID string) []port.ChatMessage {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	ids := s.listTurnIDsLocked(sessionID)
+	var out []port.ChatMessage
+	for _, id := range ids {
+		if retainFromTurnID != "" && id < retainFromTurnID {
+			continue
+		}
+		out = append(out, s.loadTurnMessagesLocked(id)...)
+	}
+	return out
+}
+
+func (s *TurnLogStore) LoadTurnMessages(turnID string) []port.ChatMessage {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.loadTurnMessagesLocked(turnID)
+}
+
+func (s *TurnLogStore) loadTurnMessagesLocked(turnID string) []port.ChatMessage {
+	tf, ok := s.loadTurnFileLocked(turnID)
+	if !ok {
+		return nil
+	}
+	entries := trimIncompleteTurnEntries(s.readEntriesLocked(tf.filePath))
+	return entriesToChatMessages(entries)
+}
+
+// IsNestedToolRun reports whether this turn log lives under tool_runs/
+// (nested tool execution). Such turns are not parent session LLM history and
+// must not be auto-resumed by RecoverRunning.
+func (s *TurnLogStore) IsNestedToolRun(turnID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tf, ok := s.loadTurnFileLocked(turnID)
+	if !ok {
+		return false
+	}
+	return strings.Contains(filepath.ToSlash(tf.filePath), "/tool_runs/")
+}
+
+func (s *TurnLogStore) readEntriesLocked(filePath string) []map[string]any {
+	f, err := os.Open(filePath)
 	if err != nil {
-		return goal, nil
+		return nil
 	}
 	defer f.Close()
 
@@ -230,30 +317,173 @@ func (s *TurnLogStore) LoadForRecovery(turnID string) (goal string, entries []ma
 			all = append(all, e)
 		}
 	}
+	return all
+}
 
-	// Whitelist: only tool_call / tool_result participate in recovery.
-	// Walk from the end so we can drop an unpaired trailing tool_call
-	// (cancel / tool error mid-flight) without discarding earlier pairs.
-	cut := 0
-	for i := len(all) - 1; i >= 0; i-- {
-		typ, _ := all[i]["type"].(string)
+// trimIncompleteTurnEntries keeps reconstructable whitelist entries and drops
+// an unpaired trailing assistant(tool_calls) / legacy tool_call.
+func trimIncompleteTurnEntries(all []map[string]any) []map[string]any {
+	// Collect whitelist indices first.
+	var kept []map[string]any
+	for _, e := range all {
+		typ, _ := e["type"].(string)
 		switch typ {
-		case "tool_result":
-			for j := i - 1; j >= 0; j-- {
-				if t, _ := all[j]["type"].(string); t == "tool_call" {
-					cut = i + 1
-					break
-				}
-			}
-			return goal, all[:cut]
-		case "tool_call":
-			// Drop this unpaired call; keep everything before it.
-			return goal, all[:i]
+		case "user", "assistant", "tool_call", "tool_result":
+			kept = append(kept, e)
 		}
-		// All other types (start, end, unknown) silently skipped.
+	}
+	if len(kept) == 0 {
+		return nil
 	}
 
-	return goal, all[:cut]
+	// Drop trailing unpaired tool call / assistant-with-tools without matching results.
+	for len(kept) > 0 {
+		last := kept[len(kept)-1]
+		typ, _ := last["type"].(string)
+		switch typ {
+		case "tool_result", "user":
+			return kept
+		case "assistant":
+			data, _ := last["data"].(map[string]any)
+			if !assistantHasToolCalls(data) {
+				return kept // text-only assistant is complete
+			}
+			// Assistant with tool_calls but no following tool_results — drop it.
+			kept = kept[:len(kept)-1]
+		case "tool_call":
+			kept = kept[:len(kept)-1]
+		default:
+			kept = kept[:len(kept)-1]
+		}
+	}
+	return kept
+}
+
+func assistantHasToolCalls(data map[string]any) bool {
+	if data == nil {
+		return false
+	}
+	raw, ok := data["tool_calls"]
+	if !ok || raw == nil {
+		return false
+	}
+	switch v := raw.(type) {
+	case []any:
+		return len(v) > 0
+	case []map[string]any:
+		return len(v) > 0
+	default:
+		return false
+	}
+}
+
+func entriesToChatMessages(entries []map[string]any) []port.ChatMessage {
+	var out []port.ChatMessage
+	for _, e := range entries {
+		typ, _ := e["type"].(string)
+		data, _ := e["data"].(map[string]any)
+		if data == nil {
+			data = map[string]any{}
+		}
+		switch typ {
+		case "user":
+			msg := port.ChatMessage{Role: "user", Content: stringField(data, "content")}
+			if parts := partsFromData(data); len(parts) > 0 {
+				msg.Parts = parts
+			}
+			out = append(out, msg)
+		case "assistant":
+			msg := port.ChatMessage{Role: "assistant", Content: stringField(data, "content")}
+			msg.ToolCalls = toolCallsFromData(data)
+			out = append(out, msg)
+		case "tool_call":
+			// Legacy: one assistant message per call.
+			callID := stringField(data, "call_id")
+			name := stringField(data, "name")
+			args, _ := data["input"].(map[string]any)
+			out = append(out, port.ChatMessage{
+				Role: "assistant",
+				ToolCalls: []port.ChatToolCall{{
+					ID: callID, Name: name, Arguments: args,
+				}},
+			})
+		case "tool_result":
+			out = append(out, port.ChatMessage{
+				Role:       "tool",
+				ToolCallID: stringField(data, "call_id"),
+				Name:       stringField(data, "name"),
+				Content:    stringField(data, "output"),
+			})
+		}
+	}
+	return out
+}
+
+func stringField(data map[string]any, key string) string {
+	if data == nil {
+		return ""
+	}
+	if v, ok := data[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+func toolCallsFromData(data map[string]any) []port.ChatToolCall {
+	raw, ok := data["tool_calls"]
+	if !ok || raw == nil {
+		return nil
+	}
+	arr, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	var out []port.ChatToolCall
+	for _, item := range arr {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		args, _ := m["arguments"].(map[string]any)
+		if args == nil {
+			args, _ = m["input"].(map[string]any)
+		}
+		out = append(out, port.ChatToolCall{
+			ID:        stringField(m, "id"),
+			Name:      stringField(m, "name"),
+			Arguments: args,
+		})
+	}
+	return out
+}
+
+func partsFromData(data map[string]any) []port.ChatContentPart {
+	raw, ok := data["parts"]
+	if !ok || raw == nil {
+		return nil
+	}
+	arr, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	var out []port.ChatContentPart
+	for _, item := range arr {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		// v1: skip base64 blobs; only keep text metadata if present without data.
+		if stringField(m, "data") != "" {
+			continue
+		}
+		out = append(out, port.ChatContentPart{
+			Type:     stringField(m, "type"),
+			MimeType: stringField(m, "mimeType"),
+			Name:     stringField(m, "name"),
+			Text:     stringField(m, "text"),
+		})
+	}
+	return out
 }
 
 func (s *TurnLogStore) LoadRawLog(turnID string) ([]byte, error) {
@@ -518,7 +748,8 @@ func (s *TurnLogStore) reopenAppendLocked(tf *turnFile) error {
 	return nil
 }
 
-// locateTurnFile scans project data dirs for sessions/*/{turnID}.jsonl.
+// locateTurnFile scans project data dirs for sessions/*/{turnID}.jsonl
+// or sessions/*/tool_runs/{turnID}.jsonl.
 func (s *TurnLogStore) locateTurnFile(turnID string) (filePath, sessionID, projectID string) {
 	root := s.projector("")
 	projectEntries, err := os.ReadDir(root)
@@ -540,9 +771,14 @@ func (s *TurnLogStore) locateTurnFile(turnID string) (filePath, sessionID, proje
 			if !se.IsDir() {
 				continue
 			}
-			candidate := filepath.Join(sessionsRoot, se.Name(), want)
-			if st, err := os.Stat(candidate); err == nil && !st.IsDir() {
-				return candidate, se.Name(), pid
+			sid := se.Name()
+			for _, rel := range []string{
+				filepath.Join(sessionsRoot, sid, want),
+				filepath.Join(sessionsRoot, sid, "tool_runs", want),
+			} {
+				if st, err := os.Stat(rel); err == nil && !st.IsDir() {
+					return rel, sid, pid
+				}
 			}
 		}
 	}

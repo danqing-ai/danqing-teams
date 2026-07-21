@@ -395,8 +395,11 @@ func TestRecoverRunningAutoResumesFromToolPairs(t *testing.T) {
 	if err := core1.TurnLogs.Create(zombieTurnID, s.ID, projectID, agentDefault, "简单回复: 自动恢复测试, 回答'恢复完成'"); err != nil {
 		t.Fatalf("create turn log: %v", err)
 	}
-	core1.TurnLogs.Append(zombieTurnID, "tool_call", map[string]any{
-		"call_id": "c1", "name": "read_file", "input": map[string]any{"path": "README.md"},
+	core1.TurnLogs.Append(zombieTurnID, "user", map[string]any{"content": "简单回复: 自动恢复测试, 回答'恢复完成'"})
+	core1.TurnLogs.Append(zombieTurnID, "assistant", map[string]any{
+		"tool_calls": []any{
+			map[string]any{"id": "c1", "name": "read_file", "arguments": map[string]any{"path": "README.md"}},
+		},
 	})
 	core1.TurnLogs.Append(zombieTurnID, "tool_result", map[string]any{
 		"call_id": "c1", "name": "read_file", "output": "ok",
@@ -705,3 +708,93 @@ func TestListByStatusQueries(t *testing.T) {
 }
 
 
+
+// ---------- Test: session LLM history survives process restart via turn log ----------
+
+func TestSessionHistorySurvivesRestartFromTurnLog(t *testing.T) {
+	_, dataDir := setupRecoveryEnv(t)
+	ctx := context.Background()
+
+	core1 := newCore(t, dataDir)
+	modelID := pickTestModel(t, core1)
+	r1 := newRouter(t, core1)
+
+	w := postJSON(t, r1, "/api/v1/sessions", domain.CreateSessionRequest{
+		Content: "简单回复: 历史种子, 回答'种子完成'",
+		AgentID: agentDefault,
+		ModelID: modelID,
+	})
+	if w.Code != 201 {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	var s domain.Session
+	json.Unmarshal(w.Body.Bytes(), &s)
+
+	var since int64
+	waitForReport(t, r1, s.ID, &since)
+	time.Sleep(200 * time.Millisecond)
+
+	// Simulate a completed prior turn written in the new LLM-message format.
+	histTurn := "turn-hist-001"
+	if err := core1.TurnLogs.Create(histTurn, s.ID, s.ProjectID, agentDefault, "查深圳天气"); err != nil {
+		t.Fatalf("create hist turn log: %v", err)
+	}
+	core1.TurnLogs.Append(histTurn, "user", map[string]any{"content": "查深圳天气"})
+	core1.TurnLogs.Append(histTurn, "assistant", map[string]any{"content": "深圳今天 29°C，有烟霾"})
+	core1.TurnLogs.EndTurn(histTurn, domain.TurnCompleted)
+	_ = core1.Store.Turns().Create(ctx, domain.TurnLog{
+		ID: histTurn, SessionID: s.ID, AgentID: agentDefault,
+		Goal: "查深圳天气", Status: domain.TurnCompleted,
+	})
+
+	msgs1 := core1.TurnLogs.LoadSessionMessages(s.ID, "")
+	found := false
+	for _, m := range msgs1 {
+		if m.Role == "assistant" && m.Content == "深圳今天 29°C，有烟霾" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("before restart: weather assistant missing from history: %+v", msgs1)
+	}
+
+	// Process restart — in-memory turnMessages is gone; history must come from JSONL.
+	core2 := newCore(t, dataDir)
+	msgs2 := core2.TurnLogs.LoadSessionMessages(s.ID, "")
+	found = false
+	for _, m := range msgs2 {
+		if m.Role == "assistant" && m.Content == "深圳今天 29°C，有烟霾" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("after restart: weather assistant missing from turn log replay: %+v", msgs2)
+	}
+
+	// New turn after restart should still see prior assistant text in the LLM request.
+	r2 := newRouter(t, core2)
+	w2 := postJSON(t, r2, "/api/v1/sessions/"+s.ID+"/turns", domain.SendMessageRequest{
+		UserInput: "把刚才的天气做成网页",
+		AgentID:   agentDefault,
+		ModelID:   modelID,
+	})
+	if w2.Code != 200 && w2.Code != 201 && w2.Code != 202 {
+		t.Fatalf("start turn after restart: %d %s", w2.Code, w2.Body.String())
+	}
+	waitForReport(t, r2, s.ID, &since)
+
+	// History on disk must still include the weather answer (plus the new turn).
+	msgs3 := core2.TurnLogs.LoadSessionMessages(s.ID, "")
+	found = false
+	for _, m := range msgs3 {
+		if m.Role == "assistant" && m.Content == "深圳今天 29°C，有烟霾" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("after new turn: weather assistant lost: %+v", msgs3)
+	}
+}

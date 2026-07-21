@@ -216,6 +216,44 @@ func (m *CompactionManager) Compact(ctx context.Context, sessionID, turnID strin
 	return cutIdx
 }
 
+// CompactToRetain summarizes oldMessages and records retainFromTurnID so later
+// LoadSessionMessages skips compacted turns.
+func (m *CompactionManager) CompactToRetain(ctx context.Context, sessionID, turnID string, oldMessages []Message, turnCount int, model, retainFromTurnID string, tokensBefore int) bool {
+	if len(oldMessages) == 0 || retainFromTurnID == "" {
+		return false
+	}
+	cfg := m.loadCfg(ctx)
+	prevCP := m.getCheckpoint(sessionID)
+	conversation := serializeConversation(oldMessages, cfg.toolTruncate)
+	summary, err := m.summarize(ctx, conversation, prevCP, model)
+	if err != nil || summary == "" {
+		return false
+	}
+	todos := extractLatestTodos(oldMessages)
+	if len(todos) == 0 && prevCP != nil {
+		todos = prevCP.Todos
+	}
+	cp := &domain.CompactionCheckpoint{
+		SessionID:        sessionID,
+		TurnID:           turnID,
+		Summary:          summary,
+		Todos:            todos,
+		TurnCount:        turnCount,
+		TokenEstimate:    tokensBefore,
+		RetainFromTurnID: retainFromTurnID,
+	}
+	m.setCheckpoint(sessionID, cp)
+	if m.stream != nil {
+		m.stream.Publish(ctx, sessionID, turnID, domain.EventContextCompacted, domain.ContextCompactedPayload{
+			FilePath:       fmt.Sprintf("checkpoint_%s.json", turnID),
+			TurnsCompacted: len(oldMessages),
+			TokensBefore:   tokensBefore,
+			TokensAfter:    0,
+		})
+	}
+	return true
+}
+
 func (m *CompactionManager) summarize(ctx context.Context, conversation string, prev *domain.CompactionCheckpoint, model string) (string, error) {
 	var prompt string
 	if prev != nil && prev.Summary != "" {

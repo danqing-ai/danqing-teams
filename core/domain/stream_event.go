@@ -25,6 +25,7 @@ const (
 	EventReport            = "report"
 	EventUserMessage       = "user.message"
 	EventAgentMessage      = "agent.message"
+	EventAgentThinking     = "agent.thinking"
 	EventLLMUsage          = "llm.usage"
 	EventError             = "error"
 	EventSessionCompleted  = "session.completed"
