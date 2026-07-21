@@ -152,7 +152,7 @@ type TurnContext struct {
 
 type approvalGate interface {
 	WaitApproval(ctx context.Context, approvalID string) (ApprovalOutcome, error)
-	CreateApproval(sessionID, toolName, description, reason string) string
+	CreateApproval(sessionID, turnID, toolName, description, reason string) string
 }
 
 type TurnRunner struct {
@@ -395,7 +395,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			allowNetworkForRun := allowNet
 			if decision == permission.DecisionAsk && !cfg.autoApprove && p.Approval != nil {
 				description := describe
-				approvalID := p.Approval.CreateApproval(tctx.SessionID, call.Name, description, permResult.Reason)
+				approvalID := p.Approval.CreateApproval(tctx.SessionID, tctx.TurnID, call.Name, description, permResult.Reason)
 				scopeOpts := []string{"once"}
 				if permResult.Reason == permission.ReasonNetwork {
 					scopeOpts = append(scopeOpts, "session")

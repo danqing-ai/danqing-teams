@@ -26,7 +26,7 @@ func setupCore(t *testing.T) (*bootstrap.Core, string) {
 	t.Helper()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "teams.db")
-	copyDB(t, "../../data/teams.db", dbPath)
+	copyDB(t, "data/teams.db", dbPath)
 	dataDir := filepath.Join(tmpDir, "data")
 	t.Setenv("TEAMS_DB_PATH", dbPath)
 	core := bootstrap.New(bootstrap.Config{AutoApprove: true, DataDir: dataDir})
@@ -37,7 +37,7 @@ func setupCoreWithAutoApprove(t *testing.T, autoApprove bool) (*bootstrap.Core, 
 	t.Helper()
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "teams.db")
-	copyDB(t, "../../data/teams.db", dbPath)
+	copyDB(t, "data/teams.db", dbPath)
 	dataDir := filepath.Join(tmpDir, "data")
 	t.Setenv("TEAMS_DB_PATH", dbPath)
 	core := bootstrap.New(bootstrap.Config{AutoApprove: autoApprove, DataDir: dataDir})
@@ -78,10 +78,34 @@ func copyDB(t *testing.T, src, dst string) {
 	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("cp", src, dst)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("copy db: %v: %s", err, out)
+	candidates := []string{src, "data/teams.db", "../../data/teams.db"}
+	if home, err := os.UserHomeDir(); err == nil {
+		candidates = append(candidates, filepath.Join(home, ".dq-teams", "teams.db"))
 	}
+	var chosen string
+	for _, c := range candidates {
+		st, err := os.Stat(c)
+		if err != nil || st.IsDir() {
+			continue
+		}
+		// Prefer a seed that has LLM provider rows (package seed may be empty).
+		out, err := exec.Command("sqlite3", c, "SELECT COUNT(*) FROM llm_configs;").Output()
+		if err == nil && strings.TrimSpace(string(out)) != "0" {
+			chosen = c
+			break
+		}
+		if chosen == "" {
+			chosen = c
+		}
+	}
+	if chosen == "" {
+		t.Fatalf("copy db: no seed teams.db found (tried %v)", candidates)
+	}
+	cmd := exec.Command("cp", chosen, dst)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("copy db from %s: %v: %s", chosen, err, out)
+	}
+	t.Logf("test seed db: %s", chosen)
 }
 
 func newRouter(t *testing.T, core *bootstrap.Core) http.Handler {

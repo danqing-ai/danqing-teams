@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -12,10 +13,10 @@ import (
 
 	"danqing-teams/core/domain"
 	"danqing-teams/core/port"
-	"danqing-teams/core/service"
 	"danqing-teams/core/runtime/permission"
 	"danqing-teams/core/runtime/tool"
 	"danqing-teams/core/runtime/tool/builtin"
+	"danqing-teams/core/service"
 )
 
 var _ port.Engine = (*Engine)(nil)
@@ -402,25 +403,17 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) {
 }
 
 func (e *Engine) RecoverRunning(ctx context.Context) {
-	// 1. Recover zombie turns: mark all "running" turns as failed.
 	runningTurns, err := e.turns.ListByStatus(ctx, domain.TurnRunning)
 	if err != nil {
 		log.Printf("[RecoverRunning] list running turns: %v", err)
 		return
 	}
-	if len(runningTurns) > 0 {
-		log.Printf("[RecoverRunning] found %d zombie running turn(s), marking as failed", len(runningTurns))
-	}
+	runningBySession := make(map[string][]domain.TurnLog)
 	for _, t := range runningTurns {
-		if err := e.turns.UpdateStatus(ctx, t.ID, domain.TurnFailed); err != nil {
-			log.Printf("[RecoverRunning] update turn %s status: %v", t.ID, err)
-		}
-		// Rehydrate JSONL from disk (if any) so EndTurn can write the end marker.
-		_ = e.turnLog.Create(t.ID, t.SessionID, "", t.AgentID, t.Goal)
-		e.turnLog.EndTurn(t.ID, domain.TurnFailed)
+		runningBySession[t.SessionID] = append(runningBySession[t.SessionID], t)
 	}
 
-	// 2. Recover stale approvals: mark all "pending" approvals as expired.
+	// 1. Expire stale approvals and publish decided events so UI hides old buttons.
 	pendingApprovals, err := e.approvals.ListByStatus(ctx, "pending")
 	if err != nil {
 		log.Printf("[RecoverRunning] list pending approvals: %v", err)
@@ -431,12 +424,39 @@ func (e *Engine) RecoverRunning(ctx context.Context) {
 			if err := e.approvals.Update(ctx, a); err != nil {
 				log.Printf("[RecoverRunning] update approval %s: %v", a.ID, err)
 			}
+			turnID := e.resolveApprovalTurnID(a, runningBySession)
+			if a.SessionID != "" && turnID != "" {
+				e.PublishPermissionDecided(a.SessionID, turnID, a.ID, false, "once")
+			}
 		}
 	}
 
-	// 3. Recover stuck sessions: status "active" with no running turns means the
-	//    process died mid-flight. Derive the terminal status from turns — do NOT
-	//    always mark failed (completed turns would incorrectly show a failure badge).
+	// 2. Resume recoverable zombie turns from last complete tool pairs; fail the rest.
+	resumedSessions := make(map[string]bool)
+	if len(runningTurns) > 0 {
+		log.Printf("[RecoverRunning] found %d zombie running turn(s)", len(runningTurns))
+	}
+	for _, t := range runningTurns {
+		e.expireOrphanAskUsers(t.SessionID, t.ID)
+
+		// Recoverable only when JSONL exists (start goal and/or complete tool pairs).
+		// DB Goal alone is not enough — injected zombies without work must stay failed.
+		goal, entries := e.turnLog.LoadForRecovery(t.ID)
+		if goal == "" && len(entries) == 0 {
+			log.Printf("[RecoverRunning] turn %s not recoverable, marking as failed", t.ID)
+			if err := e.turns.UpdateStatus(ctx, t.ID, domain.TurnFailed); err != nil {
+				log.Printf("[RecoverRunning] update turn %s status: %v", t.ID, err)
+			}
+			_ = e.turnLog.Create(t.ID, t.SessionID, "", t.AgentID, t.Goal)
+			e.turnLog.EndTurn(t.ID, domain.TurnFailed)
+			continue
+		}
+		log.Printf("[RecoverRunning] auto-resuming turn %s (session %s) from %d tool pair entr(y/ies)", t.ID, t.SessionID, len(entries))
+		resumedSessions[t.SessionID] = true
+		e.ResumeTurn(ctx, t.SessionID, t.ID)
+	}
+
+	// 3. Recover stuck sessions that were not auto-resumed.
 	sessions, err := e.sessions.List(ctx)
 	if err != nil {
 		log.Printf("[RecoverRunning] list sessions: %v", err)
@@ -444,6 +464,9 @@ func (e *Engine) RecoverRunning(ctx context.Context) {
 	}
 	for _, s := range sessions {
 		if s.Status != domain.SessionStatusActive {
+			continue
+		}
+		if resumedSessions[s.ID] {
 			continue
 		}
 		turns, err := e.turns.ListBySession(ctx, s.ID)
@@ -471,6 +494,72 @@ func (e *Engine) RecoverRunning(ctx context.Context) {
 		s.Status = status
 		s.UpdatedAt = time.Now().UTC()
 		_ = e.sessions.UpdateSession(ctx, s)
+	}
+}
+
+// resolveApprovalTurnID finds a turn ID for publishing permission.decided after expiry.
+func (e *Engine) resolveApprovalTurnID(a domain.Approval, runningBySession map[string][]domain.TurnLog) string {
+	if a.TurnID != "" {
+		return a.TurnID
+	}
+	if a.SessionID != "" {
+		for _, ev := range e.stream.ListSince(a.SessionID, 0) {
+			if ev.Type != domain.EventPermissionAsk {
+				continue
+			}
+			var p domain.PermissionAskPayload
+			if json.Unmarshal(ev.Payload, &p) != nil {
+				continue
+			}
+			if p.ApprovalID == a.ID && ev.TurnID != "" {
+				return ev.TurnID
+			}
+		}
+		if turns := runningBySession[a.SessionID]; len(turns) == 1 {
+			return turns[0].ID
+		}
+	}
+	return ""
+}
+
+// expireOrphanAskUsers publishes tool.error for ask_user calls left pending across restart.
+func (e *Engine) expireOrphanAskUsers(sessionID, turnID string) {
+	if sessionID == "" || turnID == "" || e.stream == nil {
+		return
+	}
+	pending := make(map[string]bool)
+	for _, ev := range e.stream.ListSince(sessionID, 0) {
+		if ev.TurnID != turnID {
+			continue
+		}
+		switch ev.Type {
+		case domain.EventAskUserPending:
+			var p domain.AskUserPayload
+			if json.Unmarshal(ev.Payload, &p) != nil {
+				continue
+			}
+			callID := p.CallID
+			if callID == "" {
+				callID = p.AskID
+			}
+			if callID != "" {
+				pending[callID] = true
+			}
+		case domain.EventToolCompleted, domain.EventToolError:
+			var p domain.ToolPart
+			if json.Unmarshal(ev.Payload, &p) != nil {
+				continue
+			}
+			if p.CallID != "" {
+				delete(pending, p.CallID)
+			}
+		}
+	}
+	for callID := range pending {
+		e.stream.Publish(context.Background(), sessionID, turnID, domain.EventToolError, domain.ToolPart{
+			CallID: callID, Name: "ask_user", Status: domain.ToolError,
+			Error: "expired (process restarted)",
+		})
 	}
 }
 
@@ -958,7 +1047,7 @@ func (e *Engine) WaitApproval(ctx context.Context, id string) (ApprovalOutcome, 
 		return ApprovalOutcome{}, ctx.Err()
 	}
 }
-func (e *Engine) CreateApproval(sessionID, toolName, description, reason string) string {
+func (e *Engine) CreateApproval(sessionID, turnID, toolName, description, reason string) string {
 	id := fmt.Sprintf("appr-%d", time.Now().UnixNano())
 	ch := make(chan ApprovalOutcome, 1)
 	e.mu.Lock()
@@ -966,7 +1055,7 @@ func (e *Engine) CreateApproval(sessionID, toolName, description, reason string)
 	e.approvalMeta[id] = approvalMeta{SessionID: sessionID, Reason: reason}
 	e.mu.Unlock()
 	_ = e.approvals.Create(context.Background(), domain.Approval{
-		ID: id, SessionID: sessionID, ToolName: toolName,
+		ID: id, SessionID: sessionID, TurnID: turnID, ToolName: toolName,
 		Summary: description, Description: description, Status: "pending", CreatedAt: time.Now().UTC(),
 	})
 	return id

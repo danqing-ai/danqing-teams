@@ -1284,7 +1284,8 @@ function isAskExpired(ev: { seq: number; turnId?: string; payload: unknown }): b
     if ((e.type === 'tool.completed' || e.type === 'tool.error') && String(p?.callId ?? '') === callId) {
       return e.type === 'tool.error'
     }
-    if (e.type === 'turn.failed' || e.type === 'turn.ended') return true
+    // ResumeTurn re-publishes turn.started; prior ask_user waiters are gone.
+    if (e.type === 'turn.started' || e.type === 'turn.failed' || e.type === 'turn.ended') return true
   }
   return false
 }

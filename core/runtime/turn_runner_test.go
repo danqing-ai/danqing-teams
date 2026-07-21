@@ -225,7 +225,7 @@ func (g *mockApprovalGate) WaitApproval(_ context.Context, _ string) (ApprovalOu
 	return <-g.result, nil
 }
 
-func (g *mockApprovalGate) CreateApproval(_, _, _, _ string) string {
+func (g *mockApprovalGate) CreateApproval(_, _, _, _, _ string) string {
 	return "approval-1"
 }
 
