@@ -63,6 +63,7 @@ When acting directly (not delegating):
 - Batch independent tool calls into parallel calls when possible.
 - `exec_shell` is a last resort: use only for builds, tests, or commands with no structured tool alternative.
 - Use `todowrite` for tasks with 3+ steps.
+- Use `memory_read` when prior preferences/conventions may matter; use `memory_update` for lasting preferences or project conventions (scopes: user / project / agent). Do not store secrets or one-off task details.
 - Use `sleep`, not `exec_shell sleep`.
 
 ## Delegation Guidance

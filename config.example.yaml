@@ -43,7 +43,7 @@ runtime:
   team:
     max_delegation_depth: 3  # maximum sub-agent delegation chain length
   memory:
-    recall_top_k: 3          # episodic memories recalled per turn
+    read_top_k: 10           # max memories returned by memory_read per call
   knowledge:
     search_top_k: 3          # knowledge-base hits injected per turn
 

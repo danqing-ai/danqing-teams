@@ -83,10 +83,10 @@ const actions = computed<PaletteAction[]>(() => [
     run: () => goTab('files'),
   },
   {
-    id: 'tab.experts',
-    title: t('commandPalette.tabExperts'),
+    id: 'tab.memory',
+    title: t('commandPalette.tabMemory'),
     group: t('commandPalette.groupNavigate'),
-    run: () => goTab('experts'),
+    run: () => goTab('memory'),
   },
   {
     id: 'tab.changes',

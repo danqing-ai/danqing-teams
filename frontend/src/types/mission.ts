@@ -204,7 +204,7 @@ export interface ConfigFile {
       maxDelegationDepth: number
     }
     memory: {
-      recallTopK: number
+      readTopK: number
     }
     knowledge: {
       searchTopK: number
@@ -290,7 +290,7 @@ export interface RuntimeConfigForm {
   doomLoopThreshold: number
   maxStepsDefault: number
   maxDelegationDepth: number
-  recallTopK: number
+  readTopK: number
   searchTopK: number
   compactionEnabled: boolean
   compactionMaxTokens: number

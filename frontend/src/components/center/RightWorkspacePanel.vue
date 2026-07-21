@@ -3,19 +3,19 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import PlanPanel from '@/components/center/PlanPanel.vue'
 import FileTree from '@/components/center/FileTree.vue'
-import ExpertsPanel from '@/components/center/ExpertsPanel.vue'
+import MemoryPanel from '@/components/center/MemoryPanel.vue'
 import ChangesPanel from '@/components/center/ChangesPanel.vue'
 import TerminalPanel from '@/components/center/TerminalPanel.vue'
 import type { StreamEvent } from '@/types/mission'
 
-export type RightTab = 'plan' | 'files' | 'experts' | 'changes' | 'terminal' | 'browser'
+export type RightTab = 'plan' | 'files' | 'memory' | 'changes' | 'terminal' | 'browser'
 
 const props = defineProps<{
   streamEvents: StreamEvent[]
   planTurnId?: string | null
   projectId: string | null
+  agentId?: string | null
   changesCount?: number
-  expertsRunning?: number
 }>()
 
 const rightTab = defineModel<RightTab>('tab', { required: true })
@@ -28,16 +28,19 @@ const { t } = useI18n()
 const terminalOpened = ref(false)
 const fileTreeRef = ref<InstanceType<typeof FileTree> | null>(null)
 const changesPanelRef = ref<InstanceType<typeof ChangesPanel> | null>(null)
+const memoryPanelRef = ref<InstanceType<typeof MemoryPanel> | null>(null)
+const memoryCount = ref(0)
 
 watch(rightTab, (tab) => {
   if (tab === 'terminal') terminalOpened.value = true
   if (tab === 'changes') changesPanelRef.value?.refresh?.()
+  if (tab === 'memory') memoryPanelRef.value?.refresh?.()
 })
 
 const tabs = computed(() => [
   { id: 'plan' as const, label: t('sessions.tabPlan') },
   { id: 'files' as const, label: t('sessions.tabFiles') },
-  { id: 'experts' as const, label: t('sessions.tabExperts'), badge: props.expertsRunning },
+  { id: 'memory' as const, label: t('sessions.tabMemory'), badge: memoryCount.value },
   { id: 'changes' as const, label: t('sessions.tabChanges'), badge: props.changesCount },
   { id: 'terminal' as const, label: t('sessions.tabTerminal') },
   { id: 'browser' as const, label: t('sessions.tabBrowser') },
@@ -46,6 +49,7 @@ const tabs = computed(() => [
 defineExpose({
   changesPanelRef,
   refreshChanges: () => changesPanelRef.value?.refresh?.(),
+  refreshMemory: () => memoryPanelRef.value?.refresh?.(),
 })
 </script>
 
@@ -79,7 +83,6 @@ defineExpose({
         <div v-else class="right-workspace__empty">{{ t('sessions.noProjectLinked') }}</div>
       </template>
 
-      <ExpertsPanel v-else-if="rightTab === 'experts'" :stream-events="streamEvents" />
       <ChangesPanel v-else-if="rightTab === 'changes'" ref="changesPanelRef" />
 
       <template v-else-if="rightTab === 'browser'">
@@ -89,6 +92,15 @@ defineExpose({
       <template v-else-if="rightTab === 'terminal'">
         <div v-if="!projectId" class="right-workspace__empty">{{ t('sessions.noProjectLinked') }}</div>
       </template>
+
+      <MemoryPanel
+        v-show="rightTab === 'memory'"
+        ref="memoryPanelRef"
+        :project-id="projectId"
+        :agent-id="agentId ?? null"
+        :stream-events="streamEvents"
+        @loaded="memoryCount = $event"
+      />
 
       <TerminalPanel
         v-if="terminalOpened && projectId"

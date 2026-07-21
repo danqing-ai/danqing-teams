@@ -2,8 +2,12 @@ package sqlite
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"danqing-teams/core/domain"
 	"danqing-teams/core/paths"
@@ -52,6 +56,7 @@ func (s *Store) migrate() error {
 		&llmConfigModel{},
 		&approvalModel{},
 		&knowledgeDocModel{},
+		&memoryModel{},
 		&streamEventModel{},
 		&turnModel{},
 		&mcpServerModel{},
@@ -72,16 +77,17 @@ func (s *Store) migrate() error {
 	return nil
 }
 
-func (s *Store) Agents() port.AgentRepo       { return &agentRepo{s} }
-func (s *Store) Skills() port.SkillRepo       { return &skillRepo{s} }
+func (s *Store) Agents() port.AgentRepo         { return &agentRepo{s} }
+func (s *Store) Skills() port.SkillRepo         { return &skillRepo{s} }
 func (s *Store) SkillFiles() port.SkillFileRepo { return &skillFileRepo{s} }
-func (s *Store) Sessions() port.SessionRepo   { return &sessionRepo{s} }
-func (s *Store) Projects() port.ProjectRepo   { return &projectRepo{s} }
-func (s *Store) LLMConfig() port.LLMConfigRepo { return &llmConfigRepo{s} }
-func (s *Store) Approvals() port.ApprovalRepo { return &approvalRepo{s} }
+func (s *Store) Sessions() port.SessionRepo     { return &sessionRepo{s} }
+func (s *Store) Projects() port.ProjectRepo     { return &projectRepo{s} }
+func (s *Store) LLMConfig() port.LLMConfigRepo  { return &llmConfigRepo{s} }
+func (s *Store) Approvals() port.ApprovalRepo   { return &approvalRepo{s} }
 func (s *Store) StreamEvents() port.StreamEventRepo { return &streamEventRepo{s} }
-func (s *Store) Turns() port.TurnRepo             { return &turnRepo{s} }
-func (s *Store) MCPServers() port.MCPServerRepo  { return &mcpServerRepo{s} }
+func (s *Store) Turns() port.TurnRepo           { return &turnRepo{s} }
+func (s *Store) MCPServers() port.MCPServerRepo { return &mcpServerRepo{s} }
+func (s *Store) Memories() port.MemoryRepo      { return &memoryRepo{s} }
 
 func (s *Store) KnowledgeDocs() []KnowledgeDoc {
 	var rows []knowledgeDocModel
@@ -505,4 +511,136 @@ func (r *mcpServerRepo) Upsert(ctx context.Context, s domain.MCPServer) error {
 
 func (r *mcpServerRepo) Delete(ctx context.Context, id string) error {
 	return r.s.db.WithContext(ctx).Delete(&mcpServerModel{}, "id = ?", id).Error
+}
+
+// ---- MemoryRepo ----
+
+type memoryModel struct {
+	ID        string    `gorm:"primaryKey"`
+	Scope     string    `gorm:"uniqueIndex:idx_memory_scope_key;not null"`
+	ScopeID   string    `gorm:"column:scope_id;uniqueIndex:idx_memory_scope_key;not null"`
+	Key       string    `gorm:"uniqueIndex:idx_memory_scope_key;not null"`
+	Content   string    `gorm:"not null"`
+	UpdatedAt time.Time `gorm:"not null"`
+}
+
+func (memoryModel) TableName() string { return "memories" }
+
+type memoryRepo struct{ s *Store }
+
+func (r *memoryRepo) Upsert(ctx context.Context, m domain.Memory) (domain.Memory, error) {
+	now := time.Now().UTC()
+	existing, err := r.GetByKey(ctx, m.Scope, m.ScopeID, m.Key)
+	if err == nil {
+		m.ID = existing.ID
+		m.UpdatedAt = now
+		row := memoryToModel(m)
+		if err := r.s.db.WithContext(ctx).Save(&row).Error; err != nil {
+			return domain.Memory{}, err
+		}
+		return m, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return domain.Memory{}, err
+	}
+	if m.ID == "" {
+		m.ID = fmt.Sprintf("mem-%d", now.UnixNano())
+	}
+	m.UpdatedAt = now
+	row := memoryToModel(m)
+	if err := r.s.db.WithContext(ctx).Create(&row).Error; err != nil {
+		return domain.Memory{}, err
+	}
+	return m, nil
+}
+
+func (r *memoryRepo) GetByKey(ctx context.Context, scope domain.MemoryScope, scopeID, key string) (domain.Memory, error) {
+	var row memoryModel
+	err := r.s.db.WithContext(ctx).
+		Where("scope = ? AND scope_id = ? AND key = ?", string(scope), scopeID, key).
+		First(&row).Error
+	if err != nil {
+		return domain.Memory{}, err
+	}
+	return memoryToDomain(row), nil
+}
+
+func (r *memoryRepo) Search(ctx context.Context, q domain.MemoryQuery) ([]domain.Memory, error) {
+	if len(q.Scopes) == 0 {
+		return nil, nil
+	}
+
+	clauses := make([]string, 0, len(q.Scopes))
+	args := make([]any, 0, len(q.Scopes)*2)
+	for _, ref := range q.Scopes {
+		clauses = append(clauses, "(scope = ? AND scope_id = ?)")
+		args = append(args, string(ref.Scope), ref.ScopeID)
+	}
+
+	db := r.s.db.WithContext(ctx).Model(&memoryModel{}).
+		Where(strings.Join(clauses, " OR "), args...)
+
+	if q.Scope != "" {
+		db = db.Where("scope = ?", string(q.Scope))
+	}
+	if q.Key != "" {
+		db = db.Where("key = ?", q.Key)
+	}
+
+	var rows []memoryModel
+	if err := db.Order("updated_at DESC").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	out := make([]domain.Memory, 0, len(rows))
+	query := strings.ToLower(strings.TrimSpace(q.Query))
+	for _, row := range rows {
+		m := memoryToDomain(row)
+		if query != "" {
+			hay := strings.ToLower(m.Key + " " + m.Content)
+			score := 0
+			for _, w := range strings.Fields(query) {
+				if strings.Contains(hay, w) {
+					score++
+				}
+			}
+			if score == 0 && !strings.Contains(hay, query) {
+				continue
+			}
+		}
+		out = append(out, m)
+	}
+
+	if q.TopK > 0 && len(out) > q.TopK {
+		out = out[:q.TopK]
+	}
+	return out, nil
+}
+
+func (r *memoryRepo) Delete(ctx context.Context, scope domain.MemoryScope, scopeID, key string) error {
+	return r.s.db.WithContext(ctx).
+		Where("scope = ? AND scope_id = ? AND key = ?", string(scope), scopeID, key).
+		Delete(&memoryModel{}).Error
+}
+
+func memoryToModel(m domain.Memory) memoryModel {
+	return memoryModel{
+		ID:        m.ID,
+		Scope:     string(m.Scope),
+		ScopeID:   m.ScopeID,
+		Key:       m.Key,
+		Content:   m.Content,
+		UpdatedAt: m.UpdatedAt,
+	}
+}
+
+func memoryToDomain(m memoryModel) domain.Memory {
+	return domain.Memory{
+		ID:        m.ID,
+		Scope:     domain.MemoryScope(m.Scope),
+		ScopeID:   m.ScopeID,
+		Key:       m.Key,
+		Content:   m.Content,
+		UpdatedAt: m.UpdatedAt,
+	}
 }

@@ -29,6 +29,7 @@ type engineRunCfg struct {
 	autoApprove            bool
 	teamMaxDelegationDepth int
 	knowledgeSearchTopK    int
+	memoryReadTopK         int
 }
 
 type Engine struct {
@@ -40,6 +41,7 @@ type Engine struct {
 	agents        *service.AgentManager
 	skills        *service.SkillManager
 	knowledge     *builtin.Knowledge
+	memories      port.MemoryRepo
 	llm           port.LLMProvider
 	stream        port.EventStream
 	sandbox       port.Sandbox
@@ -80,6 +82,7 @@ func (e *Engine) loadRunCfg(ctx context.Context) engineRunCfg {
 	cfg := engineRunCfg{
 		teamMaxDelegationDepth: 3,
 		knowledgeSearchTopK:    3,
+		memoryReadTopK:         10,
 	}
 	if e.configStore != nil {
 		if c, err := e.configStore.Load(ctx); err == nil {
@@ -87,6 +90,9 @@ func (e *Engine) loadRunCfg(ctx context.Context) engineRunCfg {
 			cfg.autoApprove = rt.AutoApprove
 			cfg.teamMaxDelegationDepth = rt.Team.MaxDelegationDepth
 			cfg.knowledgeSearchTopK = rt.Knowledge.SearchTopK
+			if rt.Memory.ReadTopK > 0 {
+				cfg.memoryReadTopK = rt.Memory.ReadTopK
+			}
 		}
 	}
 	return cfg
@@ -101,7 +107,7 @@ func (e *Engine) isAutoApprove() bool {
 	return false
 }
 
-func NewEngine(sessions *service.SessionManager, turns *service.TurnManager, projects *service.ProjectManager, approvals *service.ApprovalManager, turnLog *service.TurnLogManager, agents *service.AgentManager, skills *service.SkillManager, knowledge *builtin.Knowledge, llm port.LLMProvider, stream port.EventStream, checkpointStore CompactionCheckpointStore, configStore port.ConfigStore, dataDir string) *Engine {
+func NewEngine(sessions *service.SessionManager, turns *service.TurnManager, projects *service.ProjectManager, approvals *service.ApprovalManager, turnLog *service.TurnLogManager, agents *service.AgentManager, skills *service.SkillManager, knowledge *builtin.Knowledge, memories port.MemoryRepo, llm port.LLMProvider, stream port.EventStream, checkpointStore CompactionCheckpointStore, configStore port.ConfigStore, dataDir string) *Engine {
 	catalog := tool.NewRegistry()
 	gate := permission.NewGate(nil)
 	turnRunner := NewTurnRunner(llm, stream, gate, tool.NewRegistry(), configStore)
@@ -118,6 +124,7 @@ func NewEngine(sessions *service.SessionManager, turns *service.TurnManager, pro
 		agents:        agents,
 		skills:        skills,
 		knowledge:     knowledge,
+		memories:      memories,
 		llm:           llm,
 		stream:        stream,
 		turnRunner:    turnRunner,
@@ -381,7 +388,7 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) {
 		e.turnRunner.Registry = reg
 		rep, turnMsgs, err := e.turnRunner.Run(turnCtx, TurnContext{
 			SessionID: sessionID, TurnID: turnID, Agent: agentPtr,
-			Model: s.ModelID, MaxSteps: agentPtr.Steps, WorkDir: workDir, Messages: messages,
+			Model: s.ModelID, MaxSteps: agentPtr.Steps, WorkDir: workDir, ProjectID: s.ProjectID, Messages: messages,
 		})
 
 		e.mu.Lock()
@@ -604,6 +611,7 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 		Model:     modelID,
 		MaxSteps:  agent.Steps,
 		WorkDir:   workDir,
+		ProjectID: projectID,
 		Messages:  messages,
 	})
 
@@ -735,7 +743,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 			childCtx := TurnContext{
 				SessionID: sessionID, TurnID: childTurnID,
 				Agent: workerAgent, Model: modelID, MaxSteps: workerAgent.Steps,
-				WorkDir: workDir,
+				WorkDir: workDir, ProjectID: projectID,
 			}
 			e.stream.Publish(ctx, sessionID, parentTurnID, domain.EventDelegateStarted, domain.DelegateStartedPayload{
 				AgentID: workerAgent.ID, Goal: goal, ChildTurnID: childTurnID,
@@ -834,6 +842,8 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 			Stream: e.stream,
 			OnAsk:  e.waitAskUser,
 		},
+		&builtin.MemoryUpdate{Store: e.memories},
+		&builtin.MemoryRead{Store: e.memories, TopK: cfg.memoryReadTopK},
 		delegator,
 	)
 	reg.CopyMCPServersFrom(e.toolCatalog)
@@ -844,12 +854,15 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 }
 
 func (e *Engine) buildWorkerRegistry(agent domain.Agent) *tool.Registry {
+	cfg := e.loadRunCfg(context.Background())
 	reg := tool.NewRegistry(
 		&builtin.SearchKB{Knowledge: e.knowledge, KBIDs: agent.KnowledgeIDs},
 		&builtin.AskUser{
 			Stream: e.stream,
 			OnAsk:  e.waitAskUser,
 		},
+		&builtin.MemoryUpdate{Store: e.memories},
+		&builtin.MemoryRead{Store: e.memories, TopK: cfg.memoryReadTopK},
 	)
 	reg.CopyMCPServersFrom(e.toolCatalog)
 	e.mountAlwaysOnBuiltins(reg)

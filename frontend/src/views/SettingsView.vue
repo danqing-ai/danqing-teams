@@ -119,7 +119,7 @@ const runtimeForm = ref({
   doomLoopThreshold: 3,
   maxStepsDefault: 20,
   maxDelegationDepth: 3,
-  recallTopK: 3,
+  readTopK: 10,
   searchTopK: 3,
   compactionEnabled: true,
   compactionMaxTokens: 128000,
@@ -695,10 +695,10 @@ const hasFooterActions = computed(() => {
             <p class="settings-form-group__desc">{{ $t('settings.runtimeMemoryKnowledgeDesc') }}</p>
             <div class="settings-form-row">
               <div class="settings-field settings-field--half">
-                <span class="settings-field__label">{{ $t('settings.recallTopK') }}</span>
+                <span class="settings-field__label">{{ $t('settings.readTopK') }}</span>
                 <div class="slider-row">
-                  <DqSlider v-model="runtimeForm.recallTopK" :min="1" :max="20" :step="1" />
-                  <span class="slider-row__value">{{ runtimeForm.recallTopK }}</span>
+                  <DqSlider v-model="runtimeForm.readTopK" :min="1" :max="20" :step="1" />
+                  <span class="slider-row__value">{{ runtimeForm.readTopK }}</span>
                 </div>
               </div>
               <div class="settings-field settings-field--half">

@@ -85,6 +85,10 @@ Custom skills (Agentskills layout) are also read from `~/.agents/skills/`,
 `<project>/.dq-teams/skills/`, and `<project>/.agents/skills/` on each new turn
 (memory only, not SQLite).
 
+Agent durable memories live in SQLite (`memories` table) via
+`memory_update` / `memory_read` (scopes: user / project / agent). UI: right
+workspace **Memory** tab. Config: `runtime.memory.read_top_k`.
+
 On first launch, existing data may be migrated from
 `~/Library/Application Support/com.danqing.teams/` or `./data/teams.db`.
 

@@ -34,9 +34,38 @@ func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList 
 		b.WriteString(activeTodos)
 	}
 	b.WriteString("\n\n")
+	b.WriteString(buildMemoryPolicy())
+	b.WriteString("\n\n")
 	b.WriteString(buildRuntimeEnvironment(sandboxStatus))
 
 	return b.String()
+}
+
+func buildMemoryPolicy() string {
+	return `<memory-policy>
+Use memory_update / memory_read for durable facts that should survive across sessions. Do not dump all memories into replies; call tools when needed.
+
+When to memory_update:
+- User states a lasting preference, correction, or "remember this"
+- Stable project conventions, architecture decisions, or verified project facts
+- Agent-specific working style that should persist for this agent role
+
+Do NOT memory_update:
+- One-off task details or transient progress (use todowrite)
+- Large code dumps, secrets/credentials, or file contents that can be re-read from the repo
+
+Scope selection:
+- user — cross-project preferences and habits
+- project — conventions and decisions for the current project only
+- agent — facts specific to this agent role
+
+When to memory_read:
+- Near the start of a new session or when prior preferences may matter
+- User refers to something said earlier / "as we discussed"
+- Before style, architecture, or convention-sensitive decisions
+
+Writing style: short stable keys (e.g. preferred_language); one to a few factual sentences; update the same key instead of duplicating.
+</memory-policy>`
 }
 
 // buildRuntimeEnvironment returns a block describing the runtime OS / shell environment.

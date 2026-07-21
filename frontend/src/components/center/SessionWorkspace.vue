@@ -1505,29 +1505,6 @@ watch(
   { immediate: true },
 )
 
-function syncExpertsRunning() {
-  const map = new Map<string, boolean>()
-  for (const ev of sessions.streamEvents) {
-    if (ev.type === 'delegate.started') {
-      const p = asRecord(ev.payload)
-      const id = String(p?.childTurnId ?? '')
-      if (id) map.set(id, true)
-    } else if (ev.type === 'delegate.completed') {
-      for (const [id, running] of map) {
-        if (running) {
-          map.set(id, false)
-          break
-        }
-      }
-    }
-  }
-  let n = 0
-  for (const v of map.values()) if (v) n++
-  workspaceUi.expertsRunning = n
-}
-
-watch(() => sessions.streamEvents.length, syncExpertsRunning, { immediate: true })
-
 watch(
   () => approvalAnchors.value.filter((a) => a.pending).length,
   (n) => { workspaceUi.pendingApprovals = n },
@@ -1901,7 +1878,7 @@ function onTitleKeydown(e: KeyboardEvent) {
           :plan-turn-id="planTurnId"
           :project-id="sessions.selectedProjectId"
           :changes-count="workspaceUi.changesCount"
-          :experts-running="workspaceUi.expertsRunning"
+          :agent-id="sessions.selectedAgentId"
           @open-in-browser="openFileInBrowser"
         >
           <template #browser>
@@ -3493,7 +3470,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   min-height: 0;
 }
 
-.session-workspace__right > :deep(.experts-panel),
+.session-workspace__right > :deep(.memory-panel),
 .session-workspace__right > :deep(.changes-panel) {
   flex: 1;
   min-height: 0;

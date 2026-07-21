@@ -415,5 +415,8 @@ func TestFormatActiveTodosAndSystemPrompt(t *testing.T) {
 	if !contains(sys, "<active-todos>") || !contains(sys, "[in_progress] A (high)") {
 		t.Errorf("expected active-todos in prompt, got %q", sys)
 	}
+	if !contains(sys, "<memory-policy>") || !contains(sys, "memory_update") {
+		t.Errorf("expected memory-policy in prompt, got %q", sys)
+	}
 }
 

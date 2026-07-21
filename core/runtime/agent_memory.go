@@ -1,20 +1,13 @@
-// Package runtime provides the agent memory implementation.
+// Package runtime — durable agent memory.
 //
-// TODO(nil): Episodic memory and Notepad (inter-agent wisdom bus) are temporarily removed.
+// Durable cross-session memory is provided by the always-on tools
+// memory_update / memory_read (see tool/builtin/memory.go), backed by the
+// SQLite memories table with user / project / agent scopes.
 //
-// Original design (removed because of near-zero recall rate and redundant injection):
-//   1. Episodic (agent-specific):
-//      - WriteEpisodic: afterTurn() writes {agentID, turnSummary}.
-//      - Recall: strings.Contains keyword matching against entries for the agent.
-//      - Injected into system prompt as "Agent memory" section.
-//      - Near-zero hit rate — naive substring match against goal text.
-//   2. Notepad (inter-agent wisdom bus):
-//      - AppendNotepad: delegate_agent appends "[agentName] summary" on subagent completion.
-//      - NotepadList: injected as "Mission wisdom" into every subsequent system prompt.
-//      - Redundant — subagent results are already in tool result messages.
-//      - No size cap — unbounded growth with delegation count.
+// System prompt guidance lives in <memory-policy> (prompt_builder.go).
+// Memories are tool-driven: they are NOT auto-injected every turn.
 //
-// Future design — compaction-time BM25 indexing:
+// Future (separate from durable tool memory) — compaction-time BM25 indexing:
 //
 // Rather than indexing per-turn summaries, index the full conversation as it is
 // about to be dropped by compaction. This captures all messages (tool calls,
@@ -28,8 +21,7 @@
 //     Return top-K message chunks as "Agent memory" in the system prompt.
 //   - Index pruning: when a session ends, discard the index (pure in-memory).
 //     For long-running sessions, evict oldest documents by token budget.
-//   - The buildSystemPrompt path and config already have a memory []string slot
-//     ready for injection.
 //
-
+// Original episodic / notepad design was removed (near-zero recall rate and
+// redundant injection with tool results).
 package runtime

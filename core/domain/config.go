@@ -63,12 +63,9 @@ type ConfigTeamSection struct {
 	MaxDelegationDepth int `json:"maxDelegationDepth" mapstructure:"max_delegation_depth"`
 }
 
-// ConfigMemorySection is reserved for future BM25-based episodic recall.
-// TODO(nil): Re-enable when BM25-indexed episodic memory is implemented.
-// The current config is intentionally a no-op — recall was removed
-// because the original strings.Contains matching had near-zero hit rate.
+// ConfigMemorySection controls durable memory_read result limits.
 type ConfigMemorySection struct {
-	RecallTopK int `json:"recallTopK" mapstructure:"recall_top_k"`
+	ReadTopK int `json:"readTopK" mapstructure:"read_top_k"`
 }
 
 type ConfigKnowledgeSection struct {

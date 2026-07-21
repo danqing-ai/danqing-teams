@@ -16,6 +16,15 @@ type Repository interface {
 	StreamEvents() StreamEventRepo
 	Turns()        TurnRepo
 	MCPServers()   MCPServerRepo
+	Memories()     MemoryRepo
+}
+
+// MemoryRepo persists agent-authored durable memories (memory_update / memory_read).
+type MemoryRepo interface {
+	Upsert(ctx context.Context, m domain.Memory) (domain.Memory, error)
+	GetByKey(ctx context.Context, scope domain.MemoryScope, scopeID, key string) (domain.Memory, error)
+	Search(ctx context.Context, q domain.MemoryQuery) ([]domain.Memory, error)
+	Delete(ctx context.Context, scope domain.MemoryScope, scopeID, key string) error
 }
 
 type AgentRepo interface {

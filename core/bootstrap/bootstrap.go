@@ -150,7 +150,7 @@ func New(cfg Config) *Core {
 	checkpointStore := turnlog.NewCheckpointStore(pm.ProjectDir)
 
 	sessions := service.NewSessionManager(st, nil, provider)
-	eng := dqruntime.NewEngine(sessions, turnManager, pm, approvalManager, turnLogManager, agents, skills, knowledge, provider, stream, checkpointStore, loader, appCfg.Data.Dir)
+	eng := dqruntime.NewEngine(sessions, turnManager, pm, approvalManager, turnLogManager, agents, skills, knowledge, st.Memories(), provider, stream, checkpointStore, loader, appCfg.Data.Dir)
 	sessions.SetEngine(eng)
 
 	sb := sandbox.New(appCfg.Runtime.Sandbox)
@@ -173,6 +173,12 @@ func New(cfg Config) *Core {
 	eng.RegisterTool(&builtin.AskUser{})
 	eng.RegisterTool(&builtin.Sleep{})
 	eng.RegisterTool(&builtin.ReadSkill{Skills: skills})
+	memTopK := appCfg.Runtime.Memory.ReadTopK
+	if memTopK <= 0 {
+		memTopK = 10
+	}
+	eng.RegisterTool(&builtin.MemoryUpdate{Store: st.Memories()})
+	eng.RegisterTool(&builtin.MemoryRead{Store: st.Memories(), TopK: memTopK})
 	eng.RecoverRunning(context.Background())
 
 	return &Core{

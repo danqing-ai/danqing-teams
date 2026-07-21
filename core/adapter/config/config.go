@@ -65,7 +65,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("runtime.turn.doom_loop_threshold", 5)
 	v.SetDefault("runtime.turn.max_steps_default", 20)
 	v.SetDefault("runtime.team.max_delegation_depth", 3)
-	v.SetDefault("runtime.memory.recall_top_k", 3)
+	v.SetDefault("runtime.memory.read_top_k", 10)
 	v.SetDefault("runtime.knowledge.search_top_k", 3)
 	v.SetDefault("runtime.compaction.enabled", true)
 	v.SetDefault("runtime.compaction.model", "")
@@ -150,6 +150,14 @@ func (l *Loader) Load(_ context.Context) (*domain.ConfigFile, error) {
 	}
 	if len(cfg.Market.Sources) == 0 {
 		cfg.Market.Sources = defaultMarketSources()
+	}
+	// Migrate legacy runtime.memory.recall_top_k → read_top_k.
+	if cfg.Runtime.Memory.ReadTopK <= 0 {
+		if legacy := l.v.GetInt("runtime.memory.recall_top_k"); legacy > 0 {
+			cfg.Runtime.Memory.ReadTopK = legacy
+		} else {
+			cfg.Runtime.Memory.ReadTopK = 10
+		}
 	}
 	return &cfg, nil
 }

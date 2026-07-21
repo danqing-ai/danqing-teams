@@ -8,4 +8,4 @@
 | `Shift+Enter` | New line in composer |
 | `Esc` | Cancel browser element select / close dialogs |
 
-Command palette actions include: new session, stop turn, open settings, and switch right-workspace tabs (Plan / Files / Experts / Changes / Terminal / Browser).
+Command palette actions include: new session, stop turn, open settings, and switch right-workspace tabs (Plan / Files / Memory / Changes / Terminal / Browser).

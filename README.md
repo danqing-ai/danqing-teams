@@ -8,7 +8,7 @@ AI agent collaboration platform. A general-purpose **Work Agent** with AI coding
 
 ## Product UI
 
-Three-pane workspace: project sidebar · agent execution log · live browser preview. Describe a goal, watch tool calls stream in, and open the result in the built-in browser.
+Three-pane workspace: project sidebar · agent execution log · right panel (Plan / Files / **Memory** / Changes / Terminal / Browser). Describe a goal, watch tool calls stream in, browse durable memories, and open the result in the built-in browser.
 
 | Research & report | Interactive demo | Mini-game |
 |-------------------|------------------|-----------|
@@ -26,12 +26,13 @@ Every capability is a Tool — no mode switches, no special cases:
 
 | Traditional concept | Unified abstraction |
 |---------------------|---------------------|
-| Sub-agent delegation | `sub_agent` Tool |
+| Sub-agent delegation | `delegate_agent` Tool |
 | User interaction | `ask_user` Tool |
-| Skills / capabilities | `skill` Tool |
-| Knowledge retrieval | `knowledge` Tool |
-| File operations | `file` Tool |
-| External APIs | `api` Tool |
+| Skills / capabilities | `read_skill` / skill bindings |
+| Knowledge retrieval | `search_kb` Tool |
+| Durable memory | `memory_update` / `memory_read` (user · project · agent) |
+| File operations | `read_file` / `write` / `edit` / … |
+| External APIs | `http_request` / MCP / `web_fetch` · `web_search` |
 
 One abstraction (Tool), one loop (Agent Loop), one store (Turn Log). New capability = new Tool.
 
@@ -48,7 +49,9 @@ Execute tools (Agent Loop)
     ↓
 Need clarification? → ask_user Tool
     ↓
-Need delegation? → sub_agent Tool
+Need to remember? → memory_update / memory_read (cross-session, scoped)
+    ↓
+Need delegation? → delegate_agent Tool
       → new Turn, fresh messages (system + goal; parent transcript not inherited)
       → own tool registry / skills / knowledge
       → child runs the same Agent Loop
@@ -58,6 +61,42 @@ Done → deliver result
 ```
 
 Delegation is not a framework scheduler or a parallel product mode — it is a tool call on the **same thinking chain**, with **hard context isolation**. Developers supply Tools and agent definitions; the LLM orchestrates. Coding and work modes emerge from configuration, not an explicit `mode` flag.
+
+### Long-term memory
+
+Cross-session continuity is a first-class Tool — not prompt stuffing, not an opaque product black box, and not the same thing as session compaction.
+
+**How it works**
+
+| Piece | Behavior |
+|-------|----------|
+| Write | `memory_update(scope, key, content)` — model decides *when* something is worth remembering |
+| Read | `memory_read(scope?, key?, query?)` — on-demand retrieval; **not** auto-injected every turn |
+| Scopes | `user` (global prefs) · `project` (conventions / decisions) · `agent` (role-specific style) |
+| Store | SQLite `memories` table, separate from Knowledge docs and Turn Log |
+| Human | Right-panel **Memory** tab — browse, refresh, delete |
+
+System prompt includes a `<memory-policy>` that steers the model: remember lasting preferences and project conventions; skip one-off tasks, secrets, large code dumps, and anything already in the repo (`todowrite` covers transient progress).
+
+**Not confused with**
+
+| Mechanism | Role |
+|-----------|------|
+| Memory tools | Durable facts the agent *chooses* to keep across sessions |
+| Compaction checkpoint | Session-local summary when context is truncated |
+| Knowledge (`search_kb`) | Human-curated documents bound to an agent |
+
+**vs mainstream AI agents**
+
+| Approach | Typical products / stacks | Gap | DanQing Teams |
+|----------|---------------------------|-----|---------------|
+| Opaque product memory | ChatGPT / Claude “Memory” | User rarely sees structure, scope, or exact writes | Explicit tools + visible Memory tab; scoped keys |
+| IDE / coding-agent memory | Cursor-style memories | Often product-private; hard to audit or share across surfaces | Same SQLite store for web / desktop / CLI; API list/delete |
+| Framework buffers | LangChain ConversationBuffer / summary memory | Session-bound chat history, not durable project facts | Separate durable layer with `user` / `project` / `agent` |
+| Vector memory services | Mem0 / Zep-style stores | Extra infra; write policy often external to the agent loop | Built-in tools on the Agent Loop; keyword search v1, no extra service |
+| Auto-summarize everything | Turn/episode auto-index | Noise, near-zero useful recall (we tried this; removed) | Model-gated writes only when worth remembering |
+
+Mainstream often treats memory as either *invisible product magic* or *another vector DB to wire up*. DanQing Teams keeps memory on the same Tool abstraction: the LLM decides, storage is inspectable, and humans stay in the loop via the Memory tab.
 
 ### Log is state
 
@@ -73,8 +112,9 @@ Delegation is not a framework scheduler or a parallel product mode — it is a t
 | Control flow | Developer-written graph, role router, or product modes | **Pure LLM-driven** — no human-maintained workflow |
 | Abstraction | Agent / Chain / Graph / Role / Mode layers | **Tool only** — minimal, flat |
 | Decision center | Nodes / handoffs / role scheduling | LLM plans Tool Call DAGs on one Agent Loop |
-| Sub-agents | Explicit create, configure, route; or parallel sessions / modes | `sub_agent` Tool on the **same thinking chain** |
+| Sub-agents | Explicit create, configure, route; or parallel sessions / modes | `delegate_agent` Tool on the **same thinking chain** |
 | Context | Often shared or trimmed parent transcript | **Hard isolation** — child gets goal (+ optional context) only; parent sees Report |
+| Memory | Opaque product memory, chat buffers, or external vector DBs | Explicit `memory_update` / `memory_read` + scoped store + Memory tab |
 | User interaction | Preset nodes / approval gates | `ask_user` Tool — model chooses when |
 | State | In-memory first, optional persistence | Native persistence — log is state |
 | Debugging | Breakpoints / external logs | Visual replay; edit results and continue |
@@ -102,8 +142,9 @@ Project/
 | **Task** | Multi-turn interaction around one goal |
 | **Turn** | One [input → agent reply], containing N LLM Steps |
 | **Step** | One LLM request/response inside a Turn (atomic context unit) |
-| **Delegated agent** | Delegation is a Tool; child agent runs isolated, result returns to parent |
+| **Delegated agent** | Delegation is a Tool (`delegate_agent`); child agent runs isolated, result returns to parent |
 | **ask_user** | Asking the user is a Tool; loop pauses until the reply arrives |
+| **Memory** | Cross-session facts via `memory_update` / `memory_read` (scopes: user / project / agent) |
 
 ## Architecture
 
@@ -128,7 +169,7 @@ server/   cli/   tui/    frontend/ (Vue 3 + Vite)
 | Bootstrap | `core/bootstrap/` | DI wiring, config assembly |
 | Services | `core/service/` | Session, Project, Agent, Skill, LLM config, … |
 | Runtime | `core/runtime/` | Session/Turn runners, prompt, compaction, permission, tools |
-| Domain | `core/domain/` | Agent, Session, Project, Skill, Knowledge, Turn, … |
+| Domain | `core/domain/` | Agent, Session, Project, Skill, Knowledge, Memory, Turn, … |
 | Ports | `core/port/` | Engine, LLMProvider, Repository, Stream |
 | Adapters | `core/adapter/` | LLM providers, config loader |
 | Store | `core/store/` | SQLite + Turn Log |

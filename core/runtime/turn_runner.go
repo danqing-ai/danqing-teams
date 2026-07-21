@@ -145,6 +145,7 @@ type TurnContext struct {
 	Model     string
 	MaxSteps  int
 	WorkDir   string
+	ProjectID string
 	OnReport  func(domain.Report)
 	Messages  []Message
 }
@@ -458,6 +459,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		args["__session_id"] = tctx.SessionID
 		args["__turn_id"] = tctx.TurnID
 		args["__agent_id"] = tctx.Agent.ID
+		args["__project_id"] = tctx.ProjectID
 		args["__model_id"] = tctx.Model
 		args["__work_dir"] = tctx.WorkDir
 		args["__call_id"] = call.ID

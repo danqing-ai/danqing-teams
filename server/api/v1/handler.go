@@ -115,6 +115,8 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.PUT("/agents/:id", updateAgent(h))
 	api.POST("/agents/:id/reset", resetAgent(h))
 	api.DELETE("/agents/:id", deleteAgent(h))
+	api.GET("/memories", listMemories(h))
+	api.DELETE("/memories", deleteMemory(h))
 	api.GET("/mcp/servers", listMCPServers(h))
 	api.POST("/mcp/servers", createMCPServer(h))
 	api.GET("/mcp/servers/:id", getMCPServer(h))
@@ -405,6 +407,79 @@ func resetAgent(h *Handler) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, agent)
+	}
+}
+
+func listMemories(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if h.Store == nil {
+			c.JSON(http.StatusOK, []domain.Memory{})
+			return
+		}
+		projectID := strings.TrimSpace(c.Query("projectId"))
+		agentID := strings.TrimSpace(c.Query("agentId"))
+		scopes := []domain.MemoryScopeRef{{
+			Scope:   domain.MemoryScopeUser,
+			ScopeID: domain.MemoryUserScopeID,
+		}}
+		if projectID != "" {
+			scopes = append(scopes, domain.MemoryScopeRef{
+				Scope:   domain.MemoryScopeProject,
+				ScopeID: projectID,
+			})
+		}
+		if agentID != "" {
+			scopes = append(scopes, domain.MemoryScopeRef{
+				Scope:   domain.MemoryScopeAgent,
+				ScopeID: agentID,
+			})
+		}
+		items, err := h.Store.Memories().Search(c, domain.MemoryQuery{
+			Scopes: scopes,
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if items == nil {
+			items = []domain.Memory{}
+		}
+		c.JSON(http.StatusOK, items)
+	}
+}
+
+func deleteMemory(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if h.Store == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "store unavailable"})
+			return
+		}
+		scope := domain.MemoryScope(strings.TrimSpace(c.Query("scope")))
+		scopeID := strings.TrimSpace(c.Query("scopeId"))
+		key := strings.TrimSpace(c.Query("key"))
+		if scope == "" || key == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "scope and key are required"})
+			return
+		}
+		switch scope {
+		case domain.MemoryScopeUser:
+			if scopeID == "" {
+				scopeID = domain.MemoryUserScopeID
+			}
+		case domain.MemoryScopeProject, domain.MemoryScopeAgent:
+			if scopeID == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "scopeId is required"})
+				return
+			}
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "scope must be user, project, or agent"})
+			return
+		}
+		if err := h.Store.Memories().Delete(c, scope, scopeID, key); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	}
 }
 

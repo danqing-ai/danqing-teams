@@ -17,7 +17,7 @@ export interface RuntimeForm {
   doomLoopThreshold: number
   maxStepsDefault: number
   maxDelegationDepth: number
-  recallTopK: number
+  readTopK: number
   searchTopK: number
   compactionEnabled: boolean
   compactionMaxTokens: number
@@ -44,7 +44,7 @@ function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
     doomLoopThreshold: rt.turn.doomLoopThreshold,
     maxStepsDefault: rt.turn.maxStepsDefault,
     maxDelegationDepth: rt.team.maxDelegationDepth,
-    recallTopK: rt.memory.recallTopK,
+    readTopK: rt.memory.readTopK,
     searchTopK: rt.knowledge.searchTopK,
     compactionEnabled: rt.compaction?.enabled ?? true,
     compactionMaxTokens: rt.compaction?.maxTokens ?? 128000,
@@ -117,7 +117,7 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
           maxDelegationDepth: form.maxDelegationDepth,
         },
         memory: {
-          recallTopK: form.recallTopK,
+          readTopK: form.readTopK,
         },
         knowledge: {
           searchTopK: form.searchTopK,

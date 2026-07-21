@@ -1,12 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
-export type RightWorkspaceTab = 'plan' | 'files' | 'experts' | 'changes' | 'terminal' | 'browser'
+export type RightWorkspaceTab = 'plan' | 'files' | 'memory' | 'changes' | 'terminal' | 'browser'
 
 export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
   const rightTab = ref<RightWorkspaceTab>('plan')
   const changesCount = ref(0)
-  const expertsRunning = ref(0)
   const pendingApprovals = ref(0)
   const paletteOpen = ref(false)
 
@@ -29,7 +28,6 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
   return {
     rightTab,
     changesCount,
-    expertsRunning,
     pendingApprovals,
     paletteOpen,
     setRightTab,
