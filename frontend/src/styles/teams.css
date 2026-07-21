@@ -2738,8 +2738,8 @@ body.teams-is-resizing {
   transition: max-height 0.25s ease, opacity 0.2s ease, padding 0.2s ease;
 }
 
-/* Thinking indicator for active turns */
-.turn__thinking {
+/* Legacy thinking-dots indicator (optional; expandable UI is in SessionWorkspace) */
+.turn__thinking-dots-row {
   display: flex;
   align-items: center;
   gap: 8px;

@@ -2941,7 +2941,12 @@ function onTitleKeydown(e: KeyboardEvent) {
 }
 
 .turn__thinking {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
   margin: 2px 0;
+  padding: 0;
 }
 
 .turn__thinking-header {
