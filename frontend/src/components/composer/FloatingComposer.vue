@@ -6,6 +6,7 @@ import { useProjectsStore } from '@/stores/projects'
 import { useLLMStore } from '@/stores/llm'
 import { useWorkspaceUiStore } from '@/stores/workspaceUi'
 import ComposerAttachmentTray from '@/components/composer/ComposerAttachmentTray.vue'
+import ContextUsageBar from '@/components/center/ContextUsageBar.vue'
 import { toast } from '@/utils/feedback'
 import type { LLMModel } from '@/types/mission'
 import type { ElementAttachment } from '@/types/element-attachment'
@@ -411,7 +412,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
         <DqInput
           v-model="content"
           type="textarea"
-          :rows="sessions.composingNew ? 3 : 2"
+          :rows="2"
           class="composer-float__input"
           :placeholder="placeholder"
           @keydown="onKeydown"
@@ -509,9 +510,9 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
       </div>
     </div>
 
-    <!-- Lower tray: project + agent context -->
+    <!-- Lower tray: project + agent + context usage -->
     <div
-      v-if="sessions.composingNew || showAgentSelect"
+      v-if="sessions.composingNew || showAgentSelect || sessions.currentSession"
       class="composer-float__tray"
     >
       <div class="composer-float__tray-leading">
@@ -559,6 +560,10 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
           </DqSelect>
         </div>
       </div>
+
+      <div class="composer-float__tray-trailing">
+        <ContextUsageBar />
+      </div>
     </div>
     </template>
   </div>
@@ -569,7 +574,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
 }
 
 .composer-float.is-dragover .composer-float__card {
@@ -583,6 +588,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
 
 .composer-float__card {
   position: relative;
+  z-index: 2;
 }
 
 .composer-float__card--blocked {
@@ -661,7 +667,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
 }
 
 .composer-float__body {
-  padding: 12px 14px 4px;
+  padding: 6px 14px 0;
 }
 
 .composer-float__body :deep(.dq-input),
@@ -670,6 +676,11 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
   background: transparent !important;
   box-shadow: none !important;
   resize: none;
+  min-height: 0 !important;
+  height: calc(2 * 1.45em) !important;
+  max-height: calc(2 * 1.45em) !important;
+  line-height: 1.45;
+  overflow-y: auto;
 }
 
 .composer-float__file-input {
@@ -681,7 +692,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 6px 10px 10px;
+  padding: 4px 10px 8px;
   min-width: 0;
 }
 
@@ -703,12 +714,23 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
 }
 
 .composer-float__tray {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 0 4px 2px;
+  margin-top: -10px;
+  padding: 14px 10px 6px;
   min-width: 0;
+  border-radius: 0 0 var(--dq-radius-menu) var(--dq-radius-menu);
+  background: color-mix(in srgb, var(--dq-glass-popover-bg) 92%, var(--dq-bg-base));
+  border: 1px solid var(--dq-glass-border-strong);
+  border-top: none;
+  box-shadow:
+    0 8px 24px color-mix(in srgb, var(--dq-mask) 18%, transparent);
+  backdrop-filter: var(--dq-glass-blur-heavy);
+  -webkit-backdrop-filter: var(--dq-glass-blur-heavy);
 }
 
 .composer-float__tray-leading {
@@ -723,6 +745,15 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
 
 .composer-float__tray-leading::-webkit-scrollbar {
   display: none;
+}
+
+.composer-float__tray-trailing {
+  flex-shrink: 0;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
 }
 
 .composer-agent-seg--compact {
@@ -743,8 +774,17 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
 
 .composer-agent-seg--compact :deep(.dq-segmented__item.is-active) {
   color: var(--dq-label-primary);
-  background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+  background: color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
   box-shadow: none;
+}
+
+.composer-float__tray :deep(.context-usage__label),
+.composer-float__tray :deep(.context-usage__icon) {
+  color: var(--dq-label-secondary);
+}
+
+.composer-float__tray :deep(.context-usage__pct) {
+  color: var(--dq-label-tertiary);
 }
 
 .composer-meta-chip {

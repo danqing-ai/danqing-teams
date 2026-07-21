@@ -76,14 +76,19 @@ const hasData = computed(() => usedTokens.value > 0 || compactionHistory.value.l
 <style scoped>
 .context-usage {
   flex-shrink: 0;
-  padding: 0 4px 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 0;
+  position: relative;
 }
 
 .context-usage__main {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 28px;
+  justify-content: flex-end;
+  gap: 6px;
+  min-height: 22px;
 }
 
 .context-usage__icon {
@@ -102,9 +107,9 @@ const hasData = computed(() => usedTokens.value > 0 || compactionHistory.value.l
 }
 
 .context-usage__track {
-  flex: 1;
-  max-width: 120px;
-  height: 4px;
+  flex: 0 1 96px;
+  max-width: 96px;
+  height: 3px;
   border-radius: 2px;
   background: color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
   overflow: hidden;
@@ -137,8 +142,8 @@ const hasData = computed(() => usedTokens.value > 0 || compactionHistory.value.l
 }
 
 .context-usage__history-btn {
-  margin-left: auto;
-  padding: 2px 8px;
+  margin-left: 0;
+  padding: 1px 6px;
   border: none;
   border-radius: 6px;
   background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
@@ -152,7 +157,11 @@ const hasData = computed(() => usedTokens.value > 0 || compactionHistory.value.l
 }
 
 .context-usage__history {
-  margin-bottom: 6px;
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 4px);
+  z-index: 2;
+  margin-bottom: 0;
   padding: 8px 10px;
   border-radius: 8px;
   background: color-mix(in srgb, var(--dq-glass-popover-bg, var(--dq-bg-elevated)) 92%, transparent);
@@ -161,6 +170,9 @@ const hasData = computed(() => usedTokens.value > 0 || compactionHistory.value.l
   font-size: var(--dq-font-size-caption);
   color: var(--dq-label-secondary);
   line-height: 1.5;
+  max-width: min(360px, 70vw);
+  text-align: left;
+  white-space: normal;
 }
 
 .context-usage__history-row + .context-usage__history-row {

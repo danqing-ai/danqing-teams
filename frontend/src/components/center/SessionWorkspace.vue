@@ -7,7 +7,6 @@ import { useSessionsStore } from '@/stores/sessions'
 import { useWorkspaceUiStore } from '@/stores/workspaceUi'
 import FloatingComposer from '@/components/composer/FloatingComposer.vue'
 import WelcomeEmpty from '@/components/center/WelcomeEmpty.vue'
-import ContextUsageBar from '@/components/center/ContextUsageBar.vue'
 import ApprovalRail from '@/components/center/ApprovalRail.vue'
 import ToolCardBlock from '@/components/center/ToolCardBlock.vue'
 import RightWorkspacePanel from '@/components/center/RightWorkspacePanel.vue'
@@ -283,7 +282,7 @@ const scrollAreaRef = ref<HTMLElement | null>(null)
 const composerWrapRef = ref<HTMLElement | null>(null)
 const composerStyle = ref<Record<string, string>>({})
 /** Floating composer overlay height — keeps stream content above it. */
-const composerOverlayPx = ref(160)
+const composerOverlayPx = ref(140)
 let composerResizeObs: ResizeObserver | null = null
 
 function updateComposerPosition() {
@@ -1961,7 +1960,6 @@ function onTitleKeydown(e: KeyboardEvent) {
     </div>
 
     <div ref="composerWrapRef" class="session-workspace__composer" :style="composerStyle">
-      <ContextUsageBar />
       <FloatingComposer ref="composerRef" @jump-pending="jumpToFirstPendingApproval" />
     </div>
   </div>
@@ -3618,8 +3616,8 @@ function onTitleKeydown(e: KeyboardEvent) {
   z-index: 10;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 24px 0 18px;
+  gap: 4px;
+  padding: 16px 0 12px;
   pointer-events: none;
 }
 
