@@ -116,8 +116,8 @@ const runtimeForm = ref({
   browserEnabled: true,
   browserExecutablePath: '',
   browserCdpUrl: '',
-  doomLoopThreshold: 3,
-  maxStepsDefault: 20,
+  doomLoopThreshold: 10,
+  maxStepsDefault: 200,
   maxDelegationDepth: 3,
   readTopK: 10,
   searchTopK: 3,
@@ -664,14 +664,14 @@ const hasFooterActions = computed(() => {
               <div class="settings-field settings-field--half">
                 <span class="settings-field__label">{{ $t('settings.doomLoopThreshold') }}</span>
                 <div class="slider-row">
-                  <DqSlider v-model="runtimeForm.doomLoopThreshold" :min="1" :max="10" :step="1" />
+                  <DqSlider v-model="runtimeForm.doomLoopThreshold" :min="1" :max="50" :step="1" />
                   <span class="slider-row__value">{{ runtimeForm.doomLoopThreshold }}</span>
                 </div>
               </div>
               <div class="settings-field settings-field--half">
                 <span class="settings-field__label">{{ $t('settings.maxStepsDefault') }}</span>
                 <div class="slider-row">
-                  <DqSlider v-model="runtimeForm.maxStepsDefault" :min="5" :max="100" :step="1" />
+                  <DqSlider v-model="runtimeForm.maxStepsDefault" :min="5" :max="500" :step="1" />
                   <span class="slider-row__value">{{ runtimeForm.maxStepsDefault }}</span>
                 </div>
               </div>

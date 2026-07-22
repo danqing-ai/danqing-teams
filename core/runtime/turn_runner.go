@@ -198,8 +198,8 @@ func NewTurnRunner(llm port.LLMProvider, stream port.EventStream, perm *permissi
 
 func (p *TurnRunner) loadRunCfg(ctx context.Context) turnRunCfg {
 	cfg := turnRunCfg{
-		doomLoopThreshold:      5,
-		maxStepsDefault:        20,
+		doomLoopThreshold:      10,
+		maxStepsDefault:        200,
 		compactionMaxTokens:    128000,
 		compactionTriggerRatio: 0.85,
 	}
@@ -207,8 +207,12 @@ func (p *TurnRunner) loadRunCfg(ctx context.Context) turnRunCfg {
 		if c, err := p.ConfigStore.Load(ctx); err == nil {
 			rt := c.Runtime
 			cfg.autoApprove = rt.AutoApprove
-			cfg.doomLoopThreshold = rt.Turn.DoomLoopThreshold
-			cfg.maxStepsDefault = rt.Turn.MaxStepsDefault
+			if rt.Turn.DoomLoopThreshold > 0 {
+				cfg.doomLoopThreshold = rt.Turn.DoomLoopThreshold
+			}
+			if rt.Turn.MaxStepsDefault > 0 {
+				cfg.maxStepsDefault = rt.Turn.MaxStepsDefault
+			}
 			cfg.compactionEnabled = rt.Compaction.Enabled
 			cfg.compactionMaxTokens = rt.Compaction.MaxTokens
 			cfg.compactionTriggerRatio = rt.Compaction.TriggerRatio
