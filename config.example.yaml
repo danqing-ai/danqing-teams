@@ -403,27 +403,32 @@ llm:
     # ── 通义千问 Qwen ──────────────────────────────────────────────────
     # Qwen3.7 — 1M / 64K，深度思考
     - model: qwen3.7-max
+      vision: true
       context_window: 1000000
       max_output: 65536
       available_efforts: ["off", "low", "medium", "high"]
 
     - model: qwen3.7-plus
+      vision: true
       context_window: 1000000
       max_output: 65536
       available_efforts: ["off", "low", "medium", "high"]
 
     - model: qwen3.6-flash
+      vision: true
       context_window: 1000000
       max_output: 65536
       available_efforts: ["off", "low", "medium", "high"]
 
     # Qwen3.5 — 1M / 64K
     - model: qwen3.5-plus
+      vision: true
       context_window: 1000000
       max_output: 65536
       available_efforts: ["off", "low", "medium", "high"]
 
     - model: qwen3.5-flash
+      vision: true
       context_window: 1000000
       max_output: 65536
       available_efforts: ["off", "low", "medium", "high"]
@@ -459,18 +464,21 @@ llm:
     #   kimi-for-coding           → Kimi K2.7 Code
     #   kimi-for-coding-highspeed → Kimi K2.7 Code HighSpeed
     - model: k3
+      vision: true
       context_window: 1000000
       max_output: 128000
       temperature: 1.0
       available_efforts: ["off", "low", "high", "max"]
 
     - model: kimi-for-coding
+      vision: true
       context_window: 256000
       max_output: 32768
       temperature: 1.0
       available_efforts: ["off", "high"]
 
     - model: kimi-for-coding-highspeed
+      vision: true
       context_window: 256000
       max_output: 32768
       temperature: 1.0
@@ -478,24 +486,28 @@ llm:
 
     # Moonshot Open Platform aliases (api.moonshot.cn / api.moonshot.ai)
     - model: kimi-k2.7-code
+      vision: true
       context_window: 256000
       max_output: 32768
       temperature: 1.0
       available_efforts: ["off", "high"]
 
     - model: kimi-k2.7-code-highspeed
+      vision: true
       context_window: 256000
       max_output: 32768
       temperature: 1.0
       available_efforts: ["off", "high"]
 
     - model: kimi-k2.6
+      vision: true
       context_window: 256000
       max_output: 32768
       available_efforts: ["off", "high"]
 
     # ── MiniMax ────────────────────────────────────────────────────────
     - model: MiniMax-M3
+      vision: true
       context_window: 1000000
       max_output: 128000
       available_efforts: ["off", "high"]
@@ -518,65 +530,77 @@ llm:
     # ── Google Gemini ──────────────────────────────────────────────────
     # Gemini 2.5 — budget-based thinking
     - model: gemini-2.5-pro
+      vision: true
       context_window: 1048576
       max_output: 65536
       available_efforts: ["off", "low", "medium", "high"]
 
     - model: gemini-2.5-flash
+      vision: true
       context_window: 1048576
       max_output: 65536
       available_efforts: ["off", "low", "medium", "high"]
 
     # Gemini 3.x — thinking_level based (minimal/low/medium/high)
     - model: gemini-3.1-pro-preview
+      vision: true
       context_window: 1048576
       max_output: 65536
       available_efforts: ["off", "low", "medium", "high"]
 
     - model: gemini-3.1-flash-lite
+      vision: true
       context_window: 1048576
       max_output: 65536
       available_efforts: ["off", "minimal", "low", "medium", "high"]
 
     - model: gemini-3-flash-preview
+      vision: true
       context_window: 1048576
       max_output: 65536
       available_efforts: ["off", "minimal", "low", "medium", "high"]
 
     - model: gemini-3.5-flash
+      vision: true
       context_window: 1048576
       max_output: 65536
       available_efforts: ["off", "minimal", "low", "medium", "high"]
 
     # Short aliases (map to nearest 3.x IDs above)
     - model: gemini-3-pro
+      vision: true
       context_window: 1048576
       max_output: 65536
       available_efforts: ["off", "low", "medium", "high"]
 
     - model: gemini-3-flash
+      vision: true
       context_window: 1048576
       max_output: 65536
       available_efforts: ["off", "minimal", "low", "medium", "high"]
 
     # ── xAI Grok ──────────────────────────────────────────────────────
     - model: grok-4.5
+      vision: true
       context_window: 500000
       max_output: 128000
       available_efforts: ["off", "low", "high"]
 
     - model: grok-4.3
+      vision: true
       context_window: 1000000
       max_output: 128000
       available_efforts: ["off", "low", "high"]
 
     - model: grok-4.1-fast
+      vision: true
       context_window: 2000000
       max_output: 128000
       available_efforts: ["off", "low", "high"]
 
     # Legacy alias → grok-4.3
     - model: grok-3-mini
+      vision: true
       context_window: 1000000
       max_output: 128000
       available_efforts: ["off", "low", "high"]
