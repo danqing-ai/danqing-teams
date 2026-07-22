@@ -9,6 +9,7 @@ import FloatingComposer from '@/components/composer/FloatingComposer.vue'
 import WelcomeEmpty from '@/components/center/WelcomeEmpty.vue'
 import ApprovalRail from '@/components/center/ApprovalRail.vue'
 import ToolCardBlock from '@/components/center/ToolCardBlock.vue'
+import ToolCardGroup from '@/components/center/ToolCardGroup.vue'
 import RightWorkspacePanel from '@/components/center/RightWorkspacePanel.vue'
 import ElementAnnotatePopover from '@/components/center/ElementAnnotatePopover.vue'
 import { renderMarkdown } from '@/utils/markdown-render'
@@ -225,6 +226,50 @@ function toggleToolCard(seq: number) {
 }
 function isToolCardExpanded(seq: number) {
   return expandedToolCards.value.has(seq)
+}
+
+/** Manual expand/collapse overrides for consecutive tool groups (keyed by first card seq). */
+const toolGroupExpandOverride = ref(new Map<number, boolean>())
+function toggleToolGroup(seq: number, cards: ToolCard[]) {
+  const next = !isToolGroupExpanded(seq, cards)
+  toolGroupExpandOverride.value.set(seq, next)
+  toolGroupExpandOverride.value = new Map(toolGroupExpandOverride.value)
+}
+function isToolGroupExpanded(seq: number, cards: ToolCard[]): boolean {
+  const override = toolGroupExpandOverride.value.get(seq)
+  if (override !== undefined) return override
+  // Default: stay open while any tool is in-flight; collapse when settled.
+  return cards.some((c) => c.status === 'running' || c.status === 'pending')
+}
+
+function groupConsecutiveToolCards(events: StreamEvent[]): StreamEvent[] {
+  const out: StreamEvent[] = []
+  let i = 0
+  while (i < events.length) {
+    const ev = events[i]
+    if (ev.type !== '__tool_card__') {
+      out.push(ev)
+      i++
+      continue
+    }
+    const start = i
+    while (i < events.length && events[i].type === '__tool_card__') i++
+    const run = events.slice(start, i)
+    if (run.length === 1) {
+      out.push(run[0])
+      continue
+    }
+    const cards = run.map((e) => e.payload as ToolCard)
+    out.push({
+      seq: run[0].seq,
+      type: '__tool_group__',
+      sessionId: run[0].sessionId || '',
+      turnId: run[0].turnId,
+      createdAt: run[0].createdAt || '',
+      payload: { cards, seq: run[0].seq },
+    } as unknown as StreamEvent)
+  }
+  return out
 }
 
 const expandedThinking = ref(new Set<number>())
@@ -511,6 +556,8 @@ watch(
   () => sessions.currentSession?.id,
   () => {
     currentTurnId.value = null
+    toolGroupExpandOverride.value = new Map()
+    expandedToolCards.value = new Set()
   },
 )
 
@@ -629,11 +676,11 @@ const turnMap = computed(() => {
     }
   }
 
-  // Post-process: filter noise events
+  // Post-process: filter noise events, then aggregate consecutive tool cards
   const NOISE_TYPES = new Set(['turn.started', 'turn.ended', 'turn.failed', 'step.started', 'step.ended', 'llm.usage'])
   for (const turnId in map) {
     const turn = map[turnId]
-    turn.events = turn.events.filter((ev) => !NOISE_TYPES.has(ev.type))
+    turn.events = groupConsecutiveToolCards(turn.events.filter((ev) => !NOISE_TYPES.has(ev.type)))
   }
 
   for (const ev of sessions.streamEvents) {
@@ -702,15 +749,29 @@ function childTurnIdFromDelegate(ev: StreamEvent): string | null {
   return id || null
 }
 
+function forEachToolCard(ev: StreamEvent, fn: (card: ToolCard) => void) {
+  if (ev.type === '__tool_card__') {
+    fn(ev.payload as ToolCard)
+  } else if (ev.type === '__tool_group__') {
+    const cards = toolGroupCards(ev)
+    for (const c of cards) fn(c)
+  }
+}
+
+function toolGroupCards(ev: StreamEvent): ToolCard[] {
+  const p = ev.payload as { cards?: ToolCard[] } | null
+  return Array.isArray(p?.cards) ? p.cards : []
+}
+
 const delegateLinkMap = computed(() => {
   const m = new Map<number, string>()
   let lastDelegateSeq = -1
   for (const turn of Object.values(turnMap.value)) {
     for (const ev of turn.events) {
-      if (ev.type === '__tool_card__') {
-        const p = ev.payload as ToolCard
-        if (p.name === 'delegate_agent') lastDelegateSeq = ev.seq
-      } else if (ev.type === 'delegate.started' && lastDelegateSeq >= 0) {
+      forEachToolCard(ev, (p) => {
+        if (p.name === 'delegate_agent') lastDelegateSeq = p.seq
+      })
+      if (ev.type === 'delegate.started' && lastDelegateSeq >= 0) {
         const payload = asRecord(ev.payload)
         const childTurnId = String(payload?.childTurnId ?? '')
         if (childTurnId) m.set(lastDelegateSeq, childTurnId)
@@ -723,6 +784,16 @@ const delegateLinkMap = computed(() => {
 
 function delegateChildTurnId(seq: number): string | null {
   return delegateLinkMap.value.get(seq) ?? null
+}
+
+function groupCardAwaitingApproval(cards: ToolCard[], seq: number): boolean {
+  const card = cards.find((c) => c.seq === seq)
+  return !!card && card.name === 'delegate_agent' && delegateCardAwaiting(seq)
+}
+
+function groupCardShowChildLink(cards: ToolCard[], seq: number): boolean {
+  const card = cards.find((c) => c.seq === seq)
+  return !!card && card.name === 'delegate_agent' && !!delegateChildTurnId(seq)
 }
 
 /** Child turn has undecided permission.ask (same session stream, child turnId). */
@@ -1460,13 +1531,12 @@ function turnSummary(turn: Turn): { toolCount: number; completedTools: number; e
   let errorTools = 0
   let runningTools = 0
   for (const ev of turn.events) {
-    if (ev.type === '__tool_card__') {
+    forEachToolCard(ev, (card) => {
       toolCount++
-      const st = (ev.payload as ToolCard).status
-      if (st === 'completed') completedTools++
-      else if (st === 'error') errorTools++
-      else if (st === 'running' || st === 'pending') runningTools++
-    }
+      if (card.status === 'completed') completedTools++
+      else if (card.status === 'error') errorTools++
+      else if (card.status === 'running' || card.status === 'pending') runningTools++
+    })
   }
   const tokensUsed = tokensForTurn(turn.id)
   return { toolCount, completedTools, errorTools, runningTools, tokensUsed }
@@ -1682,7 +1752,22 @@ function onTitleKeydown(e: KeyboardEvent) {
                     :key="ev.seq"
                     class="turn__event"
                   >
-                    <template v-if="ev.type === '__tool_card__'">
+                    <template v-if="ev.type === '__tool_group__'">
+                      <ToolCardGroup
+                        :cards="toolGroupCards(ev)"
+                        :expanded="isToolGroupExpanded(ev.seq, toolGroupCards(ev))"
+                        :is-card-expanded="isToolCardExpanded"
+                        :card-awaiting-approval="(seq) => groupCardAwaitingApproval(toolGroupCards(ev), seq)"
+                        :card-awaiting-label="delegateCardAwaitingLabel"
+                        :card-show-child-link="(seq) => groupCardShowChildLink(toolGroupCards(ev), seq)"
+                        :card-child-link-label="delegateCardLinkLabel"
+                        @toggle="toggleToolGroup(ev.seq, toolGroupCards(ev))"
+                        @toggle-card="toggleToolCard"
+                        @open-child="drillIntoChildTurnBySeq"
+                      />
+                    </template>
+
+                    <template v-else-if="ev.type === '__tool_card__'">
                       <ToolCardBlock
                         :card="ev.payload as ToolCard"
                         :expanded="isToolCardExpanded(ev.seq)"

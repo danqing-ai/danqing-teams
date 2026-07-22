@@ -540,6 +540,7 @@ export default {
     toolInput: '输入',
     toolOutput: '输出',
     toolError: '错误',
+    toolsGroup: '{n} 个工具',
     tabPlan: '计划',
     tabFiles: '文件',
     tabMemory: '记忆',

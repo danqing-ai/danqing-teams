@@ -541,6 +541,7 @@ export default {
     toolInput: 'Input',
     toolOutput: 'Output',
     toolError: 'Error',
+    toolsGroup: '{n} tools',
     tabPlan: 'Plan',
     tabFiles: 'Files',
     tabMemory: 'Memory',
