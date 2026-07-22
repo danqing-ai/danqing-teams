@@ -1,0 +1,12 @@
+{
+  "bundle": {
+    "resources": {
+      "resources/coreutils/coreutils.exe": "coreutils/coreutils.exe"
+    },
+    "windows": {
+      "nsis": {
+        "installerHooks": "./windows/hooks.nsh"
+      }
+    }
+  }
+}

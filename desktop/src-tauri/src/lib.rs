@@ -5,6 +5,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
+#[cfg(windows)]
+use std::process::Command;
+#[cfg(windows)]
+use tauri::path::BaseDirectory;
 
 const HELP_URL: &str = "https://github.com/danqing-ai/DanQing-Teams#macos-%E5%AE%89%E8%A3%85";
 const BACKEND_ADDR: &str = "127.0.0.1:7801";
@@ -81,6 +85,102 @@ fn prepare_runtime_binary(bundled: &Path, home: &Path) -> Result<PathBuf, String
     Ok(runtime_bin)
 }
 
+/// Install bundled Microsoft Coreutils into ~/.dq-teams/bin/coreutils and create applet hardlinks.
+/// Returns (coreutils.exe, bin_dir with ls.exe/…). Non-Windows builds return None.
+fn prepare_coreutils(app: &AppHandle, home: &Path) -> Option<(PathBuf, PathBuf)> {
+    #[cfg(not(windows))]
+    {
+        let _ = (app, home);
+        return None;
+    }
+    #[cfg(windows)]
+    {
+        let bundled = app
+            .path()
+            .resolve("coreutils/coreutils.exe", BaseDirectory::Resource)
+            .ok()
+            .filter(|p| p.is_file())
+            .or_else(|| {
+                // Dev / unpackaged: next to sidecar or under src-tauri/resources.
+                let exe_dir = std::env::current_exe()
+                    .ok()
+                    .and_then(|p| p.parent().map(|d| d.to_path_buf()))?;
+                let candidates = [
+                    exe_dir.join("coreutils").join("coreutils.exe"),
+                    exe_dir
+                        .join("resources")
+                        .join("coreutils")
+                        .join("coreutils.exe"),
+                    exe_dir
+                        .join("..")
+                        .join("resources")
+                        .join("coreutils")
+                        .join("coreutils.exe"),
+                ];
+                candidates.into_iter().find(|p| p.is_file())
+            })?;
+
+        let root = home.join("bin").join("coreutils");
+        let dst_exe = root.join("coreutils.exe");
+        let bin_dir = root.join("bin");
+        if let Err(e) = fs::create_dir_all(&bin_dir) {
+            eprintln!("[coreutils] create dir: {e}");
+            return None;
+        }
+        let need_copy = match (fs::metadata(&bundled), fs::metadata(&dst_exe)) {
+            (Ok(src), Ok(dst)) => {
+                src.len() != dst.len()
+                    || src
+                        .modified()
+                        .ok()
+                        .zip(dst.modified().ok())
+                        .map(|(a, b)| a > b)
+                        .unwrap_or(true)
+            }
+            (Ok(_), Err(_)) => true,
+            (Err(e), _) => {
+                eprintln!("[coreutils] metadata: {e}");
+                return None;
+            }
+        };
+        if need_copy {
+            if let Err(e) = fs::copy(&bundled, &dst_exe) {
+                eprintln!("[coreutils] copy: {e}");
+                return None;
+            }
+        }
+        // Prefer official hardlink sync when the binary supports coreutils-manager.
+        let refreshed = Command::new(&dst_exe)
+            .arg("coreutils-manager")
+            .arg("refresh")
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !refreshed {
+            // Fallback: create a minimal hardlink set so PATH at least has ls/cat/grep.
+            for name in ["ls", "cat", "grep", "find", "xargs", "head", "tail", "wc", "cp", "mv", "rm", "mkdir", "touch", "sort", "uniq", "cut", "tr", "tee", "pwd", "echo", "printf", "env", "base64", "sha256sum", "md5sum", "realpath", "dirname", "basename", "mktemp", "sleep", "true", "false"] {
+                let link = bin_dir.join(format!("{name}.exe"));
+                if link.exists() {
+                    continue;
+                }
+                if std::fs::hard_link(&dst_exe, &link).is_err() {
+                    let _ = fs::copy(&dst_exe, &link);
+                }
+            }
+        }
+        if !bin_dir.join("ls.exe").is_file() {
+            eprintln!("[coreutils] ls.exe missing after prepare");
+            return None;
+        }
+        eprintln!(
+            "[coreutils] ready: {} (bin: {})",
+            dst_exe.display(),
+            bin_dir.display()
+        );
+        Some((dst_exe, bin_dir))
+    }
+}
+
 fn spawn_backend(app: &AppHandle) -> Result<(), String> {
     let home = teams_home(app)?;
     fs::create_dir_all(&home).map_err(|e| format!("failed to create ~/.dq-teams: {e}"))?;
@@ -95,6 +195,8 @@ fn spawn_backend(app: &AppHandle) -> Result<(), String> {
     eprintln!("[sidecar] home: {}", home.display());
     eprintln!("[sidecar] runtime: {}", binary.display());
 
+    let coreutils = prepare_coreutils(app, &home);
+
     let log_file = OpenOptions::new()
         .create(true)
         .append(true)
@@ -107,8 +209,8 @@ fn spawn_backend(app: &AppHandle) -> Result<(), String> {
         let _ = writeln!(f, "\n--- sidecar spawn ---");
     }
 
-    let mut child = std::process::Command::new(&binary)
-        .current_dir(&home)
+    let mut cmd = std::process::Command::new(&binary);
+    cmd.current_dir(&home)
         .env("TEAMS_ADDR", BACKEND_ADDR)
         .env(
             "TEAMS_DB_PATH",
@@ -117,7 +219,12 @@ fn spawn_backend(app: &AppHandle) -> Result<(), String> {
         .env("TEAMS_CONFIG", config_path.to_string_lossy().as_ref())
         .env("TEAMS_DATA_DIR", work_dir.to_string_lossy().as_ref())
         .stdout(std::process::Stdio::from(log_file))
-        .stderr(std::process::Stdio::from(log_err))
+        .stderr(std::process::Stdio::from(log_err));
+    if let Some((exe, bin)) = coreutils {
+        cmd.env("TEAMS_COREUTILS_EXE", exe.to_string_lossy().as_ref());
+        cmd.env("TEAMS_COREUTILS_BIN", bin.to_string_lossy().as_ref());
+    }
+    let mut child = cmd
         .spawn()
         .map_err(|e| format!("failed to spawn backend: {e}"))?;
 

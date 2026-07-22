@@ -185,6 +185,9 @@ func runHost(ctx context.Context, opts port.SandboxRunOptions, cfg domain.Config
 	}
 	cmd.Dir = opts.WorkDir
 	cmd.Env = opts.Env
+	if sh.kind == "cmd" {
+		cmd.Env = prependCoreutilsPATH(cmd.Env)
+	}
 	out, err := cmd.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {
 		return out, fmt.Errorf("sandbox: command timed out after %s", opts.Timeout)

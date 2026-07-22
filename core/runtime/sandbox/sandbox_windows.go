@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	modadvapi32             = windows.NewLazySystemDLL("advapi32.dll")
+	modadvapi32               = windows.NewLazySystemDLL("advapi32.dll")
 	procCreateRestrictedToken = modadvapi32.NewProc("CreateRestrictedToken")
 )
 
@@ -126,6 +126,9 @@ func (winTokenRunner) run(ctx context.Context, opts port.SandboxRunOptions, cfg 
 	}
 	cmd.Dir = workdir
 	cmd.Env = opts.Env
+	if sh.kind == "cmd" {
+		cmd.Env = prependCoreutilsPATH(cmd.Env)
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Token: syscall.Token(restricted),
 	}

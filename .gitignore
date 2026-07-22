@@ -22,6 +22,8 @@
 # Tauri
 /desktop/src-tauri/target/
 /desktop/src-tauri/keys/
+/desktop/src-tauri/resources/coreutils/coreutils.exe
+/desktop/src-tauri/resources/coreutils/VERSION
 
 # SQLite data
 /data/

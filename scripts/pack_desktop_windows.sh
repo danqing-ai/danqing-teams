@@ -46,6 +46,23 @@ has_tauri_signing_key() {
 echo "==> Building backend sidecar..."
 "$SCRIPT_DIR/build_sidecar.sh"
 
+# Bundle Microsoft Coreutils for Windows (required — default-installed with the NSIS package)
+echo "==> Fetching bundled Coreutils for Windows (required)..."
+"$SCRIPT_DIR/fetch_windows_coreutils.sh"
+CU_EXE="$DQ_ROOT/desktop/src-tauri/resources/coreutils/coreutils.exe"
+if [[ ! -f "$CU_EXE" ]]; then
+  echo "ERROR: Windows Coreutils is required for pack-windows-desktop but missing:" >&2
+  echo "  $CU_EXE" >&2
+  echo "  Re-run: scripts/fetch_windows_coreutils.sh" >&2
+  exit 1
+fi
+CU_SIZE="$(wc -c < "$CU_EXE" | tr -d ' ')"
+if [[ "${CU_SIZE:-0}" -lt 1000000 ]]; then
+  echo "ERROR: coreutils.exe looks truncated ($CU_SIZE bytes): $CU_EXE" >&2
+  exit 1
+fi
+echo "==> Coreutils OK: $CU_EXE ($(du -h "$CU_EXE" | cut -f1))"
+
 # Ensure only the target-tripled sidecar exists in bin/ to avoid duplicates in the bundle
 BIN_DIR="$DQ_ROOT/desktop/src-tauri/bin"
 rm -f "$BIN_DIR"/danqing-teams-backend.exe

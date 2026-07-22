@@ -142,8 +142,13 @@ func buildRuntimeEnvironment(st domain.SandboxStatus) string {
 		b.WriteString("Sandbox backend: " + string(st.Backend) + "\n")
 	}
 	switch {
+	case st.Shell == "cmd (Coreutils)" || (st.Shell == "cmd" && st.CoreutilsBin != ""):
+		b.WriteString("Note: exec_shell uses cmd.exe with Microsoft Coreutils on PATH (ls/cat/grep/find/…). Prefer POSIX utility names and simple pipelines. Use NUL instead of /dev/null. Bash-only syntax requires shell=bash (Git for Windows) or runtime.sandbox.backend=wsl2.\n")
+		if st.CoreutilsBin != "" {
+			b.WriteString("Coreutils bin: " + st.CoreutilsBin + "\n")
+		}
 	case st.Shell == "cmd":
-		b.WriteString("Note: Git Bash not detected; exec_shell uses cmd.exe syntax, or install Git for Windows / set runtime.sandbox.backend=wsl2 for bash.\n")
+		b.WriteString("Note: neither bundled/system Coreutils nor Git Bash detected; exec_shell uses cmd.exe syntax. Install Microsoft Coreutils, Git for Windows, or set runtime.sandbox.backend=wsl2 for bash.\n")
 	case strings.HasPrefix(st.Shell, "bash"):
 		b.WriteString("Note: exec_shell invokes the Shell above under the OS sandbox when enabled (workspace-write by default). Prefer POSIX shell syntax. Avoid cmd.exe builtins unless necessary.\n")
 	default:

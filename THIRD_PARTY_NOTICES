@@ -43,3 +43,16 @@ Adapted skills in this product:
 - Original DanQing content (e.g. core of `git-workflow`, `skill-creator`) remains
   under this repository’s license; skill-creator additionally notes inspiration from
   Anthropic’s skill-creator materials where applicable.
+
+## Microsoft Coreutils for Windows (MIT)
+
+- Repository: https://github.com/microsoft/coreutils
+- Upstream: https://github.com/uutils/coreutils, https://github.com/uutils/findutils,
+  https://github.com/uutils/grep
+- Copyright: uutils developers, Microsoft Corporation
+- License: MIT
+
+Windows desktop builds may download and bundle `coreutils.exe` (multi-call binary)
+via `scripts/fetch_windows_coreutils.sh`, then install applet hardlinks under
+`~/.dq-teams/bin/coreutils/` for `exec_shell` PATH injection. This replaces the
+need for Git Bash to run POSIX utilities on Windows host / win-token backends.
