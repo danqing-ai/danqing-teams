@@ -36,6 +36,12 @@ func (c *DefaultLLMProviderClient) Chat(ctx context.Context, req port.LLMChatReq
 
 	modelID := providerName + "/" + modelName
 
+	// Non-vision models must not receive image_url / image parts (providers
+	// like DeepSeek reject them with a 400). Strip before provider dispatch.
+	if c.modelCfg == nil || !c.modelCfg.SupportsVision(modelID) {
+		req.Messages = stripImageParts(req.Messages)
+	}
+
 	// Load gen params from registry, merge with caller-provided params.
 	if c.modelCfg != nil {
 		registryParams := c.modelCfg.GenParams(modelID)
@@ -104,4 +110,16 @@ func ParseModelID(modelID string) (providerName, modelName, effort string) {
 		effort = parts[2]
 	}
 	return
+}
+
+// stripImageParts returns a shallow copy of messages with multimodal Parts cleared.
+func stripImageParts(msgs []port.ChatMessage) []port.ChatMessage {
+	out := make([]port.ChatMessage, len(msgs))
+	for i, m := range msgs {
+		out[i] = m
+		if len(m.Parts) > 0 {
+			out[i].Parts = nil
+		}
+	}
+	return out
 }

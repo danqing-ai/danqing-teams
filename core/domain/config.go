@@ -57,6 +57,9 @@ type ConfigCompactionSection struct {
 type ConfigTurnSection struct {
 	DoomLoopThreshold int `json:"doomLoopThreshold" mapstructure:"doom_loop_threshold"`
 	MaxStepsDefault   int `json:"maxStepsDefault" mapstructure:"max_steps_default"`
+	// MaxLLMFailures is consecutive LLM Chat errors before the turn fails
+	// (independent of max_steps). Resets after any successful Chat response.
+	MaxLLMFailures int `json:"maxLLMFailures" mapstructure:"max_llm_failures"`
 }
 
 type ConfigTeamSection struct {

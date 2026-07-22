@@ -139,8 +139,10 @@ func (m *LLMConfigManager) ListModels(ctx context.Context) []domain.LLMModel {
 			}
 			modelID := cfg.Name + "/" + ref.Name
 			var efforts []string
+			vision := false
 			if m.modelCfg != nil {
 				efforts = m.modelCfg.AvailableEfforts(modelID)
+				vision = m.modelCfg.SupportsVision(modelID)
 			}
 			out = append(out, domain.LLMModel{
 				ID:               modelID,
@@ -149,10 +151,18 @@ func (m *LLMConfigManager) ListModels(ctx context.Context) []domain.LLMModel {
 				Provider:         string(cfg.Provider),
 				Enabled:          ref.Enabled,
 				AvailableEfforts: efforts,
+				Vision:           vision,
 			})
 		}
 	}
 	return out
+}
+
+// SetModelConfigs replaces in-memory model parameter entries (context, vision, etc.).
+func (m *LLMConfigManager) SetModelConfigs(models []domain.ModelConfig) {
+	if m.modelCfg != nil {
+		m.modelCfg.SetModels(models)
+	}
 }
 
 func (m *LLMConfigManager) ResolveProvider(ctx context.Context, modelID string) (domain.LLMProviderConfig, string, error) {

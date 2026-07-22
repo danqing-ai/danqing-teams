@@ -294,7 +294,11 @@ async function send() {
     return
   }
   const text = buildComposerUserInput(content.value, attachments.value)
-  const imageAtts = toApiImageAttachments(attachments.value)
+  let imageAtts = toApiImageAttachments(attachments.value)
+  if (imageAtts.length && !selectedModel.value?.vision) {
+    toast.warning(t('composer.modelNoVision'))
+    imageAtts = []
+  }
   if ((!text.trim() && !imageAtts.length) || sessions.loading) return
 
   if (sessions.composingNew) {

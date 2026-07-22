@@ -2,11 +2,13 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
 	"danqing-teams/core/adapter/llm"
 	"danqing-teams/core/domain"
+	"danqing-teams/core/port"
 	"danqing-teams/core/runtime/permission"
 	"danqing-teams/core/runtime/tool"
 )
@@ -461,5 +463,53 @@ func TestSnipHeadPreservesLastUserMessage(t *testing.T) {
 	}
 	if !foundLastUser {
 		t.Fatal("snipHead must not remove the last user message (current turn goal)")
+	}
+}
+
+type failingLLM struct {
+	calls int
+}
+
+func (f *failingLLM) Chat(_ context.Context, _ port.LLMChatRequest) (port.LLMChatResponse, error) {
+	f.calls++
+	return port.LLMChatResponse{}, fmt.Errorf("bad request (400): unknown variant image_url")
+}
+
+func TestTurnRunnerStopsAfterMaxLLMFailures(t *testing.T) {
+	failing := &failingLLM{}
+	stream := NewStreamEventManager(nil)
+	perm := permission.NewGate(nil)
+	reg := tool.NewRegistry()
+	configStore := &testConfigStore{
+		cfg: &domain.ConfigFile{
+			Runtime: domain.ConfigRuntimeSection{
+				Turn: domain.ConfigTurnSection{
+					DoomLoopThreshold: 10,
+					MaxStepsDefault:   50,
+					MaxLLMFailures:    3,
+				},
+			},
+		},
+	}
+	tr := NewTurnRunner(failing, stream, perm, reg, configStore)
+	report, _, err := tr.Run(context.Background(), TurnContext{
+		SessionID: "s1",
+		TurnID:    "t1",
+		Agent:     domain.Agent{ID: "a", Steps: 50},
+		Model:     "mock/x",
+		MaxSteps:  50,
+		Messages:  []Message{{Role: RoleUser, Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if failing.calls != 3 {
+		t.Fatalf("expected 3 LLM calls, got %d", failing.calls)
+	}
+	if report.Status != domain.ReportFailed {
+		t.Fatalf("expected failed report, got %s", report.Status)
+	}
+	if !strings.Contains(report.Summary, "3 times") {
+		t.Fatalf("expected failure summary mentioning 3 times, got %q", report.Summary)
 	}
 }

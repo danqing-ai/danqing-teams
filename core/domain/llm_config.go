@@ -40,6 +40,8 @@ type LLMModel struct {
 	Provider         string   `json:"provider"`
 	Enabled          bool     `json:"enabled"`
 	AvailableEfforts []string `json:"availableEfforts,omitempty"`
+	// Vision is true when the model accepts image content parts.
+	Vision bool `json:"vision"`
 }
 
 // ModelConfig defines per-model configuration including context window, max
@@ -57,6 +59,9 @@ type ModelConfig struct {
 	AvailableEfforts   []string       `json:"available_efforts,omitempty" mapstructure:"available_efforts" yaml:"available_efforts,omitempty"`
 	ThinkingMode       string         `json:"thinking_mode,omitempty" mapstructure:"thinking_mode" yaml:"thinking_mode,omitempty"`
 	EffortBudgetTokens map[string]int `json:"effort_budget_tokens,omitempty" mapstructure:"effort_budget_tokens" yaml:"effort_budget_tokens,omitempty"`
+	// Vision marks whether the model accepts multimodal image input.
+	// When false/omitted, image parts are stripped before Chat.
+	Vision bool `json:"vision,omitempty" mapstructure:"vision" yaml:"vision,omitempty"`
 }
 
 // LLMProviderPreset is a template for quickly creating a provider config.

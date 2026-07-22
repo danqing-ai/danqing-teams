@@ -40,6 +40,7 @@ runtime:
   turn:
     doom_loop_threshold: 10  # fail after N consecutive identical tool calls (resets when tool/args change)
     max_steps_default: 200   # fallback step limit when agent.steps is 0
+    max_llm_failures: 3      # fail turn after N consecutive LLM Chat errors (independent of max_steps)
   team:
     max_delegation_depth: 3  # maximum sub-agent delegation chain length
   memory:
@@ -192,92 +193,109 @@ llm:
   #     → sent as { thinking: { type: "adaptive" }, effort, display: "summarized" }
   models:
 
+    # vision: true — model accepts image content parts; omit/false strips images before Chat
     # ── OpenAI ─────────────────────────────────────────────────────────
     # GPT-5.6 family — Sol (gpt-5.6), Terra, Luna: 1.05M / 128K
     - model: gpt-5.6
+      vision: true
       context_window: 1050000
       max_output: 128000
       available_efforts: ["off", "none", "low", "medium", "high", "xhigh"]
 
     - model: gpt-5.6-terra
+      vision: true
       context_window: 1050000
       max_output: 128000
       available_efforts: ["off", "none", "low", "medium", "high", "xhigh"]
 
     - model: gpt-5.6-luna
+      vision: true
       context_window: 1050000
       max_output: 128000
       available_efforts: ["off", "none", "low", "medium", "high", "xhigh"]
 
     # GPT-5 family — 400K / 128K
     - model: gpt-5
+      vision: true
       context_window: 400000
       max_output: 128000
       available_efforts: ["off", "none", "minimal", "low", "medium", "high", "xhigh"]
 
     - model: gpt-5-mini
+      vision: true
       context_window: 400000
       max_output: 128000
       available_efforts: ["off", "minimal", "low", "medium", "high"]
 
     - model: gpt-5-nano
+      vision: true
       context_window: 400000
       max_output: 128000
       available_efforts: ["off", "minimal", "low", "medium", "high"]
 
     - model: o4-mini
+      vision: true
       context_window: 200000
       max_output: 100000
       temperature: 1.0
       available_efforts: ["off", "none", "minimal", "low", "medium", "high", "xhigh"]
 
     - model: o3
+      vision: true
       context_window: 200000
       max_output: 100000
       temperature: 1.0
       available_efforts: ["off", "none", "minimal", "low", "medium", "high", "xhigh"]
 
     - model: gpt-4.1
+      vision: true
       context_window: 1047576
       max_output: 32768
 
     - model: gpt-4o
+      vision: true
       context_window: 128000
       max_output: 16384
 
     # ── Anthropic Claude ───────────────────────────────────────────────
     # Claude 5 / Opus 4.6+ / Sonnet 4.6 — adaptive thinking, 1M / 128K
     - model: claude-sonnet-5
+      vision: true
       context_window: 1000000
       max_output: 128000
       available_efforts: ["off", "low", "medium", "high", "xhigh", "max"]
       thinking_mode: "adaptive"
 
     - model: claude-fable-5
+      vision: true
       context_window: 1000000
       max_output: 128000
       available_efforts: ["off", "low", "medium", "high", "xhigh", "max"]
       thinking_mode: "adaptive"
 
     - model: claude-opus-4-8
+      vision: true
       context_window: 1000000
       max_output: 128000
       available_efforts: ["off", "low", "medium", "high", "xhigh", "max"]
       thinking_mode: "adaptive"
 
     - model: claude-opus-4-7
+      vision: true
       context_window: 1000000
       max_output: 128000
       available_efforts: ["off", "low", "medium", "high", "xhigh", "max"]
       thinking_mode: "adaptive"
 
     - model: claude-opus-4-6
+      vision: true
       context_window: 1000000
       max_output: 128000
       available_efforts: ["off", "low", "medium", "high", "xhigh", "max"]
       thinking_mode: "adaptive"
 
     - model: claude-sonnet-4-6
+      vision: true
       context_window: 1000000
       max_output: 128000
       available_efforts: ["off", "low", "medium", "high", "xhigh", "max"]
@@ -285,6 +303,7 @@ llm:
 
     # Claude 4.5 — budget-tokens thinking (high/max), 200K / 64K
     - model: claude-sonnet-4-5
+      vision: true
       context_window: 200000
       max_output: 64000
       available_efforts: ["off", "high", "max"]
@@ -294,6 +313,7 @@ llm:
         max: 32000
 
     - model: claude-opus-4-5
+      vision: true
       context_window: 200000
       max_output: 64000
       available_efforts: ["off", "high", "max"]
@@ -303,6 +323,7 @@ llm:
         max: 32000
 
     - model: claude-haiku-4-5
+      vision: true
       context_window: 200000
       max_output: 64000
       available_efforts: ["off", "high", "max"]

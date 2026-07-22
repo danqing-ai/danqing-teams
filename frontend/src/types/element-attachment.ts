@@ -146,8 +146,8 @@ export function fromInspectPayload(
   const pageUrl = opts.pageUrl || raw.page?.url || ''
   const pageTitle = raw.page?.title || ''
   const sourceFile = opts.sourceFile || raw.page?.sourceFile
-  const html = (raw.outerHTML || raw.html || '').slice(0, 1800)
-  const neighborhood = (raw.neighborhoodHTML || '').slice(0, 2800)
+  const html = (raw.outerHTML || raw.html || '').slice(0, 1200)
+  const neighborhood = (raw.neighborhoodHTML || '').slice(0, 1200)
   const styles = raw.computedStyles && typeof raw.computedStyles === 'object' ? raw.computedStyles : {}
   const id = createElementAttachmentId()
   const screenshot =
@@ -191,83 +191,38 @@ export function fromInspectPayload(
   }
 }
 
-function formatComputedStyles(styles: Record<string, string>, limit = 28): string[] {
-  const keys = Object.keys(styles)
-  if (!keys.length) return []
-  const lines: string[] = ['- Computed styles:']
-  for (const k of keys.slice(0, limit)) {
-    lines.push(`  - ${k}: ${styles[k]}`)
-  }
-  if (keys.length > limit) lines.push(`  - … +${keys.length - limit} more`)
-  return lines
+function clip(s: string, max: number): string {
+  const t = s.trim()
+  if (t.length <= max) return t
+  return t.slice(0, max) + '…'
 }
 
+/** Compact prompt block for the agent — identity + HTML only. */
 export function serializeElementAttachment(att: ElementAttachment): string {
-  const lines: string[] = ['### Attached UI Element']
-  lines.push(
-    '- Intent: The user selected this UI element in the Browser tab. Treat it as the primary target of their request.',
-  )
-  if (att.annotation) lines.push(`- Annotation: ${att.annotation}`)
-  if (att.page.url) lines.push(`- Page: ${att.page.url}`)
-  if (att.page.title) lines.push(`- Title: ${att.page.title}`)
-  if (att.page.sourceFile) lines.push(`- Source: ${att.page.sourceFile}`)
+  const lines: string[] = ['## Selected UI Element']
+  if (att.annotation) lines.push(`Request: ${att.annotation}`)
 
-  const tagParts = [`Tag: ${att.tag}`]
-  if (att.role) tagParts.push(`Role: ${att.role}`)
-  if (att.text) tagParts.push(`Text: "${att.text.slice(0, 200)}"`)
-  if (att.ariaLabel) tagParts.push(`Aria: "${att.ariaLabel}"`)
-  if (att.testId) tagParts.push(`TestId: ${att.testId}`)
-  lines.push(`- ${tagParts.join(' | ')}`)
+  const target: string[] = [`<${att.tag}>`]
+  if (att.selectors?.css) target.push(att.selectors.css)
+  else if (att.elementId) target.push(`#${att.elementId}`)
+  else if (att.classes.length) target.push(`.${att.classes.slice(0, 3).join('.')}`)
+  const label = (att.text || att.ariaLabel || att.testId || '').trim()
+  if (label) target.push(`"${clip(label, 80)}"`)
+  lines.push(`Target: ${target.join(' ')}`)
 
-  if (att.elementId) lines.push(`- Id: #${att.elementId}`)
-  if (att.classes.length) lines.push(`- Classes: ${att.classes.slice(0, 12).join(' ')}`)
-  if (att.selectors.css) lines.push(`- CSS: ${att.selectors.css}`)
-  if (att.selectors.fallbacks?.length) {
-    lines.push(`- CSS fallbacks: ${att.selectors.fallbacks.slice(0, 3).join(' | ')}`)
-  }
-  if (att.xpath) lines.push(`- XPath: ${att.xpath}`)
-
-  const b = att.boundingBox
-  const v = att.viewport
-  if (b.w || b.h) {
-    lines.push(
-      `- Box: x=${b.x} y=${b.y} w=${b.w} h=${b.h}` +
-        (v.w || v.h ? ` (viewport ${v.w}x${v.h})` : ''),
-    )
-  }
+  if (att.page.sourceFile) lines.push(`File: ${att.page.sourceFile}`)
+  else if (att.page.url) lines.push(`Page: ${att.page.url}`)
 
   if (att.component?.name) {
-    const loc = att.component.file ? ` @ ${att.component.file}` : ''
-    const fw = att.component.framework ? ` (${att.component.framework})` : ''
-    lines.push(`- Component: ${att.component.name}${loc}${fw}`)
+    const loc = att.component.file ? ` (${att.component.file})` : ''
+    lines.push(`Component: ${att.component.name}${loc}`)
   }
 
-  if (att.screenshotName) {
-    lines.push(
-      `- Screenshot: attached as image "${att.screenshotName}" (visual crop of the selected element)`,
-    )
-  }
-
-  const attrKeys = Object.keys(att.attributes || {})
-  if (attrKeys.length) {
-    const attrs = attrKeys
-      .slice(0, 12)
-      .map((k) => `${k}="${att.attributes[k]}"`)
-      .join(' ')
-    lines.push(`- Attrs: ${attrs}`)
-  }
-
-  lines.push(...formatComputedStyles(att.computedStyles))
-
-  if (att.neighborhoodHTML) {
-    lines.push('- Neighborhood HTML (parent + siblings; selected marked):')
+  const html = clip(att.neighborhoodHTML || att.outerHTML || '', 1200)
+  if (html) {
+    lines.push('HTML:')
     lines.push('```html')
-    lines.push(att.neighborhoodHTML)
-    lines.push('```')
-  } else if (att.outerHTML) {
-    lines.push('- HTML:')
-    lines.push('```html')
-    lines.push(att.outerHTML)
+    lines.push(html)
     lines.push('```')
   }
 

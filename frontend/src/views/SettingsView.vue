@@ -118,6 +118,7 @@ const runtimeForm = ref({
   browserCdpUrl: '',
   doomLoopThreshold: 10,
   maxStepsDefault: 200,
+  maxLLMFailures: 3,
   maxDelegationDepth: 3,
   readTopK: 10,
   searchTopK: 3,
@@ -676,6 +677,15 @@ const hasFooterActions = computed(() => {
                 </div>
               </div>
             </div>
+            <div class="settings-form-row">
+              <div class="settings-field settings-field--half">
+                <span class="settings-field__label">{{ $t('settings.maxLLMFailures') }}</span>
+                <div class="slider-row">
+                  <DqSlider v-model="runtimeForm.maxLLMFailures" :min="1" :max="20" :step="1" />
+                  <span class="slider-row__value">{{ runtimeForm.maxLLMFailures }}</span>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="settings-form-group">
@@ -1161,6 +1171,14 @@ const hasFooterActions = computed(() => {
             <label class="settings-field">
               <span class="settings-field__label">Thinking Mode</span>
               <DqInput v-model="modelConfigForm[editingModelIdx].thinking_mode" placeholder="adaptive / enabled" />
+            </label>
+            <label class="settings-field settings-field--switch">
+              <span class="settings-field__label">{{ $t('settings.modelVision') }}</span>
+              <DqSwitch
+                :model-value="!!modelConfigForm[editingModelIdx].vision"
+                @update:model-value="(v: boolean) => { modelConfigForm[editingModelIdx].vision = v }"
+              />
+              <span class="settings-field__hint">{{ $t('settings.modelVisionDesc') }}</span>
             </label>
             <label class="settings-field">
               <span class="settings-field__label">Effort Budget Tokens</span>

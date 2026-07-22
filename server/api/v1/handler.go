@@ -1136,6 +1136,9 @@ func updateModelConfigs(h *Handler) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		if h.LLMConfig != nil {
+			h.LLMConfig.SetModelConfigs(models)
+		}
 		c.JSON(http.StatusOK, models)
 	}
 }

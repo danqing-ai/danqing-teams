@@ -120,6 +120,8 @@ export interface LLMModel {
   provider: string
   enabled: boolean
   availableEfforts: string[]
+  /** True when the model accepts image / multimodal input. */
+  vision?: boolean
 }
 
 export interface ModelConfig {
@@ -134,6 +136,8 @@ export interface ModelConfig {
   available_efforts?: string[]
   thinking_mode?: string
   effort_budget_tokens?: Record<string, number>
+  /** Accepts image content parts when true. */
+  vision?: boolean
 }
 
 export type SearchProvider =
@@ -199,6 +203,7 @@ export interface ConfigFile {
     turn: {
       doomLoopThreshold: number
       maxStepsDefault: number
+      maxLLMFailures: number
     }
     team: {
       maxDelegationDepth: number
@@ -289,6 +294,7 @@ export interface RuntimeConfigForm {
   browserCdpUrl?: string
   doomLoopThreshold: number
   maxStepsDefault: number
+  maxLLMFailures: number
   maxDelegationDepth: number
   readTopK: number
   searchTopK: number

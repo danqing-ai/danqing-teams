@@ -183,6 +183,7 @@ type turnRunCfg struct {
 	autoApprove            bool
 	doomLoopThreshold      int
 	maxStepsDefault        int
+	maxLLMFailures         int
 	compactionEnabled      bool
 	compactionMaxTokens    int
 	compactionTriggerRatio float64
@@ -200,6 +201,7 @@ func (p *TurnRunner) loadRunCfg(ctx context.Context) turnRunCfg {
 	cfg := turnRunCfg{
 		doomLoopThreshold:      10,
 		maxStepsDefault:        200,
+		maxLLMFailures:         3,
 		compactionMaxTokens:    128000,
 		compactionTriggerRatio: 0.85,
 	}
@@ -212,6 +214,9 @@ func (p *TurnRunner) loadRunCfg(ctx context.Context) turnRunCfg {
 			}
 			if rt.Turn.MaxStepsDefault > 0 {
 				cfg.maxStepsDefault = rt.Turn.MaxStepsDefault
+			}
+			if rt.Turn.MaxLLMFailures > 0 {
+				cfg.maxLLMFailures = rt.Turn.MaxLLMFailures
 			}
 			cfg.compactionEnabled = rt.Compaction.Enabled
 			cfg.compactionMaxTokens = rt.Compaction.MaxTokens
@@ -251,6 +256,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 	var finalReport domain.Report
 	reportCaptured := false
 	maxPromptTokens := 0 // track actual max prompt tokens from LLM API
+	consecutiveLLMFailures := 0
 
 	for step := 1; step <= tctx.MaxSteps; step++ {
 		select {
@@ -283,14 +289,27 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		}
 		resp, err := p.LLM.Chat(ctx, llmReq)
 		if err != nil {
-			// Don't terminate — feed the error back to LLM as user message.
-			// doom loop / max steps will catch repeated failures.
+			consecutiveLLMFailures++
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventError, domain.ErrorPayload{Message: err.Error(), Kind: "llm"})
+			if consecutiveLLMFailures >= cfg.maxLLMFailures {
+				finalReport = domain.Report{
+					Status:          domain.ReportFailed,
+					Summary:         fmt.Sprintf("LLM call failed %d times in a row: %s", consecutiveLLMFailures, err.Error()),
+					Confidence:      0.2,
+					StepsUsed:       step,
+					MaxPromptTokens: maxPromptTokens,
+				}
+				reportCaptured = true
+				p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepEnded, domain.StepPayload{Step: step})
+				break
+			}
+			// Transient-ish failures: feed error back and retry within the failure budget.
 			retryMsg := "[System: LLM call failed — " + err.Error() + ". Please retry or respond in text.]"
 			messages = append(messages, Message{Role: RoleUser, Content: retryMsg})
 			p.logUserMessage(retryMsg)
 			continue
 		}
+		consecutiveLLMFailures = 0
 		if resp.Usage != nil {
 			if resp.Usage.PromptTokens > maxPromptTokens {
 				maxPromptTokens = resp.Usage.PromptTokens
