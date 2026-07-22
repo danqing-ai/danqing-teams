@@ -604,6 +604,7 @@ export default {
     editAnnotation: 'Edit annotation',
     removeAttachment: 'Remove attachment',
     annotationPlaceholder: 'Add annotation…',
+    gitBranch: 'Current branch',
   },
   commandPalette: {
     title: 'Command Palette',

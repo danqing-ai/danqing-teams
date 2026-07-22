@@ -603,6 +603,7 @@ export default {
     editAnnotation: '编辑批注',
     removeAttachment: '移除附件',
     annotationPlaceholder: '添加批注…',
+    gitBranch: '当前分支',
   },
   commandPalette: {
     title: '命令面板',

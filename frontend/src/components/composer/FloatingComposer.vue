@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch, onMounted } from 'vue'
+import { computed, nextTick, ref, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSessionsStore } from '@/stores/sessions'
 import { useProjectsStore } from '@/stores/projects'
@@ -7,6 +7,7 @@ import { useLLMStore } from '@/stores/llm'
 import { useWorkspaceUiStore } from '@/stores/workspaceUi'
 import ComposerAttachmentTray from '@/components/composer/ComposerAttachmentTray.vue'
 import ContextUsageBar from '@/components/center/ContextUsageBar.vue'
+import { fetchJSON } from '@/api/client'
 import { toast } from '@/utils/feedback'
 import type { LLMModel } from '@/types/mission'
 import type { ElementAttachment } from '@/types/element-attachment'
@@ -27,6 +28,7 @@ const editingAnnotation = ref('')
 const inputWrap = ref<HTMLElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const dragOver = ref(false)
+const gitBranch = ref('')
 const sessions = useSessionsStore()
 const projects = useProjectsStore()
 const llm = useLLMStore()
@@ -111,6 +113,14 @@ const showAgentSelect = computed(
   () => (sessions.composingNew || sessions.currentSessionId) && primaryAgents.value.length > 0,
 )
 
+const showTray = computed(
+  () =>
+    sessions.composingNew ||
+    showAgentSelect.value ||
+    Boolean(sessions.currentSession) ||
+    Boolean(gitBranch.value),
+)
+
 /** Few primary agents → segmented toggle; many → dropdown. */
 const useAgentSegmented = computed(() => primaryAgents.value.length > 0 && primaryAgents.value.length <= 4)
 
@@ -118,10 +128,44 @@ const agentOptions = computed(() =>
   primaryAgents.value.map((a) => ({ label: a.name, value: a.id })),
 )
 
+async function loadGitBranch() {
+  const projectId = sessions.selectedProjectId
+  if (!projectId) {
+    gitBranch.value = ''
+    return
+  }
+  try {
+    const res = await fetchJSON<{ current?: string; error?: string }>(
+      `/projects/${projectId}/git-branches`,
+    )
+    gitBranch.value = res.error ? '' : (res.current ?? '')
+  } catch {
+    gitBranch.value = ''
+  }
+}
+
 onMounted(async () => {
   const oldIds = new Set(llm.models.map((m) => m.id))
   await llm.loadModels()
   sessions.syncModelSelection(llm.models, oldIds)
+  void loadGitBranch()
+  document.addEventListener('visibilitychange', onVisibilityRefresh)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('visibilitychange', onVisibilityRefresh)
+})
+
+function onVisibilityRefresh() {
+  if (document.visibilityState === 'visible') void loadGitBranch()
+}
+
+watch(() => sessions.selectedProjectId, () => {
+  void loadGitBranch()
+})
+
+watch(() => workspaceUi.rightTab, (tab, prev) => {
+  if (prev === 'changes' || tab === 'changes') void loadGitBranch()
 })
 
 watch(
@@ -510,9 +554,9 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
       </div>
     </div>
 
-    <!-- Lower tray: project + agent + context usage -->
+    <!-- Lower tray: project + agent + git branch + context usage -->
     <div
-      v-if="sessions.composingNew || showAgentSelect || sessions.currentSession"
+      v-if="showTray"
       class="composer-float__tray"
     >
       <div class="composer-float__tray-leading">
@@ -559,6 +603,16 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
             />
           </DqSelect>
         </div>
+
+        <span
+          v-if="gitBranch"
+          class="composer-git-branch"
+          :title="t('composer.gitBranch')"
+          :aria-label="`${t('composer.gitBranch')}: ${gitBranch}`"
+        >
+          <span class="composer-git-branch__icon" aria-hidden="true">⎇</span>
+          <span class="composer-git-branch__name">{{ gitBranch }}</span>
+        </span>
       </div>
 
       <div class="composer-float__tray-trailing">
@@ -754,6 +808,33 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
   align-items: center;
   justify-content: flex-end;
   min-width: 0;
+}
+
+.composer-git-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 160px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  color: var(--dq-label-secondary);
+  font-size: var(--dq-font-size-caption);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.composer-git-branch__icon {
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
+.composer-git-branch__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .composer-agent-seg--compact {
