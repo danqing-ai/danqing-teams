@@ -1,7 +1,11 @@
-# Bundled Microsoft Coreutils for Windows
+# Bundled Microsoft Coreutils for Windows (default install)
 
-`coreutils.exe` is downloaded by `scripts/fetch_windows_coreutils.sh` during
-`make pack-windows-desktop` (not committed). At runtime the desktop shell copies
-it to `~/.dq-teams/bin/coreutils/` and creates applet hardlinks for `exec_shell`.
+`coreutils.exe` is **required** for `make pack-windows-desktop`. It is downloaded by
+`scripts/fetch_windows_coreutils.sh` (not committed).
+
+Install flow:
+1. NSIS post-install copies it to `%USERPROFILE%\.dq-teams\bin\coreutils\`
+2. Runs `coreutils-manager refresh` to create applet hardlinks
+3. App first-launch also re-prepares as a safety net
 
 See https://github.com/microsoft/coreutils (MIT).

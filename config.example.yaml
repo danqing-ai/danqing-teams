@@ -26,7 +26,8 @@ runtime:
   # Backend: empty = auto-probe; or seatbelt | landlock | bwrap | win-token | wsl2 | host-weak
   # Shell (Windows host/win-token only): auto | bash | cmd
   # auto prefers bundled/system Microsoft Coreutils with cmd, then Git Bash, else cmd.
-  # WSL2 always uses bash inside WSL. Desktop Windows builds ship Coreutils under ~/.dq-teams/bin/coreutils/.
+  # WSL2 always uses bash inside WSL.
+  # Windows desktop NSIS installs Coreutils by default into ~/.dq-teams/bin/coreutils/.
   sandbox:
     enabled: true
     mode: "workspace-write"

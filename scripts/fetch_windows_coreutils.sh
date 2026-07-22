@@ -16,8 +16,14 @@ mkdir -p "$DEST_DIR"
 DEST_EXE="$DEST_DIR/coreutils.exe"
 
 if [[ -f "$DEST_EXE" && "${DQ_COREUTILS_FORCE:-}" != "1" ]]; then
-  echo "==> Coreutils already present: $DEST_EXE ($(du -h "$DEST_EXE" | cut -f1))"
-  exit 0
+  SIZE="$(wc -c < "$DEST_EXE" | tr -d ' ')"
+  if [[ "${SIZE:-0}" -lt 1000000 ]]; then
+    echo "WARNING: existing coreutils.exe looks truncated ($SIZE bytes); re-fetching" >&2
+  else
+    echo "==> Coreutils already present: $DEST_EXE ($(du -h "$DEST_EXE" | cut -f1))"
+    printf '%s\n' "$VERSION" >"$DEST_DIR/VERSION"
+    exit 0
+  fi
 fi
 
 TMP="$(mktemp -d)"
@@ -53,9 +59,20 @@ Version: ${VERSION}
 Source: https://github.com/microsoft/coreutils/releases/tag/v${VERSION}
 License: MIT (see repository NOTICE.md / LICENSE)
 
-This multi-call binary is prepared at runtime into \`~/.dq-teams/bin/coreutils/\`
-with hardlinks (\`ls.exe\`, \`cat.exe\`, …) and prepended to \`exec_shell\` PATH on
-Windows so agents get POSIX utilities without installing Git Bash.
+**Default-installed** with the Windows desktop NSIS package:
+1. \`pack-windows-desktop\` downloads \`coreutils.exe\` into this folder (required).
+2. The installer copies it to \`%USERPROFILE%\\.dq-teams\\bin\\coreutils\\\` and runs
+   \`coreutils-manager refresh\` to create applet hardlinks (\`ls.exe\`, \`cat.exe\`, …).
+3. Desktop / backend prepend that \`bin\\\` directory to \`exec_shell\` PATH.
+
+No Git Bash install is required for POSIX utilities on Windows host / win-token.
 EOF
 
-echo "==> Wrote $DEST_EXE ($(du -h "$DEST_EXE" | cut -f1))"
+SIZE="$(wc -c < "$DEST_EXE" | tr -d ' ')"
+if [[ "${SIZE:-0}" -lt 1000000 ]]; then
+  echo "ERROR: downloaded coreutils.exe looks truncated ($SIZE bytes)" >&2
+  rm -f "$DEST_EXE"
+  exit 1
+fi
+
+echo "==> Wrote $DEST_EXE ($(du -h "$DEST_EXE" | cut -f1)) — required for Windows desktop packs"
