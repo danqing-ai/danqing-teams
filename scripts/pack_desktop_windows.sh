@@ -46,6 +46,10 @@ has_tauri_signing_key() {
 echo "==> Building backend sidecar..."
 "$SCRIPT_DIR/build_sidecar.sh"
 
+# Bundle Microsoft Coreutils for Windows (POSIX utilities; replaces Git Bash dependency)
+echo "==> Fetching bundled Coreutils for Windows..."
+"$SCRIPT_DIR/fetch_windows_coreutils.sh"
+
 # Ensure only the target-tripled sidecar exists in bin/ to avoid duplicates in the bundle
 BIN_DIR="$DQ_ROOT/desktop/src-tauri/bin"
 rm -f "$BIN_DIR"/danqing-teams-backend.exe

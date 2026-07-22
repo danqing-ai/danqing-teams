@@ -5,6 +5,7 @@
 //	  teams.db      — SQLite database
 //	  data/         — projects, turn logs, checkpoints
 //	  bin/          — desktop sidecar binary (optional)
+//	  bin/coreutils/— Windows Microsoft Coreutils multi-call + applet hardlinks (optional)
 //	  backend.log   — desktop sidecar log (optional)
 package paths
 

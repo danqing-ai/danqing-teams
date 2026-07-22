@@ -137,14 +137,17 @@ const sandboxStatusText = computed(() => {
   const caps = st.capabilities?.length ? ` (${st.capabilities.join(', ')})` : ''
   const shell = st.shell ? ` · ${st.shell}` : ''
   const path = st.shellPath ? ` @ ${st.shellPath}` : ''
-  return `${st.backend}${caps}${shell}${path}`
+  const cu = st.coreutilsBin ? ` · coreutils ${st.coreutilsBin}` : ''
+  return `${st.backend}${caps}${shell}${path}${cu}`
 })
 
 const showGitBashHint = computed(() => {
   const st = runtimeConfig.sandboxStatus
   if (!st || st.platform !== 'windows') return false
   if (st.backend === 'wsl2') return false
-  return !st.shell || st.shell === 'cmd'
+  if (st.coreutilsBin) return false
+  if (st.shell && st.shell !== 'cmd') return false
+  return true
 })
 
 const browserStatusText = computed(() => {

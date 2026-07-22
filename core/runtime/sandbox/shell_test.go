@@ -39,6 +39,17 @@ func TestResolveShellGitBashAuto(t *testing.T) {
 	gitBashCandidatePaths = func() []string { return []string{bash} }
 	t.Cleanup(func() { gitBashCandidatePaths = prev })
 
+	prevCU := coreutilsCandidateBins
+	coreutilsCandidateBins = func() []string { return nil }
+	prevExe := coreutilsExeCandidates
+	coreutilsExeCandidates = func() []string { return nil }
+	resetCoreutilsCache()
+	t.Cleanup(func() {
+		coreutilsCandidateBins = prevCU
+		coreutilsExeCandidates = prevExe
+		resetCoreutilsCache()
+	})
+
 	// Force Windows branch by only testing path find + resolve logic pieces.
 	found := findGitBash()
 	if found != bash {
@@ -56,6 +67,37 @@ func TestResolveShellGitBashAuto(t *testing.T) {
 
 	sh := resolveShell(domain.ConfigSandboxSection{Shell: "auto"}, domain.SandboxBackendWinToken)
 	if sh.kind != "git-bash" || sh.path != bash || sh.label != "bash (Git for Windows)" {
+		t.Fatalf("got %+v", sh)
+	}
+}
+
+func TestResolveShellAutoPrefersCoreutilsOverGitBash(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("windows-only")
+	}
+	dir := t.TempDir()
+	bash := filepath.Join(dir, "bash.exe")
+	_ = os.WriteFile(bash, []byte("fake"), 0o755)
+	cuBin := filepath.Join(dir, "cubin")
+	_ = os.MkdirAll(cuBin, 0o755)
+	_ = os.WriteFile(filepath.Join(cuBin, "ls.exe"), []byte("fake"), 0o755)
+
+	prev := gitBashCandidatePaths
+	gitBashCandidatePaths = func() []string { return []string{bash} }
+	prevCU := coreutilsCandidateBins
+	coreutilsCandidateBins = func() []string { return []string{cuBin} }
+	prevExe := coreutilsExeCandidates
+	coreutilsExeCandidates = func() []string { return nil }
+	resetCoreutilsCache()
+	t.Cleanup(func() {
+		gitBashCandidatePaths = prev
+		coreutilsCandidateBins = prevCU
+		coreutilsExeCandidates = prevExe
+		resetCoreutilsCache()
+	})
+
+	sh := resolveShell(domain.ConfigSandboxSection{Shell: "auto"}, domain.SandboxBackendWinToken)
+	if sh.kind != "cmd" || sh.label != "cmd (Coreutils)" || sh.coreutilsBin != cuBin {
 		t.Fatalf("got %+v", sh)
 	}
 }
@@ -83,7 +125,17 @@ func TestResolveShellRequireBashMissing(t *testing.T) {
 	}
 	prev := gitBashCandidatePaths
 	gitBashCandidatePaths = func() []string { return nil }
-	t.Cleanup(func() { gitBashCandidatePaths = prev })
+	prevCU := coreutilsCandidateBins
+	coreutilsCandidateBins = func() []string { return nil }
+	prevExe := coreutilsExeCandidates
+	coreutilsExeCandidates = func() []string { return nil }
+	resetCoreutilsCache()
+	t.Cleanup(func() {
+		gitBashCandidatePaths = prev
+		coreutilsCandidateBins = prevCU
+		coreutilsExeCandidates = prevExe
+		resetCoreutilsCache()
+	})
 
 	sh := resolveShell(domain.ConfigSandboxSection{Shell: "bash"}, domain.SandboxBackendWinToken)
 	if sh.err == nil {
@@ -97,7 +149,17 @@ func TestResolveShellAutoFallsBackCmd(t *testing.T) {
 	}
 	prev := gitBashCandidatePaths
 	gitBashCandidatePaths = func() []string { return []string{filepath.Join(t.TempDir(), "missing", "bash.exe")} }
-	t.Cleanup(func() { gitBashCandidatePaths = prev })
+	prevCU := coreutilsCandidateBins
+	coreutilsCandidateBins = func() []string { return nil }
+	prevExe := coreutilsExeCandidates
+	coreutilsExeCandidates = func() []string { return nil }
+	resetCoreutilsCache()
+	t.Cleanup(func() {
+		gitBashCandidatePaths = prev
+		coreutilsCandidateBins = prevCU
+		coreutilsExeCandidates = prevExe
+		resetCoreutilsCache()
+	})
 
 	sh := resolveShell(domain.ConfigSandboxSection{Shell: "auto"}, domain.SandboxBackendWinToken)
 	if sh.kind != "cmd" || sh.err != nil {

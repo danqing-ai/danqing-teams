@@ -78,6 +78,7 @@ Server, CLI, TUI, and desktop all use the same home by default:
   data/          # projects, turn logs
   skills/        # optional user custom skills (scanned each turn)
   bin/           # desktop sidecar binary
+  bin/coreutils/ # Windows: bundled Microsoft Coreutils + applet hardlinks
   backend.log    # desktop sidecar log
 ```
 

@@ -262,6 +262,7 @@ export interface SandboxStatus {
   capabilities?: string[]
   shell?: string
   shellPath?: string
+  coreutilsBin?: string
 }
 
 export interface BrowserStatus {
