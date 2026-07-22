@@ -376,3 +376,90 @@ func validateToolMessagePairs(t *testing.T, msgs []Message, label string) {
 		}
 	}
 }
+
+func TestEnforceToolPairingDropsOrphanAssistantToolCalls(t *testing.T) {
+	tr := NewTurnRunner(nil, nil, nil, nil, nil)
+	msgs := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleUser, Content: "hi"},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "c1", Name: "read_file"}}},
+		{Role: RoleTool, ToolCallID: "c1", Name: "read_file", Content: "ok"},
+		// Orphan: assistant with tool_calls but no matching tool result
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "c2", Name: "write_file"}}},
+		{Role: RoleUser, Content: "next"},
+	}
+	out := tr.enforceToolPairing(msgs)
+
+	// The orphan assistant(tool_calls) for c2 must be dropped.
+	for _, m := range out {
+		if m.Role == RoleAssistant {
+			for _, tc := range m.ToolCalls {
+				if tc.ID == "c2" {
+					t.Fatal("orphan assistant tool_call c2 should have been dropped")
+				}
+			}
+		}
+	}
+	// The complete pair (c1) must survive.
+	foundC1 := false
+	for _, m := range out {
+		if m.Role == RoleTool && m.ToolCallID == "c1" {
+			foundC1 = true
+		}
+	}
+	if !foundC1 {
+		t.Fatal("complete pair c1 should have been kept")
+	}
+	validateToolMessagePairs(t, out, "enforceToolPairing orphan assistant")
+}
+
+func TestEnforceToolPairingKeepsPartialAssistantWithSomeResults(t *testing.T) {
+	tr := NewTurnRunner(nil, nil, nil, nil, nil)
+	// Assistant with 2 tool_calls, only 1 has a result — should be kept
+	// (the missing one will be handled by closeUnfinishedToolCalls elsewhere).
+	msgs := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleUser, Content: "hi"},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{
+			{ID: "c1", Name: "read_file"},
+			{ID: "c2", Name: "write_file"},
+		}},
+		{Role: RoleTool, ToolCallID: "c1", Name: "read_file", Content: "ok"},
+	}
+	out := tr.enforceToolPairing(msgs)
+
+	// Assistant should be kept because c1 has a result.
+	foundAssistant := false
+	for _, m := range out {
+		if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
+			foundAssistant = true
+		}
+	}
+	if !foundAssistant {
+		t.Fatal("assistant with at least one matching result should be kept")
+	}
+}
+
+func TestSnipHeadPreservesLastUserMessage(t *testing.T) {
+	tr := NewTurnRunner(nil, nil, nil, nil, nil)
+	// Very small budget — should remove history but NOT the last user message.
+	msgs := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleUser, Content: "old history message 1"},
+		{Role: RoleAssistant, Content: "old response 1"},
+		{Role: RoleUser, Content: "old history message 2"},
+		{Role: RoleAssistant, Content: "old response 2"},
+		{Role: RoleUser, Content: "current goal — must survive"},
+	}
+	out := tr.snipHead(msgs, 10) // budget=10 tokens, very small
+
+	foundLastUser := false
+	for _, m := range out {
+		if m.Role == RoleUser && m.Content == "current goal — must survive" {
+			foundLastUser = true
+		}
+	}
+	if !foundLastUser {
+		t.Fatal("snipHead must not remove the last user message (current turn goal)")
+	}
+}

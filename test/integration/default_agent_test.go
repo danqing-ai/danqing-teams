@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -244,6 +245,19 @@ func TestDefaultInterrupt(t *testing.T) {
 		t.Fatalf("cancel: %d %s", w3.Code, w3.Body.String())
 	}
 	t.Logf("cancelled turn: %s", sendResp.TurnID)
+
+	// Wait for the background goroutine to finish (turn status → cancelled in DB)
+	// before returning, so TempDir cleanup doesn't race with the goroutine.
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		turn, err := core.Store.Turns().Get(context.Background(), sendResp.TurnID)
+		if err == nil && (turn.Status == domain.TurnCancelled || turn.Status == domain.TurnFailed) {
+			t.Logf("cancel goroutine finished, turn status=%s", turn.Status)
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Log("cancel not yet reflected in DB (goroutine may still be running)")
 }
 
 func TestDefaultContinueAfterInterrupt(t *testing.T) {
@@ -620,8 +634,10 @@ func TestDefaultSameSessionMultiTurn(t *testing.T) {
 	}
 
 	saved, _ := core.Sessions.Get(nil, s.ID)
-	if saved.Status != domain.SessionStatusActive {
-		t.Errorf("session should be active, got %s", saved.Status)
+	// After all turns complete, afterTurn sets the session status to "completed".
+	// (It's only "active" while a turn is running.)
+	if saved.Status != domain.SessionStatusCompleted {
+		t.Errorf("session should be completed after all turns, got %s", saved.Status)
 	}
 }
 
@@ -795,16 +811,19 @@ func TestDefaultToolCallWithRealLLM(t *testing.T) {
 		t.Error("expected at least one tool.completed event — tool did not complete")
 	}
 
-	// Verify turn log has tool_call entries with non-nil input
+	// Verify turn log has assistant entries with tool_calls (the current format;
+	// legacy "tool_call" entries are only produced by older code paths).
 	entries, err := turnlog.LoadTurnLog(core.Projects.ProjectDir, "_default", s.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var toolCalls int
 	for _, e := range entries {
-		if e.Type == "tool_call" {
-			toolCalls++
-			t.Logf("turn log tool_call: name=%s input=%v", e.Data["name"], e.Data["input"])
+		if e.Type == "assistant" {
+			if calls, ok := e.Data["tool_calls"].([]any); ok && len(calls) > 0 {
+				toolCalls++
+				t.Logf("turn log assistant tool_calls: %d call(s)", len(calls))
+			}
 		}
 	}
 	if toolCalls == 0 {

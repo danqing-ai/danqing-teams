@@ -521,15 +521,11 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		finalReport = domain.Report{Status: domain.ReportFailed, Summary: "max steps reached", Confidence: 0.3, MaxPromptTokens: maxPromptTokens}
 	}
 
-	reportPayload := finalReport
-	if reportCaptured {
-		reportPayload = domain.Report{
-			Status:     finalReport.Status,
-			Confidence: finalReport.Confidence,
-			StepsUsed:  finalReport.StepsUsed,
-		}
-	}
-	p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventReport, reportPayload)
+	// Publish the full report including Summary and MaxPromptTokens.
+	// Multiple consumers (CLI, frontend, tests) read the summary from this event;
+	// stripping it left them with an empty report. EventAgentMessage carries the
+	// streamed text for UI display, but EventReport is the structured final report.
+	p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventReport, finalReport)
 	p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventTurnEnded, domain.TurnEndedPayload{
 		TurnID: tctx.TurnID, Status: string(finalReport.Status), Summary: finalReport.Summary,
 	})
@@ -739,19 +735,40 @@ func isHugeResult(content string) bool {
 }
 
 func (p *TurnRunner) enforceToolPairing(messages []Message) []Message {
+	// Build a set of tool_call IDs that have a matching tool_result.
 	callIdx := make(map[string]int)
+	resultIDs := make(map[string]bool)
 	for i, m := range messages {
 		if m.Role == RoleAssistant {
 			for _, tc := range m.ToolCalls {
 				callIdx[tc.ID] = i
 			}
 		}
+		if m.Role == RoleTool && m.ToolCallID != "" {
+			resultIDs[m.ToolCallID] = true
+		}
 	}
 
 	out := make([]Message, 0, len(messages))
 	for _, m := range messages {
 		if m.Role == RoleTool && m.ToolCallID != "" {
+			// Drop orphan tool results (no matching assistant tool_call).
 			if _, ok := callIdx[m.ToolCallID]; !ok {
+				continue
+			}
+		}
+		if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
+			// Drop orphan assistant tool_calls whose results are all missing.
+			// An assistant(tool_calls) without any matching tool_result would
+			// cause an OpenAI-compatible API error ("tool_call without result").
+			allMissing := true
+			for _, tc := range m.ToolCalls {
+				if resultIDs[tc.ID] {
+					allMissing = false
+					break
+				}
+			}
+			if allMissing {
 				continue
 			}
 		}
@@ -823,10 +840,26 @@ func (p *TurnRunner) snipHead(messages []Message, budget int) []Message {
 	result := make([]Message, len(messages))
 	copy(result, messages)
 
+	// Protect the last user message — it is the current turn's goal.
+	// Removing it would make the turn meaningless.
+	lastUserIdx := -1
+	for i := len(result) - 1; i >= systemCount; i-- {
+		if result[i].Role == RoleUser {
+			lastUserIdx = i
+			break
+		}
+	}
+
 	i := systemCount
 	for i < len(result) {
 		cur := estimateTurnTokens(result)
 		if cur <= budget {
+			break
+		}
+
+		// Stop if the next message to remove is the protected last user message
+		// or beyond it (everything after the user message is the current turn's work).
+		if lastUserIdx >= 0 && i >= lastUserIdx {
 			break
 		}
 

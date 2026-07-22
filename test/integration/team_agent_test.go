@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -165,6 +166,16 @@ func TestTeamCancelTurn(t *testing.T) {
 			since = ev.Seq
 			if ev.Type == domain.EventTurnFailed {
 				t.Logf("cancel confirmed via turn.failed event")
+				// Wait for the background goroutine to finish writing to DB / turn log.
+				waitDeadline := time.Now().Add(5 * time.Second)
+				for time.Now().Before(waitDeadline) {
+					turn, err := core.Store.Turns().Get(context.Background(), sendResp.TurnID)
+					if err == nil && (turn.Status == domain.TurnCancelled || turn.Status == domain.TurnFailed) {
+						t.Logf("cancel goroutine finished, turn status=%s", turn.Status)
+						return
+					}
+					time.Sleep(100 * time.Millisecond)
+				}
 				return
 			}
 		}
