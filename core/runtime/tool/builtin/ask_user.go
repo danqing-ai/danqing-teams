@@ -25,8 +25,7 @@ func (h *AskUser) Describe(args map[string]any) string {
 func (h *AskUser) Schema() domain.ToolSchema {
 	return domain.ToolSchema{
 		Name: "ask_user",
-		Description: "Ask the human user a question and wait for their response.\n\n" +
-			"Use this when you need clarification, a decision, or additional information.\n\n" +
+		Description: "Ask the human user a question and block until they reply. REQUIRED for clarification, decisions, or missing inputs — never ask in a plain assistant message (that ends the turn without waiting).\n\n" +
 			"## Modes\n" +
 			"1. **Simple question**: just provide `question`. User types a free-text reply.\n" +
 			"2. **Choice**: provide `question` + `options`. User picks one or types custom text.\n" +

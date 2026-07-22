@@ -409,15 +409,21 @@ func TestFormatActiveTodosAndSystemPrompt(t *testing.T) {
 		t.Fatalf("formatActiveTodos=%q", block)
 	}
 
-	sys := buildSystemPrompt("persona", nil, nil, `{"summary":"x"}`, block, domain.SandboxStatus{})
+	sys := buildSystemPrompt("persona", nil, nil, false, `{"summary":"x"}`, block, domain.SandboxStatus{})
 	if !contains(sys, "<compaction-checkpoint>") {
 		t.Error("expected compaction-checkpoint")
 	}
 	if !contains(sys, "<active-todos>") || !contains(sys, "[in_progress] A (high)") {
 		t.Errorf("expected active-todos in prompt, got %q", sys)
 	}
+	if !contains(sys, "<ask-user-policy>") || !contains(sys, "ask_user") {
+		t.Errorf("expected ask-user-policy in prompt, got %q", sys)
+	}
 	if !contains(sys, "<memory-policy>") || !contains(sys, "memory_update") {
 		t.Errorf("expected memory-policy in prompt, got %q", sys)
+	}
+	if contains(sys, "<delegation-policy>") {
+		t.Error("delegation-policy should be absent when canDelegate=false")
 	}
 }
 

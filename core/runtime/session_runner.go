@@ -346,7 +346,7 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) {
 			activeTodos = formatActiveTodos(checkpoint.Todos)
 		}
 
-		sys := buildSystemPrompt(agentPtr.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agentPtr), checkpointText, activeTodos, e.sandboxStatus())
+		sys := buildSystemPrompt(agentPtr.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agentPtr), agentPtr.CanDelegate, checkpointText, activeTodos, e.sandboxStatus())
 		messages := []Message{{Role: RoleSystem, Content: sys}}
 		if hits := e.knowledge.Search(agentPtr.KnowledgeIDs, goal, cfg.knowledgeSearchTopK); len(hits) > 0 {
 			content := ""
@@ -666,7 +666,7 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 		activeTodos = formatActiveTodos(checkpoint.Todos)
 	}
 
-	sys := buildSystemPrompt(agent.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agent), checkpointText, activeTodos, e.sandboxStatus())
+	sys := buildSystemPrompt(agent.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agent), agent.CanDelegate, checkpointText, activeTodos, e.sandboxStatus())
 	messages := []Message{
 		{Role: RoleSystem, Content: sys},
 	}
@@ -975,7 +975,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 				e.turnRunner.Log = oldLog
 			}()
 
-			sys := buildSystemPrompt(workerAgent.SystemPrompt, e.turnRunner.SkillList, nil, "", "", e.sandboxStatus())
+			sys := buildSystemPrompt(workerAgent.SystemPrompt, e.turnRunner.SkillList, nil, workerAgent.CanDelegate, "", "", e.sandboxStatus())
 			messages := []Message{
 				{Role: RoleSystem, Content: sys},
 			}
@@ -1181,7 +1181,7 @@ func (e *Engine) ResolveAskUser(askID, answer string) error {
 
 func (e *Engine) buildTurnMessages(sessionID string, agent domain.Agent, goal string, checkpointText string) []Message {
 	cfg := e.loadRunCfg(context.Background())
-	sys := buildSystemPrompt(agent.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agent), checkpointText, "", e.sandboxStatus())
+	sys := buildSystemPrompt(agent.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agent), agent.CanDelegate, checkpointText, "", e.sandboxStatus())
 	messages := []Message{
 		{Role: RoleSystem, Content: sys},
 	}

@@ -53,3 +53,35 @@ func TestBuildSkillMetadataEmpty(t *testing.T) {
 		t.Fatalf("expected empty, got %q", got)
 	}
 }
+
+func TestBuildSystemPromptPolicies(t *testing.T) {
+	peers := []domain.Agent{{ID: "explorer", Name: "Explorer", Description: "Explore code"}}
+
+	withDelegate := buildSystemPrompt("persona", nil, peers, true, "", "", domain.SandboxStatus{})
+	if !strings.Contains(withDelegate, "<ask-user-policy>") {
+		t.Fatal("expected ask-user-policy")
+	}
+	if !strings.Contains(withDelegate, "<delegation-policy>") {
+		t.Fatal("expected delegation-policy when canDelegate")
+	}
+	if !strings.Contains(withDelegate, "<available_agents>") || !strings.Contains(withDelegate, "explorer") {
+		t.Fatalf("expected available_agents roster:\n%s", withDelegate)
+	}
+
+	noDelegate := buildSystemPrompt("persona", nil, peers, false, "", "", domain.SandboxStatus{})
+	if strings.Contains(noDelegate, "<delegation-policy>") || strings.Contains(noDelegate, "<available_agents>") {
+		t.Fatal("delegation blocks must not appear when canDelegate=false")
+	}
+	if !strings.Contains(noDelegate, "<ask-user-policy>") {
+		t.Fatal("ask-user-policy is global")
+	}
+
+	// CanDelegate with empty peer list still gets the policy (no roster).
+	emptyPeers := buildSystemPrompt("persona", nil, nil, true, "", "", domain.SandboxStatus{})
+	if !strings.Contains(emptyPeers, "<delegation-policy>") {
+		t.Fatal("expected delegation-policy even with no peers")
+	}
+	if strings.Contains(emptyPeers, "<available_agents>\n") {
+		t.Fatal("available_agents roster should be omitted when peer list empty")
+	}
+}

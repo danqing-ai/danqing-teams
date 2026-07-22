@@ -22,7 +22,7 @@ Turn fuzzy ideas into an approved design before implementation. Do not write pro
 
 1. **Explore context** — relevant files, docs, recent patterns via `read_file` / `grep` / `glob`.
 2. **Scope** — if the request spans independent subsystems, help decompose; brainstorm one sub-project at a time.
-3. **Clarify** — ask questions **one at a time** (prefer multiple choice). Cover purpose, constraints, success criteria.
+3. **Clarify** — call `ask_user` **one question at a time** (prefer `options` / multiple choice). Cover purpose, constraints, success criteria. Never ask in a plain message.
 4. **Approaches** — propose 2–3 options with trade-offs; lead with a recommendation.
 5. **Design** — present architecture/components/data flow/errors/testing scaled to complexity; get approval (section by section if large).
 6. **Spec** — if the user wants a durable artifact, write a concise design doc with `write` (path they prefer, or a sensible project docs path).
@@ -32,7 +32,7 @@ Turn fuzzy ideas into an approved design before implementation. Do not write pro
 ## Anti-patterns
 
 - “Too simple for a design” — still state the approach and get a yes
-- Asking five questions in one message
+- Asking five questions in one message (or asking in plain text instead of `ask_user`)
 - Jumping to code, file scaffolds, or `writing-plans` before approval
 - Unrelated refactor proposals that do not serve the goal
 - Vague specs with placeholders

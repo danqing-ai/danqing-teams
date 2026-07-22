@@ -9,7 +9,7 @@ import (
 	"danqing-teams/core/domain"
 )
 
-func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList []domain.Agent, checkpoint string, activeTodos string, sandboxStatus domain.SandboxStatus) string {
+func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList []domain.Agent, canDelegate bool, checkpoint string, activeTodos string, sandboxStatus domain.SandboxStatus) string {
 	var b strings.Builder
 	b.WriteString(agentPersona)
 
@@ -18,10 +18,13 @@ func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList 
 		b.WriteString("\n\n")
 		b.WriteString(meta)
 	}
-	agentMeta := buildAgentMetadata(agentList)
-	if agentMeta != "" {
+	if canDelegate {
 		b.WriteString("\n\n")
-		b.WriteString(agentMeta)
+		b.WriteString(buildDelegationPolicy())
+		if agentMeta := buildAgentMetadata(agentList); agentMeta != "" {
+			b.WriteString("\n\n")
+			b.WriteString(agentMeta)
+		}
 	}
 	if checkpoint != "" {
 		b.WriteString("\n\n")
@@ -34,11 +37,44 @@ func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList 
 		b.WriteString(activeTodos)
 	}
 	b.WriteString("\n\n")
+	b.WriteString(buildAskUserPolicy())
+	b.WriteString("\n\n")
 	b.WriteString(buildMemoryPolicy())
 	b.WriteString("\n\n")
 	b.WriteString(buildRuntimeEnvironment(sandboxStatus))
 
 	return b.String()
+}
+
+func buildAskUserPolicy() string {
+	return `<ask-user-policy>
+When you need clarification, a decision, missing inputs, or approval before proceeding, you MUST call the ask_user tool. Do NOT ask the user in a plain assistant message — that ends the turn without waiting for an answer.
+
+Prefer ask_user with options (and defaultOption when one choice is recommended) or form_fields for structured input. Free-text question-only is fine when choices cannot be enumerated.
+
+Use a normal message only to report progress, results, or blockers that do not require a reply to continue.
+</ask-user-policy>`
+}
+
+func buildDelegationPolicy() string {
+	return `<delegation-policy>
+You can delegate via delegate_agent. Peers are listed in <available_agents>.
+
+When to delegate:
+- Split independent work across subagents; launch parallel calls when scopes do not overlap
+- Prefer delegation when it reduces total effort or improves quality; act directly on small steps where coordination would add overhead
+
+How to delegate:
+- Give a clear goal plus context (known facts, constraints, expected output)
+- Assign complete subtasks, not single actions — let subagents choose their tools
+- Read each subagent report before the next decision; treat reports as primary evidence
+- Verify load-bearing claims against EVIDENCE; if uncited, retry with a refined goal or investigate yourself
+- Only ask subagents to implement after scope and approach are understood
+
+Do NOT:
+- Re-delegate the same insufficient task unchanged (refine, pick another agent, or do it yourself)
+- Duplicate overlapping scopes across parallel subagents
+</delegation-policy>`
 }
 
 func buildMemoryPolicy() string {
