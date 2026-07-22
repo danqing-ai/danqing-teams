@@ -94,6 +94,40 @@ func TestLoadForRecoveryKeepsCompletePairs(t *testing.T) {
 	}
 }
 
+func TestLoadForRecoveryStripsPartialAssistantBatch(t *testing.T) {
+	root := t.TempDir()
+	s := NewTurnLogStore(testProjector(root))
+
+	if err := s.Create("turn-partial", "sess-1", "proj-a", "agent-1", "do"); err != nil {
+		t.Fatal(err)
+	}
+	s.Append("turn-partial", "user", map[string]any{"content": "do"})
+	// One assistant batch with two calls; only c1 completed before interrupt.
+	s.Append("turn-partial", "assistant", map[string]any{
+		"content": "reading",
+		"tool_calls": []any{
+			map[string]any{"id": "c1", "name": "read_file", "arguments": map[string]any{"p": "a"}},
+			map[string]any{"id": "c2", "name": "read_file", "arguments": map[string]any{"p": "b"}},
+		},
+	})
+	s.Append("turn-partial", "tool_result", map[string]any{
+		"call_id": "c1", "name": "read_file", "output": "A",
+	})
+	s.EndTurn("turn-partial", domain.TurnCancelled)
+
+	_, entries := s.LoadForRecovery("turn-partial")
+	msgs := entriesToChatMessages(entries)
+	if len(msgs) != 3 {
+		t.Fatalf("want user+assistant+tool, got %d %+v", len(msgs), msgs)
+	}
+	if msgs[1].Role != "assistant" || len(msgs[1].ToolCalls) != 1 || msgs[1].ToolCalls[0].ID != "c1" {
+		t.Fatalf("expected only completed tool_call c1, got %+v", msgs[1])
+	}
+	if msgs[2].Role != "tool" || msgs[2].ToolCallID != "c1" {
+		t.Fatalf("expected tool result c1, got %+v", msgs[2])
+	}
+}
+
 func TestCreateReopensWithoutDuplicateStart(t *testing.T) {
 	root := t.TempDir()
 	s := NewTurnLogStore(testProjector(root))
@@ -285,7 +319,7 @@ func TestLoadSessionMessagesRebuildsUserAssistantTools(t *testing.T) {
 	s.Append("turn-b", "assistant", map[string]any{"content": "It is 29C"})
 	s.EndTurn("turn-b", domain.TurnCompleted)
 
-	msgs := s.LoadSessionMessages("sess-hist", "")
+	msgs := s.LoadSessionMessages("sess-hist", "", 0)
 	if len(msgs) != 6 {
 		t.Fatalf("want 6 messages, got %d: %+v", len(msgs), msgs)
 	}
@@ -312,7 +346,7 @@ func TestLoadSessionMessagesIncludesFinalAssistant(t *testing.T) {
 	s.Append("turn-1", "assistant", map[string]any{"content": "done"})
 	s.EndTurn("turn-1", domain.TurnCompleted)
 
-	msgs := s.LoadSessionMessages("sess-2", "")
+	msgs := s.LoadSessionMessages("sess-2", "", 0)
 	if len(msgs) != 4 {
 		t.Fatalf("want 4 msgs, got %d %+v", len(msgs), msgs)
 	}
@@ -343,7 +377,7 @@ func TestLoadSessionMessagesSkipsNestedToolRunAndHonorsRetain(t *testing.T) {
 	s.Append("turn-2", "assistant", map[string]any{"content": "a2"})
 	s.EndTurn("turn-2", domain.TurnCompleted)
 
-	all := s.LoadSessionMessages("sess-3", "")
+	all := s.LoadSessionMessages("sess-3", "", 0)
 	for _, m := range all {
 		if m.Content == "child-secret" || m.Content == "sub" {
 			t.Fatalf("nested tool-run leaked into session history: %+v", all)
@@ -353,7 +387,7 @@ func TestLoadSessionMessagesSkipsNestedToolRunAndHonorsRetain(t *testing.T) {
 		t.Fatalf("want 4 parent msgs, got %d %+v", len(all), all)
 	}
 
-	retained := s.LoadSessionMessages("sess-3", "turn-2")
+	retained := s.LoadSessionMessages("sess-3", "turn-2", 0)
 	if len(retained) != 2 {
 		t.Fatalf("retain from turn-2: want 2 msgs, got %d %+v", len(retained), retained)
 	}
@@ -371,7 +405,7 @@ func TestLoadSessionMessagesLegacyToolCall(t *testing.T) {
 	s.Append("turn-legacy", "assistant", map[string]any{"content": "ok"})
 	s.EndTurn("turn-legacy", domain.TurnCompleted)
 
-	msgs := s.LoadSessionMessages("sess-leg", "")
+	msgs := s.LoadSessionMessages("sess-leg", "", 0)
 	if len(msgs) != 4 {
 		t.Fatalf("want 4, got %d %+v", len(msgs), msgs)
 	}
@@ -380,5 +414,38 @@ func TestLoadSessionMessagesLegacyToolCall(t *testing.T) {
 	}
 	if msgs[2].Role != "tool" || msgs[2].Content != "ok" {
 		t.Fatalf("tool result: %+v", msgs[2])
+	}
+}
+
+func TestLoadSessionMessagesHonorsRetainSkip(t *testing.T) {
+	root := t.TempDir()
+	s := NewTurnLogStore(testProjector(root))
+
+	_ = s.Create("turn-1", "sess-skip", "proj-a", "a", "g")
+	s.Append("turn-1", "user", map[string]any{"content": "u1"})
+	s.Append("turn-1", "assistant", map[string]any{
+		"tool_calls": []any{
+			map[string]any{"id": "c1", "name": "read_file", "arguments": map[string]any{"p": "a"}},
+		},
+	})
+	s.Append("turn-1", "tool_result", map[string]any{"call_id": "c1", "name": "read_file", "output": "OLD"})
+	s.Append("turn-1", "assistant", map[string]any{
+		"tool_calls": []any{
+			map[string]any{"id": "c2", "name": "read_file", "arguments": map[string]any{"p": "b"}},
+		},
+	})
+	s.Append("turn-1", "tool_result", map[string]any{"call_id": "c2", "name": "read_file", "output": "NEW"})
+	s.EndTurn("turn-1", domain.TurnCompleted)
+
+	// Skip first 3 messages (user + first tool pair), keep second pair.
+	msgs := s.LoadSessionMessages("sess-skip", "turn-1", 3)
+	if len(msgs) != 2 {
+		t.Fatalf("want 2 msgs after skip, got %d %+v", len(msgs), msgs)
+	}
+	if msgs[0].Role != "assistant" || len(msgs[0].ToolCalls) != 1 || msgs[0].ToolCalls[0].ID != "c2" {
+		t.Fatalf("expected second assistant tool_calls, got %+v", msgs[0])
+	}
+	if msgs[1].Role != "tool" || msgs[1].Content != "NEW" {
+		t.Fatalf("expected NEW tool result, got %+v", msgs[1])
 	}
 }

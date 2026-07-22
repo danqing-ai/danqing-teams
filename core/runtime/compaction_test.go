@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"danqing-teams/core/adapter/llm"
@@ -417,6 +418,96 @@ func TestFormatActiveTodosAndSystemPrompt(t *testing.T) {
 	}
 	if !contains(sys, "<memory-policy>") || !contains(sys, "memory_update") {
 		t.Errorf("expected memory-policy in prompt, got %q", sys)
+	}
+}
+
+func TestFindKeepStartRespectsToolPairs(t *testing.T) {
+	// user + (assistant tools + 2 results) + user + text assistant
+	msgs := []Message{
+		{Role: RoleUser, Content: "goal"},
+		{Role: RoleAssistant, Content: "reading", ToolCalls: []ToolCall{
+			{ID: "c1", Name: "read_file", Arguments: map[string]any{"path": "a"}},
+			{ID: "c2", Name: "read_file", Arguments: map[string]any{"path": "b"}},
+		}},
+		{Role: RoleTool, ToolCallID: "c1", Name: "read_file", Content: strings.Repeat("A", 400)},
+		{Role: RoleTool, ToolCallID: "c2", Name: "read_file", Content: strings.Repeat("B", 400)},
+		{Role: RoleUser, Content: "continue"},
+		{Role: RoleAssistant, Content: "done"},
+	}
+	blocks := buildBlocks(msgs)
+	if len(blocks) != 4 {
+		t.Fatalf("want 4 blocks (user, tool-pair, user, assistant), got %d %+v", len(blocks), blocks)
+	}
+	if blocks[1].start != 1 || blocks[1].end != 4 {
+		t.Fatalf("tool pair block should be [1,4), got %+v", blocks[1])
+	}
+
+	// Tiny budget: keep only the newest text assistant (+ ensure user)
+	keep := findKeepStart(msgs, 20)
+	if keep > 4 {
+		t.Fatalf("keepStart=%d should include continue user (idx 4) or earlier", keep)
+	}
+	// Must not cut inside the tool pair [1,4)
+	if keep > 1 && keep < 4 {
+		t.Fatalf("keepStart=%d cuts inside tool pair", keep)
+	}
+}
+
+func TestFindKeepStartSplitsOversizedTurn(t *testing.T) {
+	msgs := []Message{
+		{Role: RoleUser, Content: "start"},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "c1", Name: "read_file", Arguments: map[string]any{"p": "x"}}}},
+		{Role: RoleTool, ToolCallID: "c1", Name: "read_file", Content: strings.Repeat("X", 800)},
+		{Role: RoleUser, Content: "continue"},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "c2", Name: "read_file", Arguments: map[string]any{"p": "y"}}}},
+		{Role: RoleTool, ToolCallID: "c2", Name: "read_file", Content: strings.Repeat("Y", 80)},
+	}
+	// Budget fits the last user + small pair; drops the huge first pair.
+	keep := findKeepStart(msgs, 50)
+	if keep != 3 {
+		t.Fatalf("want keepStart=3 (continue user), got %d", keep)
+	}
+	if keep > 0 && keep < 3 {
+		t.Fatalf("must not cut inside first tool pair, keepStart=%d", keep)
+	}
+}
+
+func TestTruncateToolResultsToBudget(t *testing.T) {
+	msgs := []Message{
+		{Role: RoleUser, Content: "u"},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "c1", Name: "read_file"}}},
+		{Role: RoleTool, ToolCallID: "c1", Name: "read_file", Content: strings.Repeat("Z", 4000)},
+	}
+	out := truncateToolResultsToBudget(msgs, 100)
+	if estimateTokenCount(out) > 100 {
+		t.Fatalf("still over budget: %d", estimateTokenCount(out))
+	}
+	if out[0].Role != RoleUser || out[1].Role != RoleAssistant || out[2].Role != RoleTool {
+		t.Fatalf("structure broken: %+v", out)
+	}
+	if len(out[2].Content) >= 4000 {
+		t.Fatal("expected tool result truncation")
+	}
+}
+
+func TestCompactToRetainStoresSkip(t *testing.T) {
+	mock := llm.NewMock().AddText("handoff note")
+	stream := NewStreamEventManager(nil)
+	tmpDir := t.TempDir()
+	cpStore := turnlog.NewCheckpointStore(func(pid string) string { return filepath.Join(tmpDir, pid) })
+	mgr := NewCompactionManager(mock, stream, testCompactionConfig(true, 2, 2, 128000, 50), cpStore, nil)
+
+	old := []Message{{Role: RoleUser, Content: "old work " + strings.Repeat("o", 200)}}
+	ok := mgr.CompactToRetain(context.Background(), "s-skip", "turn-now", old, old, 3, "mock/test", "turn-big", 4, 999)
+	if !ok {
+		t.Fatal("CompactToRetain failed")
+	}
+	cp := mgr.Recover(context.Background(), "s-skip")
+	if cp == nil {
+		t.Fatal("nil checkpoint")
+	}
+	if cp.RetainFromTurnID != "turn-big" || cp.RetainSkipMessages != 4 {
+		t.Fatalf("cursor: turn=%q skip=%d", cp.RetainFromTurnID, cp.RetainSkipMessages)
 	}
 }
 

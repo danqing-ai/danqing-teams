@@ -130,7 +130,7 @@ type MCPServerRepo interface {
 // LoadSessionMessages rebuilds full ChatMessages from the whitelist above
 // (user / assistant / tool_call / tool_result). Incomplete turns drop an
 // unpaired trailing assistant(tool_calls)/tool_call. Compaction uses
-// retainFromTurnID to bound the replay window.
+// retainFromTurnID + retainSkipMessages to bound the replay window.
 type TurnLogStore interface {
 	Create(turnID, sessionID, projectID, agentID, goal string) error
 	// CreateNested writes a nested tool-run log under tool_runs/ (zip/debug only).
@@ -143,7 +143,8 @@ type TurnLogStore interface {
 	LoadForRecovery(turnID string) (goal string, entries []map[string]any)
 	// LoadSessionMessages rebuilds full LLM chat history for a session.
 	// retainFromTurnID: if non-empty, only include that turn and later ones.
-	LoadSessionMessages(sessionID, retainFromTurnID string) []ChatMessage
+	// retainSkipMessages: skip this many leading messages inside retainFromTurnID.
+	LoadSessionMessages(sessionID, retainFromTurnID string, retainSkipMessages int) []ChatMessage
 	LoadTurnMessages(turnID string) []ChatMessage
 	IsNestedToolRun(turnID string) bool
 	LoadRawLog(turnID string) ([]byte, error)

@@ -48,8 +48,8 @@ func (m *TurnLogManager) LoadForRecovery(turnID string) (goal string, entries []
 	return m.store.LoadForRecovery(turnID)
 }
 
-func (m *TurnLogManager) LoadSessionMessages(sessionID, retainFromTurnID string) []port.ChatMessage {
-	return m.store.LoadSessionMessages(sessionID, retainFromTurnID)
+func (m *TurnLogManager) LoadSessionMessages(sessionID, retainFromTurnID string, retainSkipMessages int) []port.ChatMessage {
+	return m.store.LoadSessionMessages(sessionID, retainFromTurnID, retainSkipMessages)
 }
 
 func (m *TurnLogManager) LoadTurnMessages(turnID string) []port.ChatMessage {

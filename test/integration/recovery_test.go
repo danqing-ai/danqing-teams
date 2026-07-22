@@ -748,7 +748,7 @@ func TestSessionHistorySurvivesRestartFromTurnLog(t *testing.T) {
 		Goal: "查深圳天气", Status: domain.TurnCompleted,
 	})
 
-	msgs1 := core1.TurnLogs.LoadSessionMessages(s.ID, "")
+	msgs1 := core1.TurnLogs.LoadSessionMessages(s.ID, "", 0)
 	found := false
 	for _, m := range msgs1 {
 		if m.Role == "assistant" && m.Content == "深圳今天 29°C，有烟霾" {
@@ -762,7 +762,7 @@ func TestSessionHistorySurvivesRestartFromTurnLog(t *testing.T) {
 
 	// Process restart — in-memory turnMessages is gone; history must come from JSONL.
 	core2 := newCore(t, dataDir)
-	msgs2 := core2.TurnLogs.LoadSessionMessages(s.ID, "")
+	msgs2 := core2.TurnLogs.LoadSessionMessages(s.ID, "", 0)
 	found = false
 	for _, m := range msgs2 {
 		if m.Role == "assistant" && m.Content == "深圳今天 29°C，有烟霾" {
@@ -787,7 +787,7 @@ func TestSessionHistorySurvivesRestartFromTurnLog(t *testing.T) {
 	waitForReport(t, r2, s.ID, &since)
 
 	// History on disk must still include the weather answer (plus the new turn).
-	msgs3 := core2.TurnLogs.LoadSessionMessages(s.ID, "")
+	msgs3 := core2.TurnLogs.LoadSessionMessages(s.ID, "", 0)
 	found = false
 	for _, m := range msgs3 {
 		if m.Role == "assistant" && m.Content == "深圳今天 29°C，有烟霾" {

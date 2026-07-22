@@ -258,8 +258,9 @@ func (s *TurnLogStore) LoadForRecovery(turnID string) (goal string, entries []ma
 
 // LoadSessionMessages rebuilds full LLM chat history from session turn JSONL.
 // If retainFromTurnID is non-empty, only that turn and later turns are included
-// (compaction window). Tool loops are preserved — window size is compaction's job.
-func (s *TurnLogStore) LoadSessionMessages(sessionID, retainFromTurnID string) []port.ChatMessage {
+// (compaction window). retainSkipMessages drops leading messages inside the
+// first retained turn so mid-turn cuts can land on tool-pair boundaries.
+func (s *TurnLogStore) LoadSessionMessages(sessionID, retainFromTurnID string, retainSkipMessages int) []port.ChatMessage {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -269,7 +270,14 @@ func (s *TurnLogStore) LoadSessionMessages(sessionID, retainFromTurnID string) [
 		if retainFromTurnID != "" && id < retainFromTurnID {
 			continue
 		}
-		out = append(out, s.loadTurnMessagesLocked(id)...)
+		msgs := s.loadTurnMessagesLocked(id)
+		if id == retainFromTurnID && retainSkipMessages > 0 {
+			if retainSkipMessages >= len(msgs) {
+				continue
+			}
+			msgs = msgs[retainSkipMessages:]
+		}
+		out = append(out, msgs...)
 	}
 	return out
 }
@@ -321,7 +329,9 @@ func (s *TurnLogStore) readEntriesLocked(filePath string) []map[string]any {
 }
 
 // trimIncompleteTurnEntries keeps reconstructable whitelist entries and drops
-// an unpaired trailing assistant(tool_calls) / legacy tool_call.
+// unpaired tool calls. Trailing assistants/tool_calls without any results are
+// removed; within a batch, tool_calls that lack a matching tool_result are
+// stripped (aligned with salvagePairedTurnDelta) so resume stays API-valid.
 func trimIncompleteTurnEntries(all []map[string]any) []map[string]any {
 	// Collect whitelist indices first.
 	var kept []map[string]any
@@ -342,11 +352,11 @@ func trimIncompleteTurnEntries(all []map[string]any) []map[string]any {
 		typ, _ := last["type"].(string)
 		switch typ {
 		case "tool_result", "user":
-			return kept
+			return filterPartialToolPairs(kept)
 		case "assistant":
 			data, _ := last["data"].(map[string]any)
 			if !assistantHasToolCalls(data) {
-				return kept // text-only assistant is complete
+				return filterPartialToolPairs(kept) // text-only assistant is complete
 			}
 			// Assistant with tool_calls but no following tool_results — drop it.
 			kept = kept[:len(kept)-1]
@@ -356,7 +366,114 @@ func trimIncompleteTurnEntries(all []map[string]any) []map[string]any {
 			kept = kept[:len(kept)-1]
 		}
 	}
-	return kept
+	return nil
+}
+
+// filterPartialToolPairs drops tool_calls (and legacy tool_call entries) that
+// have no matching tool_result, and drops orphan tool_results. Mutates entry
+// data copies so assistant batches remain paired for LLM replay.
+func filterPartialToolPairs(entries []map[string]any) []map[string]any {
+	haveResult := make(map[string]bool)
+	for _, e := range entries {
+		if e["type"] != "tool_result" {
+			continue
+		}
+		data, _ := e["data"].(map[string]any)
+		if id := stringField(data, "call_id"); id != "" {
+			haveResult[id] = true
+		}
+	}
+
+	out := make([]map[string]any, 0, len(entries))
+	keptCallIDs := make(map[string]bool)
+	for _, e := range entries {
+		typ, _ := e["type"].(string)
+		switch typ {
+		case "assistant":
+			data, _ := e["data"].(map[string]any)
+			if data == nil {
+				out = append(out, e)
+				continue
+			}
+			raw, ok := data["tool_calls"]
+			if !ok || raw == nil {
+				out = append(out, e)
+				continue
+			}
+			arr, ok := raw.([]any)
+			if !ok {
+				out = append(out, e)
+				continue
+			}
+			filtered := make([]any, 0, len(arr))
+			for _, item := range arr {
+				m, ok := item.(map[string]any)
+				if !ok {
+					continue
+				}
+				id := stringField(m, "id")
+				if id == "" || !haveResult[id] {
+					continue
+				}
+				filtered = append(filtered, item)
+				keptCallIDs[id] = true
+			}
+			if len(filtered) == len(arr) {
+				out = append(out, e)
+				continue
+			}
+			content := stringField(data, "content")
+			if len(filtered) == 0 && content == "" {
+				continue // nothing reconstructable
+			}
+			cpData := copyStringAnyMap(data)
+			if len(filtered) == 0 {
+				delete(cpData, "tool_calls")
+			} else {
+				cpData["tool_calls"] = filtered
+			}
+			cp := copyStringAnyMap(e)
+			cp["data"] = cpData
+			out = append(out, cp)
+		case "tool_call":
+			data, _ := e["data"].(map[string]any)
+			id := stringField(data, "call_id")
+			if id == "" || !haveResult[id] {
+				continue
+			}
+			keptCallIDs[id] = true
+			out = append(out, e)
+		case "tool_result":
+			// Deferred: only keep if call survives above. Collect for second pass.
+			out = append(out, e)
+		default:
+			out = append(out, e)
+		}
+	}
+
+	final := make([]map[string]any, 0, len(out))
+	for _, e := range out {
+		if e["type"] == "tool_result" {
+			data, _ := e["data"].(map[string]any)
+			id := stringField(data, "call_id")
+			if id != "" && !keptCallIDs[id] {
+				continue
+			}
+		}
+		final = append(final, e)
+	}
+	return final
+}
+
+func copyStringAnyMap(m map[string]any) map[string]any {
+	if m == nil {
+		return nil
+	}
+	cp := make(map[string]any, len(m))
+	for k, v := range m {
+		cp[k] = v
+	}
+	return cp
 }
 
 func assistantHasToolCalls(data map[string]any) bool {

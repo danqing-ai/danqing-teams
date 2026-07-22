@@ -339,13 +339,11 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) {
 		checkpoint := e.compactionMgr.Recover(turnCtx, sessionID)
 		checkpointText := ""
 		activeTodos := ""
-		retainFrom := ""
 		if checkpoint != nil {
 			if checkpoint.Summary != "" {
 				checkpointText = checkpoint.Summary
 			}
 			activeTodos = formatActiveTodos(checkpoint.Todos)
-			retainFrom = checkpoint.RetainFromTurnID
 		}
 
 		sys := buildSystemPrompt(agentPtr.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agentPtr), checkpointText, activeTodos, e.sandboxStatus())
@@ -359,7 +357,7 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) {
 		}
 
 		// Full session history from disk, including this turn's complete tool prefix.
-		history := chatMessagesToRuntime(e.turnLog.LoadSessionMessages(sessionID, retainFrom))
+		history := e.loadRetainedHistory(sessionID, checkpoint)
 		messages = append(messages, history...)
 		if !historyHasUserGoal(history, goal) {
 			e.turnLog.Append(turnID, "user", map[string]any{"content": goal})
@@ -661,13 +659,11 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 	checkpoint := e.compactionMgr.Recover(ctx, sessionID)
 	checkpointText := ""
 	activeTodos := ""
-	retainFrom := ""
 	if checkpoint != nil {
 		if checkpoint.Summary != "" {
 			checkpointText = checkpoint.Summary
 		}
 		activeTodos = formatActiveTodos(checkpoint.Todos)
-		retainFrom = checkpoint.RetainFromTurnID
 	}
 
 	sys := buildSystemPrompt(agent.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agent), checkpointText, activeTodos, e.sandboxStatus())
@@ -684,7 +680,7 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 	}
 
 	// Cross-turn history: full LLM messages from turn log (compaction bounds the window).
-	messages = append(messages, chatMessagesToRuntime(e.turnLog.LoadSessionMessages(sessionID, retainFrom))...)
+	messages = append(messages, e.loadRetainedHistory(sessionID, checkpoint)...)
 
 	userMsg := userMessageFromAttachments(goal, attachments)
 	e.turnLog.Append(turnID, "user", userMessageLogData(userMsg))
@@ -823,67 +819,78 @@ func (e *Engine) updateSessionStatus(sessionID string, status domain.SessionStat
 func (e *Engine) maybeCompact(ctx context.Context, sessionID, turnID string, turnCount int, model string, maxPromptTokens int) {
 	cp := e.compactionMgr.Recover(ctx, sessionID)
 	retainFrom := ""
+	retainSkip := 0
 	if cp != nil {
 		retainFrom = cp.RetainFromTurnID
+		retainSkip = cp.RetainSkipMessages
 	}
-	history := chatMessagesToRuntime(e.turnLog.LoadSessionMessages(sessionID, retainFrom))
+
+	type indexedMsg struct {
+		msg       Message
+		turnID    string
+		idxInTurn int
+	}
+	var flat []indexedMsg
+	for _, id := range e.turnLog.ListTurnIDs(sessionID) {
+		if retainFrom != "" && id < retainFrom {
+			continue
+		}
+		msgs := chatMessagesToRuntime(e.turnLog.LoadTurnMessages(id))
+		start := 0
+		if id == retainFrom && retainSkip > 0 {
+			if retainSkip >= len(msgs) {
+				continue
+			}
+			start = retainSkip
+		}
+		for i := start; i < len(msgs); i++ {
+			flat = append(flat, indexedMsg{msg: msgs[i], turnID: id, idxInTurn: i})
+		}
+	}
+	history := make([]Message, len(flat))
+	for i := range flat {
+		history[i] = flat[i].msg
+	}
 	tokenEstimate := estimateTokenCount(history)
 	if !e.compactionMgr.ShouldCompact(sessionID, turnCount, tokenEstimate, maxPromptTokens, model) {
 		return
 	}
 	cfg := e.compactionMgr.loadCfg(ctx)
-	newRetain := e.computeRetainFromTurnID(sessionID, retainFrom, cfg.cutTokens)
-	if newRetain == "" || newRetain == retainFrom {
+	if cfg.cutTokens <= 0 || len(history) == 0 {
 		return
 	}
-	// Messages to summarize: turns in [retainFrom, newRetain).
-	var oldMessages []Message
-	for _, id := range e.turnLog.ListTurnIDs(sessionID) {
-		if retainFrom != "" && id < retainFrom {
-			continue
-		}
-		if id >= newRetain {
-			break
-		}
-		oldMessages = append(oldMessages, chatMessagesToRuntime(e.turnLog.LoadTurnMessages(id))...)
-	}
-	if len(oldMessages) == 0 {
+	keepStart := findKeepStart(history, cfg.cutTokens)
+	if keepStart <= 0 {
 		return
 	}
-	if !e.compactionMgr.CompactToRetain(ctx, sessionID, turnID, oldMessages, turnCount, model, newRetain, tokenEstimate) {
+	oldMessages := history[:keepStart]
+	loc := flat[keepStart]
+	newRetain := loc.turnID
+	newSkip := loc.idxInTurn
+	if newRetain == retainFrom && newSkip == retainSkip {
+		return
+	}
+	if !e.compactionMgr.CompactToRetain(ctx, sessionID, turnID, oldMessages, history, turnCount, model, newRetain, newSkip, tokenEstimate) {
 		return
 	}
 	e.clearSessionTurnMessages(sessionID)
 }
 
-// computeRetainFromTurnID walks turns from newest to oldest until cutTokens of
-// history are retained; returns the oldest turn id in that retained window.
-func (e *Engine) computeRetainFromTurnID(sessionID, currentRetain string, cutTokens int) string {
-	if cutTokens <= 0 {
-		return ""
+// loadRetainedHistory loads compaction-bounded session messages and shrinks
+// oversized tool results so the retain window stays near cutTokens.
+func (e *Engine) loadRetainedHistory(sessionID string, cp *domain.CompactionCheckpoint) []Message {
+	retainFrom := ""
+	skip := 0
+	if cp != nil {
+		retainFrom = cp.RetainFromTurnID
+		skip = cp.RetainSkipMessages
 	}
-	ids := e.turnLog.ListTurnIDs(sessionID)
-	acc := 0
-	retain := ""
-	for i := len(ids) - 1; i >= 0; i-- {
-		id := ids[i]
-		if currentRetain != "" && id < currentRetain {
-			break
-		}
-		msgs := chatMessagesToRuntime(e.turnLog.LoadTurnMessages(id))
-		if len(msgs) == 0 {
-			continue
-		}
-		for _, m := range msgs {
-			acc += estimateMessageTokens(m)
-		}
-		retain = id
-		if acc >= cutTokens {
-			return retain
-		}
+	msgs := chatMessagesToRuntime(e.turnLog.LoadSessionMessages(sessionID, retainFrom, skip))
+	cfg := e.compactionMgr.loadCfg(context.Background())
+	if cfg.cutTokens > 0 {
+		msgs = truncateToolResultsToBudget(msgs, cfg.cutTokens)
 	}
-	// Not enough tokens to justify dropping anything.
-	return ""
+	return msgs
 }
 
 // alwaysOnBuiltinTools are mounted for every agent without requiring ToolBindings.

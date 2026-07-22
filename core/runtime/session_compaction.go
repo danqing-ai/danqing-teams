@@ -176,7 +176,7 @@ func (m *CompactionManager) Compact(ctx context.Context, sessionID, turnID strin
 	tokensBefore := estimateTokenCount(messages)
 
 	prevCP := m.getCheckpoint(sessionID)
-	cutIdx := findCutPoint(messages, cfg.cutTokens)
+	cutIdx := findKeepStart(messages, cfg.cutTokens)
 	if cutIdx <= 0 {
 		return 0
 	}
@@ -216,9 +216,10 @@ func (m *CompactionManager) Compact(ctx context.Context, sessionID, turnID strin
 	return cutIdx
 }
 
-// CompactToRetain summarizes oldMessages and records retainFromTurnID so later
-// LoadSessionMessages skips compacted turns.
-func (m *CompactionManager) CompactToRetain(ctx context.Context, sessionID, turnID string, oldMessages []Message, turnCount int, model, retainFromTurnID string, tokensBefore int) bool {
+// CompactToRetain summarizes oldMessages and records retainFromTurnID /
+// retainSkipMessages so later LoadSessionMessages can replay from a mid-turn cut.
+// todoSource should be the full pre-cut history (old+keep) so latest todowrite is kept.
+func (m *CompactionManager) CompactToRetain(ctx context.Context, sessionID, turnID string, oldMessages, todoSource []Message, turnCount int, model, retainFromTurnID string, retainSkipMessages, tokensBefore int) bool {
 	if len(oldMessages) == 0 || retainFromTurnID == "" {
 		return false
 	}
@@ -229,18 +230,23 @@ func (m *CompactionManager) CompactToRetain(ctx context.Context, sessionID, turn
 	if err != nil || summary == "" {
 		return false
 	}
-	todos := extractLatestTodos(oldMessages)
+	src := todoSource
+	if len(src) == 0 {
+		src = oldMessages
+	}
+	todos := extractLatestTodos(src)
 	if len(todos) == 0 && prevCP != nil {
 		todos = prevCP.Todos
 	}
 	cp := &domain.CompactionCheckpoint{
-		SessionID:        sessionID,
-		TurnID:           turnID,
-		Summary:          summary,
-		Todos:            todos,
-		TurnCount:        turnCount,
-		TokenEstimate:    tokensBefore,
-		RetainFromTurnID: retainFromTurnID,
+		SessionID:          sessionID,
+		TurnID:             turnID,
+		Summary:            summary,
+		Todos:              todos,
+		TurnCount:          turnCount,
+		TokenEstimate:      tokensBefore,
+		RetainFromTurnID:   retainFromTurnID,
+		RetainSkipMessages: retainSkipMessages,
 	}
 	m.setCheckpoint(sessionID, cp)
 	if m.stream != nil {
@@ -305,87 +311,159 @@ func (m *CompactionManager) setCheckpoint(sessionID string, cp *domain.Compactio
 }
 
 func findCutPoint(messages []Message, cutTokens int) int {
-	if len(messages) <= 1 {
+	return findKeepStart(messages, cutTokens)
+}
+
+// msgBlock is a contiguous [start, end) range that must be kept or dropped together.
+type msgBlock struct {
+	start, end int
+}
+
+// buildBlocks groups messages into atomic units:
+//   - assistant(content? + tool_calls) + following matching tool_results
+//   - otherwise a single message (user / text-only assistant / orphan tool)
+func buildBlocks(messages []Message) []msgBlock {
+	var blocks []msgBlock
+	for i := 0; i < len(messages); {
+		m := messages[i]
+		if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
+			ids := make(map[string]bool, len(m.ToolCalls))
+			for _, tc := range m.ToolCalls {
+				ids[tc.ID] = true
+			}
+			start := i
+			i++
+			for i < len(messages) && messages[i].Role == RoleTool && ids[messages[i].ToolCallID] {
+				i++
+			}
+			blocks = append(blocks, msgBlock{start: start, end: i})
+			continue
+		}
+		blocks = append(blocks, msgBlock{start: i, end: i + 1})
+		i++
+	}
+	return blocks
+}
+
+func blockTokens(messages []Message, b msgBlock) int {
+	n := 0
+	for i := b.start; i < b.end; i++ {
+		n += estimateMessageTokens(messages[i])
+	}
+	return n
+}
+
+// findKeepStart returns the first index of the retain window under a hard
+// cutTokens budget, walking newest→oldest by complete blocks. A single newest
+// block that alone exceeds the budget is still kept (caller should truncate
+// tool results). Prefer retaining at least one user message when present.
+func findKeepStart(messages []Message, cutTokens int) int {
+	if len(messages) == 0 {
+		return 0
+	}
+	if cutTokens <= 0 {
+		return 0
+	}
+	blocks := buildBlocks(messages)
+	if len(blocks) == 0 {
 		return 0
 	}
 
-	accumulated := 0
-	for i := len(messages) - 1; i >= 0; i-- {
-		accumulated += estimateMessageTokens(messages[i])
-		if accumulated >= cutTokens {
-			cut := findValidCutPoint(messages, i, len(messages))
-			if cut > 0 && cut < len(messages) {
-				for cut > 0 && cut < len(messages) && !isBlockBoundary(messages[cut-1], messages[cut]) {
-					cut++
-				}
-			}
-			if cut >= len(messages) {
-				cut = len(messages) - 1
-			}
-			return cut
+	acc := 0
+	keepStart := len(messages)
+	for i := len(blocks) - 1; i >= 0; i-- {
+		bt := blockTokens(messages, blocks[i])
+		if acc > 0 && acc+bt > cutTokens {
+			break
+		}
+		acc += bt
+		keepStart = blocks[i].start
+		if acc >= cutTokens {
+			break
 		}
 	}
-	return 0
-}
+	if keepStart >= len(messages) {
+		keepStart = blocks[len(blocks)-1].start
+	}
 
-func findValidCutPoint(messages []Message, from, to int) int {
-	pairs := buildToolPairs(messages)
-	for j := from; j < to; j++ {
-		m := messages[j]
-		if isNaturalCutPoint(m) {
-			if _, inPair := pairs[j]; !inPair {
-				return j
-			}
+	// Ensure the retain window includes a user message when one exists earlier.
+	hasUser := false
+	for i := keepStart; i < len(messages); i++ {
+		if messages[i].Role == RoleUser {
+			hasUser = true
+			break
 		}
 	}
-	return from
-}
-
-func buildToolPairs(messages []Message) map[int]bool {
-	pairs := make(map[int]bool)
-	for i, m := range messages {
-		if m.Role == RoleTool && m.ToolCallID != "" {
-			for j := i - 1; j >= 0; j-- {
-				prev := messages[j]
-				if prev.Role == RoleAssistant {
-					for _, tc := range prev.ToolCalls {
-						if tc.ID == m.ToolCallID {
-							pairs[i] = true
-							pairs[j] = true
-							break
-						}
-					}
+	if !hasUser {
+		for i := keepStart - 1; i >= 0; i-- {
+			if messages[i].Role != RoleUser {
+				continue
+			}
+			for _, b := range blocks {
+				if i >= b.start && i < b.end {
+					keepStart = b.start
 					break
 				}
 			}
+			break
 		}
 	}
-	return pairs
+	return keepStart
 }
 
-func isNaturalCutPoint(m Message) bool {
-	switch m.Role {
-	case RoleUser:
-		return true
-	case RoleAssistant:
-		return len(m.ToolCalls) == 0
-	case RoleSystem:
-		return false
-	case RoleTool:
-		return false
+// truncateToolResultsToBudget copies msgs and shrinks tool_result contents
+// (oldest first) until the estimate is <= budget. Pair structure is preserved.
+func truncateToolResultsToBudget(msgs []Message, budget int) []Message {
+	if budget <= 0 || len(msgs) == 0 || estimateTokenCount(msgs) <= budget {
+		return msgs
 	}
-	return false
-}
-
-func isBlockBoundary(prev, next Message) bool {
-	return prev.Role == RoleTool && next.Role == RoleUser
-}
-
-func isToolResultOrPair(messages []Message, idx int, pairs map[int]bool) bool {
-	if _, ok := pairs[idx]; ok {
-		return true
+	out := make([]Message, len(msgs))
+	copy(out, msgs)
+	const minChars = 64
+	for estimateTokenCount(out) > budget {
+		progressed := false
+		over := estimateTokenCount(out) - budget
+		cutChars := over * tokenEstimateDivisor
+		if cutChars < 32 {
+			cutChars = 32
+		}
+		for i := range out {
+			if out[i].Role != RoleTool {
+				continue
+			}
+			content := out[i].Content
+			if len(content) <= minChars {
+				continue
+			}
+			newLen := len(content) - cutChars
+			if newLen < minChars {
+				newLen = minChars
+			}
+			if newLen >= len(content) {
+				newLen = len(content) / 2
+				if newLen < minChars {
+					newLen = minChars
+				}
+			}
+			if newLen >= len(content) {
+				continue
+			}
+			out[i].Content = content[:newLen] + "\n...(truncated)"
+			progressed = true
+			if estimateTokenCount(out) <= budget {
+				return out
+			}
+			over = estimateTokenCount(out) - budget
+			cutChars = over * tokenEstimateDivisor
+			if cutChars < 32 {
+				cutChars = 32
+			}
+		}
+		if !progressed {
+			break
+		}
 	}
-	return messages[idx].Role == RoleTool
+	return out
 }
 
 // extractLatestTodos walks messages newest-first and returns the last todowrite list.
@@ -514,26 +592,27 @@ func estimateMessageTokens(m Message) int {
 	return n
 }
 
-const compactionPrompt = `You are a context compaction assistant. Analyze the conversation transcript below and produce a structured JSON summary. Preserve all critical facts, decisions, and context needed to continue the session.
+const compactionPrompt = `You are writing a compaction handoff for an AI agent that will continue this session.
+The agent will not see the conversation below — only your note (plus later uncompacted turns).
+
+Write a concise handoff so the next agent can resume correctly: honor constraints, avoid redoing finished work, and take the right next step.
+Prefer concrete anchors (paths, errors, IDs, decisions) over narrative filler.
+When relevant, cover: the user goal and success criteria; decisions and constraints still in force; what is done / in progress / blocked; open questions and the next concrete move.
+Omit chatter, redundant tool output, and anything the agent can re-read from the repo.
+Use any structure that helps (prose or light markdown). Do not force JSON.
 
 <conversation>
 %s
-</conversation>
+</conversation>`
 
-Output ONLY a valid JSON object (no markdown fences, no commentary) with these fields:
-{
-  "summary": "concise narrative summary of what happened and the current state",
-  "workState": {"completed": [], "active": [], "blocked": []},
-  "decisions": ["key decisions made"],
-  "nextMove": "what to do next",
-  "criticalContext": ["important facts that must be preserved"],
-  "agentsInvolved": ["agent names"],
-  "filesTouched": ["file paths"]
-}`
+const compactionIncrementalPrompt = `You are updating a compaction handoff for an AI agent that will continue this session.
+The agent will not see the conversation below — only your updated note (plus later uncompacted turns).
 
-const compactionIncrementalPrompt = `You are a context compaction assistant. Update the existing summary with new information from the conversation transcript below.
-
-PRESERVE all still-relevant information from the previous summary. ADD new progress and facts. UPDATE completed/active/blocked statuses. REMOVE stale details. MERGE new file paths and agent names with existing ones.
+Merge the previous handoff with the new transcript. Keep what still matters, refresh progress and status, drop stale or obsolete details.
+Write a concise handoff so the next agent can resume correctly: honor constraints, avoid redoing finished work, and take the right next step.
+Prefer concrete anchors (paths, errors, IDs, decisions) over narrative filler.
+Omit chatter, redundant tool output, and anything the agent can re-read from the repo.
+Use any structure that helps (prose or light markdown). Do not force JSON.
 
 <previous-summary>
 %s
@@ -541,10 +620,7 @@ PRESERVE all still-relevant information from the previous summary. ADD new progr
 
 <conversation>
 %s
-</conversation>
-
-Output ONLY a valid JSON object (no markdown fences, no commentary) with the same structure as the previous summary.`
-
+</conversation>`
 func ToolInputKey(args map[string]any) string {
 	keys := make([]string, 0, len(args))
 	for k := range args {

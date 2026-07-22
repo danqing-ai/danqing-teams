@@ -1,21 +1,19 @@
 package domain
 
 type CompactionCheckpoint struct {
-	SessionID       string               `json:"sessionId"`
-	TurnID          string               `json:"turnId"`
-	Summary         string               `json:"summary"`
-	WorkState       CompactionWorkState  `json:"workState"`
-	Decisions       []string             `json:"decisions"`
-	NextMove        string               `json:"nextMove"`
-	CriticalCtx     []string             `json:"criticalContext"`
-	AgentsInvolved  []string             `json:"agentsInvolved"`
-	FilesTouched    []string             `json:"filesTouched"`
-	Todos           []CompactionTodoItem `json:"todos,omitempty"`
-	TurnCount       int                  `json:"turnCount"`
-	TokenEstimate   int                  `json:"tokenEstimate"`
+	SessionID     string               `json:"sessionId"`
+	TurnID        string               `json:"turnId"`
+	Summary       string               `json:"summary"`
+	Todos         []CompactionTodoItem `json:"todos,omitempty"`
+	TurnCount     int                  `json:"turnCount"`
+	TokenEstimate int                  `json:"tokenEstimate"`
 	// RetainFromTurnID is the first turn id to replay after compaction.
 	// Turns strictly before this id are replaced by Summary in the system prompt.
 	RetainFromTurnID string `json:"retainFromTurnId,omitempty"`
+	// RetainSkipMessages skips this many leading reconstructed messages inside
+	// RetainFromTurnID (0 = from the start of that turn). Enables mid-turn cuts
+	// at tool-pair / message-block boundaries.
+	RetainSkipMessages int `json:"retainSkipMessages,omitempty"`
 }
 
 // CompactionTodoItem is a structured todowrite entry preserved across compaction.
@@ -25,19 +23,13 @@ type CompactionTodoItem struct {
 	Priority string `json:"priority"`
 }
 
-type CompactionWorkState struct {
-	Completed []string `json:"completed"`
-	Active    []string `json:"active"`
-	Blocked   []string `json:"blocked"`
-}
-
 type CompactionConfig struct {
-	Enabled       bool    `json:"enabled"`
-	Model         string  `json:"model"`
-	MaxTokens     int     `json:"maxTokens"`
-	TriggerRatio  float64 `json:"triggerRatio"`
-	CutTokens     int     `json:"cutTokens"`
-	TurnInterval  int     `json:"turnInterval"`
-	SubInterval   int     `json:"subInterval"`
-	ToolTruncate  int     `json:"toolTruncate"`
+	Enabled      bool    `json:"enabled"`
+	Model        string  `json:"model"`
+	MaxTokens    int     `json:"maxTokens"`
+	TriggerRatio float64 `json:"triggerRatio"`
+	CutTokens    int     `json:"cutTokens"`
+	TurnInterval int     `json:"turnInterval"`
+	SubInterval  int     `json:"subInterval"`
+	ToolTruncate int     `json:"toolTruncate"`
 }
