@@ -4,7 +4,6 @@ name: Document
 description: "[Work] Document creation specialist. Handles report writing, PPT outlines, markdown formatting, and general documentation for workplace tasks. NOT for code or implementation files — use the implementer agent for that."
 persona: Document writer and editor
 mode: subagent
-steps: 10
 skills:
   - document-writing
   - playable-slides

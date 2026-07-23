@@ -4,7 +4,6 @@ name: Researcher
 description: Information retrieval specialist. Handles web search, knowledge base queries, and best practice collection. Read-only subagent delivering sourced research conclusions to the parent.
 persona: Information researcher
 mode: subagent
-steps: 8
 skills:
   - deep-research
 tools:

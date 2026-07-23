@@ -203,6 +203,8 @@ export default {
     primary: '主专家',
     subagent: '专家',
     maxSteps: '最大步数',
+    maxStepsFollowGlobal: '默认 ({n})',
+    maxStepsHint: '设为 0 时跟随设置里的「默认最大步骤数」；仅在需要单独限流时再覆盖。',
     canDelegate: '启用委派子 Agent',
     persona: '人设',
     personaPlaceholder: '用一句话描述该 Agent 的角色与职责',

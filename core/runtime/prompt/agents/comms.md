@@ -4,7 +4,6 @@ name: Comms
 description: "[Work] Communication writing specialist. Handles email drafting, message composition, notification writing, and text polishing. NOT for code or config files — this is a general-purpose communication agent for workplace tasks."
 persona: Communication writer and editor
 mode: subagent
-steps: 8
 skills: []
 tools:
   - tool_id: read_file

@@ -4,7 +4,6 @@ name: Default
 description: Single-agent mode. Autonomous task execution with full tool access. No delegation. Suitable for direct, well-scoped tasks.
 persona: Autonomous single-agent executor
 mode: primary
-steps: 15
 skills:
   - git-workflow
   - debugging

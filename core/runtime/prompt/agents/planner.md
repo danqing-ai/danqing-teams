@@ -4,7 +4,6 @@ name: Planner
 description: Read-only planning mode. Analyzes requirements, explores context, and produces structured implementation plans. No writes or shell commands.
 persona: Planning specialist
 mode: primary
-steps: 18
 can_delegate: false
 skills:
   - writing-plans

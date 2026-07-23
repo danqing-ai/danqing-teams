@@ -4,7 +4,6 @@ name: Team
 description: Multi-agent collaboration mode. Coordinates subagents for complex tasks — exploration, implementation, and verification. Best for cross-file, multi-step work.
 persona: Multi-agent team coordinator
 mode: primary
-steps: 25
 can_delegate: true
 skills:
   - git-workflow

@@ -74,20 +74,44 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	// One-time: agent.steps 0 = follow runtime.turn.max_steps_default.
+	if err := s.db.AutoMigrate(&appMetaModel{}); err != nil {
+		return err
+	}
+	const metaKey = "agent_steps_follow_global_v1"
+	var meta appMetaModel
+	err := s.db.Where("key = ?", metaKey).First(&meta).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		if err := s.db.Exec("UPDATE agents SET steps = 0").Error; err != nil {
+			return err
+		}
+		if err := s.db.Create(&appMetaModel{Key: metaKey, Value: "1"}).Error; err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
 	return nil
 }
 
-func (s *Store) Agents() port.AgentRepo         { return &agentRepo{s} }
-func (s *Store) Skills() port.SkillRepo         { return &skillRepo{s} }
-func (s *Store) SkillFiles() port.SkillFileRepo { return &skillFileRepo{s} }
-func (s *Store) Sessions() port.SessionRepo     { return &sessionRepo{s} }
-func (s *Store) Projects() port.ProjectRepo     { return &projectRepo{s} }
-func (s *Store) LLMConfig() port.LLMConfigRepo  { return &llmConfigRepo{s} }
-func (s *Store) Approvals() port.ApprovalRepo   { return &approvalRepo{s} }
+type appMetaModel struct {
+	Key   string `gorm:"primaryKey;column:key"`
+	Value string `gorm:"column:value"`
+}
+
+func (appMetaModel) TableName() string { return "app_meta" }
+
+func (s *Store) Agents() port.AgentRepo             { return &agentRepo{s} }
+func (s *Store) Skills() port.SkillRepo             { return &skillRepo{s} }
+func (s *Store) SkillFiles() port.SkillFileRepo     { return &skillFileRepo{s} }
+func (s *Store) Sessions() port.SessionRepo         { return &sessionRepo{s} }
+func (s *Store) Projects() port.ProjectRepo         { return &projectRepo{s} }
+func (s *Store) LLMConfig() port.LLMConfigRepo      { return &llmConfigRepo{s} }
+func (s *Store) Approvals() port.ApprovalRepo       { return &approvalRepo{s} }
 func (s *Store) StreamEvents() port.StreamEventRepo { return &streamEventRepo{s} }
-func (s *Store) Turns() port.TurnRepo           { return &turnRepo{s} }
-func (s *Store) MCPServers() port.MCPServerRepo { return &mcpServerRepo{s} }
-func (s *Store) Memories() port.MemoryRepo      { return &memoryRepo{s} }
+func (s *Store) Turns() port.TurnRepo               { return &turnRepo{s} }
+func (s *Store) MCPServers() port.MCPServerRepo     { return &mcpServerRepo{s} }
+func (s *Store) Memories() port.MemoryRepo          { return &memoryRepo{s} }
 
 func (s *Store) KnowledgeDocs() []KnowledgeDoc {
 	var rows []knowledgeDocModel

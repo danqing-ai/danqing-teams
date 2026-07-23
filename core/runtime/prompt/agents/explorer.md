@@ -4,7 +4,6 @@ name: Explorer
 description: Codebase exploration specialist. Handles file search, pattern matching, and code reading. Read-only subagent that provides compressed, reusable context for the parent.
 persona: File and code explorer
 mode: subagent
-steps: 8
 skills:
   - debugging
 tools:

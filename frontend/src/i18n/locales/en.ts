@@ -203,6 +203,8 @@ export default {
     primary: 'Lead Expert',
     subagent: 'Expert',
     maxSteps: 'Max Steps',
+    maxStepsFollowGlobal: 'Default ({n})',
+    maxStepsHint: '0 follows Settings → Default Max Steps. Override only when this agent needs its own cap.',
     canDelegate: 'Enable Delegation',
     persona: 'Persona',
     personaPlaceholder: 'Describe the role and responsibilities of this Agent in one sentence',

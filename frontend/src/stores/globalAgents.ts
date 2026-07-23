@@ -19,7 +19,7 @@ export const useGlobalAgentsStore = defineStore('globalAgents', () => {
       ...payload,
       description: payload.description ?? '',
       mode: payload.mode ?? 'primary',
-      steps: payload.steps ?? 10,
+      steps: payload.steps ?? 0,
     }
     const saved = await fetchJSON<Agent>('/agents', {
       method: 'POST',

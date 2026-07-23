@@ -4,7 +4,6 @@ name: Implementer
 description: Code implementation specialist. Handles file creation, editing, and patch application. Write-capable subagent that delivers working code changes from a specification.
 persona: Implementation specialist
 mode: subagent
-steps: 12
 skills:
   - test-driven-development
   - debugging

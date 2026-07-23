@@ -16,17 +16,19 @@ const (
 )
 
 type Agent struct {
-	ID           string       `json:"id"`
-	Name         string       `json:"name"`
-	Description  string       `json:"description"`
-	Persona      string       `json:"persona"`
-	Mode         AgentMode    `json:"mode"`
-	SystemPrompt string       `json:"systemPrompt"`
-	Steps        int          `json:"steps"`
-	SkillIDs     []string     `json:"skillIds"`
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	Description  string    `json:"description"`
+	Persona      string    `json:"persona"`
+	Mode         AgentMode `json:"mode"`
+	SystemPrompt string    `json:"systemPrompt"`
+	// Steps is the max tool/LLM steps per turn. 0 means follow
+	// runtime.turn.max_steps_default.
+	Steps        int           `json:"steps"`
+	SkillIDs     []string      `json:"skillIds"`
 	Tools        []ToolBinding `json:"tools"`
-	KnowledgeIDs []string     `json:"knowledgeIds"`
-	CanDelegate  bool         `json:"canDelegate"`
+	KnowledgeIDs []string      `json:"knowledgeIds"`
+	CanDelegate  bool          `json:"canDelegate"`
 	// Builtin is computed (not a DB column): true when an embedded template exists.
 	Builtin bool `json:"builtin,omitempty"`
 	// MarketSource is computed from YAML frontmatter stored in SystemPrompt

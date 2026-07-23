@@ -9,6 +9,7 @@ import { useGlobalAgentsStore } from '@/stores/globalAgents'
 import { useSkillsStore } from '@/stores/skills'
 import { useKnowledgeStore } from '@/stores/knowledge'
 import { useMarketStore } from '@/stores/market'
+import { useRuntimeConfigStore } from '@/stores/runtimeConfig'
 import { confirm, toast } from '@/utils/feedback'
 import type { Agent, ToolBinding } from '@/types'
 
@@ -22,6 +23,14 @@ const globalAgents = useGlobalAgentsStore()
 const skills = useSkillsStore()
 const knowledge = useKnowledgeStore()
 const marketStore = useMarketStore()
+const runtimeConfig = useRuntimeConfigStore()
+
+const globalMaxSteps = computed(() => runtimeConfig.config?.maxStepsDefault ?? 200)
+const stepsLabel = computed(() => {
+  const n = agentForm.value.steps
+  if (!n || n <= 0) return t('teams.maxStepsFollowGlobal', { n: globalMaxSteps.value })
+  return String(n)
+})
 
 const pageView = ref<PageView>('library')
 const pageViewOptions = computed(() => [
@@ -46,7 +55,7 @@ function emptyAgentForm(): AgentForm {
     skillIds: [],
     tools: [],
     knowledgeIds: [],
-    steps: 10,
+    steps: 0,
     canDelegate: false,
   }
 }
@@ -117,7 +126,7 @@ const sectionTabs = computed(() => [
 ])
 
 onMounted(async () => {
-  await Promise.all([globalAgents.load(), skills.load()])
+  await Promise.all([globalAgents.load(), skills.load(), runtimeConfig.loadConfig()])
   if (sortedAgents.value.length && !selectedId.value) {
     selectAgent(sortedAgents.value[0].id)
   }
@@ -169,7 +178,7 @@ async function save() {
         persona: agentForm.value.persona,
         mode: agentForm.value.mode ?? 'primary',
         systemPrompt: agentForm.value.systemPrompt,
-        steps: agentForm.value.steps ?? 10,
+        steps: agentForm.value.steps ?? 0,
         skillIds: agentForm.value.skillIds,
         tools: agentForm.value.tools,
         knowledgeIds: agentForm.value.knowledgeIds,
@@ -185,7 +194,7 @@ async function save() {
         persona: agentForm.value.persona,
         mode: agentForm.value.mode ?? 'primary',
         systemPrompt: agentForm.value.systemPrompt,
-        steps: agentForm.value.steps ?? 10,
+        steps: agentForm.value.steps ?? 0,
         skillIds: agentForm.value.skillIds,
         tools: agentForm.value.tools,
         knowledgeIds: agentForm.value.knowledgeIds,
@@ -429,9 +438,10 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
           <div class="resource-field">
             <span class="resource-field__label">{{ $t('teams.maxSteps') }}</span>
             <div class="slider-row">
-              <DqSlider v-model="agentForm.steps" :min="1" :max="100" :step="1" />
-              <span class="slider-row__value">{{ agentForm.steps }}</span>
+              <DqSlider v-model="agentForm.steps" :min="0" :max="500" :step="1" />
+              <span class="slider-row__value">{{ stepsLabel }}</span>
             </div>
+            <span class="resource-field__hint">{{ $t('teams.maxStepsHint') }}</span>
           </div>
         </div>
         <label class="resource-field resource-field--block">

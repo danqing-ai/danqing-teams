@@ -42,7 +42,7 @@ runtime:
     cdp_url: ""           # optional attach URL, e.g. http://127.0.0.1:9222
   turn:
     doom_loop_threshold: 10  # fail after N consecutive identical tool calls (resets when tool/args change)
-    max_steps_default: 200   # fallback step limit when agent.steps is 0
+    max_steps_default: 200   # used when agent.steps is 0 / unset
     max_llm_failures: 3      # fail turn after N consecutive LLM Chat errors (independent of max_steps)
   team:
     max_delegation_depth: 3  # maximum sub-agent delegation chain length
