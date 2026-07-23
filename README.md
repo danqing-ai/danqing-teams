@@ -8,7 +8,7 @@
 
 **Self-hosted agent workspace** for research, coding, and long-running work — like an open Cursor-style Agent UI, with multi-agent delegation you can audit.
 
-Describe a goal. Watch tools stream. Open the result in the built-in browser. Sub-agents run in hard isolation and return a report — no hand-written LangGraph / CrewAI workflows to maintain.
+Describe a goal. Watch tools stream. Open the result in the built-in browser. Sub-agents run in hard isolation and return a report — no hand-written LangGraph / CrewAI workflows to maintain. Chat from **WeChat** on your phone; the same session syncs to the desktop workspace.
 
 | vs | They | DanQing Teams |
 |----|------|---------------|
@@ -46,7 +46,17 @@ Three-pane workspace: project sidebar · agent execution log · right panel (Pla
 - **Interactive demo** — step-by-step demo with playback controls
 - **Mini-game** — generate a playable Snake game and iterate via UI annotations
 
-> Tip: a 20–30s screen recording (GIF/MP4) converts far better than stills — drop one in `docs/screenshots/` and link it above this table when you have it.
+### WeChat channel
+
+Chat from WeChat on your phone; the same session shows up in the desktop workspace under the system project **微信**, tagged and sharing one history.
+
+| Desktop (WeChat-tagged session) | Phone (WeChat chat) |
+|---------------------------------|---------------------|
+| ![WeChat session in Teams](docs/screenshots/wx1.png) | ![DQ-Teams AI in WeChat](docs/screenshots/wx2.png) |
+
+Scan to connect via Settings → Channels → WeChat. One contact maps to one Teams session; tools run on your machine with the same Agent Loop.
+
+> Tip: a 20–30s screen recording (GIF/MP4) of the full loop still converts best — add it above this section when you have it.
 
 ## Design philosophy
 
