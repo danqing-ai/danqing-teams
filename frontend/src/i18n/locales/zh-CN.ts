@@ -611,6 +611,10 @@ export default {
     removeAttachment: '移除附件',
     annotationPlaceholder: '添加批注…',
     gitBranch: '当前分支',
+    gitMissing: '没有 git',
+    gitInitFailed: 'git 初始化失败',
+    gitUnavailable: 'git 不可用',
+    gitNoBranch: '无分支',
   },
   commandPalette: {
     title: '命令面板',

@@ -29,6 +29,7 @@ const inputWrap = ref<HTMLElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const dragOver = ref(false)
 const gitBranch = ref('')
+const gitError = ref('')
 const sessions = useSessionsStore()
 const projects = useProjectsStore()
 const llm = useLLMStore()
@@ -113,12 +114,14 @@ const showAgentSelect = computed(
   () => (sessions.composingNew || sessions.currentSessionId) && primaryAgents.value.length > 0,
 )
 
+const gitDisplay = computed(() => gitBranch.value || gitError.value)
+
 const showTray = computed(
   () =>
     sessions.composingNew ||
     showAgentSelect.value ||
     Boolean(sessions.currentSession) ||
-    Boolean(gitBranch.value),
+    Boolean(gitDisplay.value),
 )
 
 /** Few primary agents → segmented toggle; many → dropdown. */
@@ -128,19 +131,40 @@ const agentOptions = computed(() =>
   primaryAgents.value.map((a) => ({ label: a.name, value: a.id })),
 )
 
+function clearGitStatus() {
+  gitBranch.value = ''
+  gitError.value = ''
+}
+
+function applyGitError(code?: string, fallback?: string) {
+  gitBranch.value = ''
+  if (code === 'git_missing') {
+    gitError.value = t('composer.gitMissing')
+  } else if (code === 'init_failed') {
+    gitError.value = fallback?.trim() || t('composer.gitInitFailed')
+  } else {
+    gitError.value = fallback?.trim() || t('composer.gitUnavailable')
+  }
+}
+
 async function loadGitBranch() {
   const projectId = sessions.selectedProjectId
   if (!projectId) {
-    gitBranch.value = ''
+    clearGitStatus()
     return
   }
   try {
-    const res = await fetchJSON<{ current?: string; error?: string }>(
+    const res = await fetchJSON<{ current?: string; error?: string; code?: string }>(
       `/projects/${projectId}/git-branches`,
     )
-    gitBranch.value = res.error ? '' : (res.current ?? '')
-  } catch {
-    gitBranch.value = ''
+    if (res.code || res.error) {
+      applyGitError(res.code, res.error)
+      return
+    }
+    gitBranch.value = res.current?.trim() || ''
+    gitError.value = gitBranch.value ? '' : t('composer.gitNoBranch')
+  } catch (e) {
+    applyGitError(undefined, e instanceof Error ? e.message : undefined)
   }
 }
 
@@ -609,13 +633,14 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
         </div>
 
         <span
-          v-if="gitBranch"
+          v-if="gitDisplay"
           class="composer-git-branch"
-          :title="t('composer.gitBranch')"
-          :aria-label="`${t('composer.gitBranch')}: ${gitBranch}`"
+          :class="{ 'is-error': Boolean(gitError) }"
+          :title="gitError ? gitError : t('composer.gitBranch')"
+          :aria-label="gitError ? gitError : `${t('composer.gitBranch')}: ${gitBranch}`"
         >
           <span class="composer-git-branch__icon" aria-hidden="true">⎇</span>
-          <span class="composer-git-branch__name">{{ gitBranch }}</span>
+          <span class="composer-git-branch__name">{{ gitDisplay }}</span>
         </span>
       </div>
 
@@ -818,7 +843,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  max-width: 160px;
+  max-width: 200px;
   min-width: 0;
   height: 28px;
   padding: 0 8px;
@@ -828,6 +853,11 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
+}
+
+.composer-git-branch.is-error {
+  color: var(--dq-danger, var(--dq-label-secondary));
+  max-width: 240px;
 }
 
 .composer-git-branch__icon {

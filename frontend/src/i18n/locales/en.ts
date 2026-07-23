@@ -612,6 +612,10 @@ export default {
     removeAttachment: 'Remove attachment',
     annotationPlaceholder: 'Add annotation…',
     gitBranch: 'Current branch',
+    gitMissing: 'Git not installed',
+    gitInitFailed: 'Git init failed',
+    gitUnavailable: 'Git unavailable',
+    gitNoBranch: 'No branch',
   },
   commandPalette: {
     title: 'Command Palette',

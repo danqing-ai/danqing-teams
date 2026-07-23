@@ -16,12 +16,14 @@ interface GitChanges {
   branch: string
   changes: GitFileChange[]
   error?: string
+  code?: string
 }
 
 interface GitBranches {
   current: string
   branches: string[] | null
   error?: string
+  code?: string
 }
 
 const sessions = useSessionsStore()
@@ -164,8 +166,8 @@ defineExpose({ refresh, totalCount })
         <Skeleton variant="card" width="100%" />
       </div>
 
-      <div v-else-if="data?.error" class="changes-panel__empty">
-        <p>{{ data.error }}</p>
+      <div v-else-if="data?.error || data?.code" class="changes-panel__empty">
+        <p>{{ data.code === 'git_missing' ? $t('composer.gitMissing') : (data.error || $t('composer.gitUnavailable')) }}</p>
       </div>
 
       <div v-else-if="!data?.changes?.length" class="changes-panel__empty">

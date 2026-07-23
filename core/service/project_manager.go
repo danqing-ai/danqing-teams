@@ -338,12 +338,14 @@ type GitChanges struct {
 	Branch  string           `json:"branch"`
 	Changes []*GitFileChange `json:"changes"`
 	Error   string           `json:"error,omitempty"`
+	Code    string           `json:"code,omitempty"` // git_missing | init_failed
 }
 
 type GitBranches struct {
 	Current  string   `json:"current"`
 	Branches []string `json:"branches"`
 	Error    string   `json:"error,omitempty"`
+	Code     string   `json:"code,omitempty"` // git_missing | init_failed
 }
 
 func base64Encode(data []byte) string {
@@ -385,44 +387,16 @@ func encode(src, dst []byte) {
 	}
 }
 
-func (m *ProjectManager) GetGitChanges(ctx context.Context, projectID string) (*GitChanges, error) {
+func (m *ProjectManager) projectWorkDir(ctx context.Context, projectID string) (string, error) {
 	p, err := m.Get(ctx, projectID)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	root := p.Directory
 	if root == "" {
 		root = filepath.Join(m.ProjectDir(projectID), "files")
 	}
-	root = filepath.Clean(root)
-
-	gitRoot, err := gitRepoRoot(root)
-	if err != nil {
-		result := &GitChanges{}
-		if _, ok := err.(*exec.Error); ok {
-			result.Error = "git 未安装或不在 PATH 中"
-		} else {
-			result.Error = "不是 git 仓库"
-		}
-		return result, nil
-	}
-
-	cmd := exec.Command("git", "status", "--porcelain", "-b")
-	cmd.Dir = gitRoot
-	out, err := cmd.Output()
-	if err != nil {
-		return &GitChanges{}, nil
-	}
-
-	prefix := ""
-	if gitRoot != root {
-		rel, err := filepath.Rel(gitRoot, root)
-		if err == nil && rel != "." {
-			prefix = rel + "/"
-		}
-	}
-
-	return parseGitStatus(out, gitRoot, root, prefix), nil
+	return filepath.Clean(root), nil
 }
 
 func gitRepoRoot(dir string) (string, error) {
@@ -435,31 +409,89 @@ func gitRepoRoot(dir string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func (m *ProjectManager) resolveGitRoot(ctx context.Context, projectID string) (string, error) {
-	p, err := m.Get(ctx, projectID)
+func gitCurrentBranch(gitRoot string) string {
+	cur := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	cur.Dir = gitRoot
+	if out, err := cur.Output(); err == nil {
+		b := strings.TrimSpace(string(out))
+		if b != "" && b != "HEAD" {
+			return b
+		}
+	}
+	// Unborn HEAD (fresh git init, no commits yet).
+	sym := exec.Command("git", "symbolic-ref", "--short", "HEAD")
+	sym.Dir = gitRoot
+	if out, err := sym.Output(); err == nil {
+		return strings.TrimSpace(string(out))
+	}
+	return ""
+}
+
+// ensureGitRepo locates the project git root. If git is missing, returns code
+// git_missing. If the directory is not a repo, runs git init there.
+func (m *ProjectManager) ensureGitRepo(ctx context.Context, projectID string) (gitRoot, workDir, code, msg string, err error) {
+	workDir, err = m.projectWorkDir(ctx, projectID)
 	if err != nil {
-		return "", err
+		return "", "", "", "", err
 	}
-	root := p.Directory
-	if root == "" {
-		root = filepath.Join(m.ProjectDir(projectID), "files")
+	if _, lookErr := exec.LookPath("git"); lookErr != nil {
+		return "", workDir, "git_missing", "git 未安装或不在 PATH 中", nil
 	}
-	return gitRepoRoot(filepath.Clean(root))
+	gitRoot, rootErr := gitRepoRoot(workDir)
+	if rootErr == nil {
+		return gitRoot, workDir, "", "", nil
+	}
+	initCmd := exec.Command("git", "init")
+	initCmd.Dir = workDir
+	out, initErr := initCmd.CombinedOutput()
+	if initErr != nil {
+		detail := strings.TrimSpace(string(out))
+		if detail == "" {
+			detail = initErr.Error()
+		}
+		return "", workDir, "init_failed", detail, nil
+	}
+	gitRoot, rootErr = gitRepoRoot(workDir)
+	if rootErr != nil {
+		return "", workDir, "init_failed", "git init 后仍无法识别仓库", nil
+	}
+	return gitRoot, workDir, "", "", nil
+}
+
+func (m *ProjectManager) GetGitChanges(ctx context.Context, projectID string) (*GitChanges, error) {
+	gitRoot, workDir, code, msg, err := m.ensureGitRepo(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	if code != "" {
+		return &GitChanges{Error: msg, Code: code}, nil
+	}
+
+	cmd := exec.Command("git", "status", "--porcelain", "-b")
+	cmd.Dir = gitRoot
+	out, err := cmd.Output()
+	if err != nil {
+		return &GitChanges{}, nil
+	}
+
+	prefix := ""
+	if gitRoot != workDir {
+		rel, relErr := filepath.Rel(gitRoot, workDir)
+		if relErr == nil && rel != "." {
+			prefix = rel + "/"
+		}
+	}
+
+	return parseGitStatus(out, gitRoot, workDir, prefix), nil
 }
 
 func (m *ProjectManager) ListGitBranches(ctx context.Context, projectID string) (*GitBranches, error) {
-	if _, err := m.Get(ctx, projectID); err != nil {
+	gitRoot, _, code, msg, err := m.ensureGitRepo(ctx, projectID)
+	if err != nil {
 		return nil, err
 	}
-	gitRoot, err := m.resolveGitRoot(ctx, projectID)
-	if err != nil {
-		result := &GitBranches{}
-		if _, ok := err.(*exec.Error); ok {
-			result.Error = "git 未安装或不在 PATH 中"
-		} else {
-			result.Error = "不是 git 仓库"
-		}
-		return result, nil
+	if code != "" {
+		return &GitBranches{Error: msg, Code: code}, nil
 	}
 
 	result := &GitBranches{}
@@ -468,6 +500,7 @@ func (m *ProjectManager) ListGitBranches(ctx context.Context, projectID string) 
 	cmd.Dir = gitRoot
 	out, err := cmd.Output()
 	if err != nil {
+		result.Current = gitCurrentBranch(gitRoot)
 		return result, nil
 	}
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
@@ -476,10 +509,18 @@ func (m *ProjectManager) ListGitBranches(ctx context.Context, projectID string) 
 		}
 	}
 
-	cur := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
-	cur.Dir = gitRoot
-	if out, err := cur.Output(); err == nil {
-		result.Current = strings.TrimSpace(string(out))
+	result.Current = gitCurrentBranch(gitRoot)
+	if result.Current != "" {
+		found := false
+		for _, b := range result.Branches {
+			if b == result.Current {
+				found = true
+				break
+			}
+		}
+		if !found {
+			result.Branches = append([]string{result.Current}, result.Branches...)
+		}
 	}
 
 	return result, nil
@@ -493,12 +534,12 @@ func (m *ProjectManager) CheckoutGitBranch(ctx context.Context, projectID, branc
 	if strings.HasPrefix(branch, "-") || strings.ContainsAny(branch, " \t\r\n~^:?*[\\") {
 		return nil, fmt.Errorf("invalid branch name")
 	}
-	if _, err := m.Get(ctx, projectID); err != nil {
+	gitRoot, _, code, msg, err := m.ensureGitRepo(ctx, projectID)
+	if err != nil {
 		return nil, err
 	}
-	gitRoot, err := m.resolveGitRoot(ctx, projectID)
-	if err != nil {
-		return nil, fmt.Errorf("不是 git 仓库")
+	if code != "" {
+		return nil, fmt.Errorf("%s", msg)
 	}
 
 	cmd := exec.Command("git", "checkout", branch)
