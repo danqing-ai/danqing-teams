@@ -425,6 +425,7 @@ type weixinAccountModel struct {
 	Token     string    `gorm:"column:token"`
 	BaseURL   string    `gorm:"column:base_url"`
 	UserID    string    `gorm:"column:user_id"`
+	ProjectID string    `gorm:"column:project_id;index"`
 	SyncBuf   string    `gorm:"column:sync_buf;type:text"`
 	CreatedAt time.Time `gorm:"column:created_at"`
 	UpdatedAt time.Time `gorm:"column:updated_at"`
@@ -438,6 +439,7 @@ func weixinAccountToDomain(m weixinAccountModel) domain.WeixinAccount {
 		Token:     m.Token,
 		BaseURL:   m.BaseURL,
 		UserID:    m.UserID,
+		ProjectID: m.ProjectID,
 		SyncBuf:   m.SyncBuf,
 		CreatedAt: m.CreatedAt,
 		UpdatedAt: m.UpdatedAt,

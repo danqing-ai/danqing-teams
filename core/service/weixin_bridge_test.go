@@ -45,42 +45,7 @@ func TestWeixinBindingRepoPeerSession(t *testing.T) {
 	}
 }
 
-func TestEnsureWeixinProject(t *testing.T) {
-	dir := t.TempDir()
-	dbPath := filepath.Join(dir, "t.db")
-	cfgPath := filepath.Join(dir, "config.yaml")
-	st, err := sqlitestore.New(dbPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	loader := config.NewLoader(cfgPath)
-	cm := service.NewConfigManager(loader)
-	pm := service.NewProjectManager(st, dir)
-	bridge := service.NewWeixinBridge(st, service.NewSessionManager(st, nil, nil), pm, cm)
-	id, err := bridge.EnsureWeixinProject(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if id == "" {
-		t.Fatal("empty project id")
-	}
-	p, err := pm.Get(context.Background(), id)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if p.Name != domain.WeixinProjectName {
-		t.Fatalf("name=%q", p.Name)
-	}
-	cfg, err := cm.Get(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Channels.Weixin.DefaultProjectID != id {
-		t.Fatalf("cfg project=%q want %q", cfg.Channels.Weixin.DefaultProjectID, id)
-	}
-}
-
-func TestEnsureWeixinProjectIgnoresStaleDefaultID(t *testing.T) {
+func TestMigrateAccountProjectsOnce(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "t.db")
 	cfgPath := filepath.Join(dir, "config.yaml")
@@ -93,8 +58,14 @@ func TestEnsureWeixinProjectIgnoresStaleDefaultID(t *testing.T) {
 	pm := service.NewProjectManager(st, dir)
 	bridge := service.NewWeixinBridge(st, service.NewSessionManager(st, nil, nil), pm, cm)
 
-	other, err := pm.Create(context.Background(), domain.CreateProjectRequest{Name: "DanQing-knowledge"})
+	proj, err := pm.Create(context.Background(), domain.CreateProjectRequest{Name: "Biz"})
 	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := st.WeixinAccounts().Upsert(context.Background(), domain.WeixinAccount{
+		AccountID: "bot-mig", Token: "tok", BaseURL: ilink.DefaultBaseURL, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := cm.Get(context.Background())
@@ -102,26 +73,70 @@ func TestEnsureWeixinProjectIgnoresStaleDefaultID(t *testing.T) {
 		t.Fatal(err)
 	}
 	wx := cfg.Channels.Weixin
-	wx.DefaultProjectID = other.ID
+	wx.DefaultProjectID = proj.ID
 	sec := cfg.Channels
 	sec.Weixin = wx
 	if _, err := cm.Update(context.Background(), domain.UpdateConfigFileRequest{Channels: &sec}); err != nil {
 		t.Fatal(err)
 	}
 
-	id, err := bridge.EnsureWeixinProject(context.Background())
+	if err := bridge.MigrateAccountProjectsOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	acc, err := st.WeixinAccounts().Get(context.Background(), "bot-mig")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if id == other.ID {
-		t.Fatalf("reused stale project %q", id)
+	if acc.ProjectID != proj.ID {
+		t.Fatalf("projectId=%q want %q", acc.ProjectID, proj.ID)
 	}
-	p, err := pm.Get(context.Background(), id)
+	cfg, err = cm.Get(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Name != domain.WeixinProjectName {
-		t.Fatalf("name=%q", p.Name)
+	if cfg.Channels.Weixin.DefaultProjectID != "" {
+		t.Fatalf("default_project_id still set: %q", cfg.Channels.Weixin.DefaultProjectID)
+	}
+	// idempotent
+	if err := bridge.MigrateAccountProjectsOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSetAccountProject(t *testing.T) {
+	dir := t.TempDir()
+	st, err := sqlitestore.New(filepath.Join(dir, "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	loader := config.NewLoader(filepath.Join(dir, "config.yaml"))
+	cm := service.NewConfigManager(loader)
+	pm := service.NewProjectManager(st, dir)
+	bridge := service.NewWeixinBridge(st, service.NewSessionManager(st, nil, nil), pm, cm)
+
+	proj, err := pm.Create(context.Background(), domain.CreateProjectRequest{Name: "A"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := st.WeixinAccounts().Upsert(context.Background(), domain.WeixinAccount{
+		AccountID: "bot1", Token: "tok", BaseURL: ilink.DefaultBaseURL, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	acc, err := bridge.SetAccountProject(context.Background(), "bot1", proj.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acc.ProjectID != proj.ID {
+		t.Fatalf("%+v", acc)
+	}
+	acc, err = bridge.SetAccountProject(context.Background(), "bot1", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acc.ProjectID != "" {
+		t.Fatalf("expected unbound, got %+v", acc)
 	}
 }
 
@@ -129,7 +144,6 @@ func TestWeixinLoginConfirmed(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.Contains(r.URL.Path, "get_bot_qrcode"):
-			// Simulate real iLink: URL payload, not a data-image.
 			_ = json.NewEncoder(w).Encode(map[string]string{
 				"qrcode":             "qr1",
 				"qrcode_img_content": "https://liteapp.weixin.qq.com/q/demo?qrcode=abc",
@@ -162,7 +176,16 @@ func TestWeixinLoginConfirmed(t *testing.T) {
 	client.BaseURL = srv.URL
 	bridge.SetClient(client)
 
-	start, err := bridge.StartLogin(context.Background())
+	proj, err := pm.Create(context.Background(), domain.CreateProjectRequest{Name: "Biz"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := bridge.StartLogin(context.Background(), ""); err == nil {
+		t.Fatal("expected error without projectId")
+	}
+
+	start, err := bridge.StartLogin(context.Background(), proj.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,11 +199,17 @@ func TestWeixinLoginConfirmed(t *testing.T) {
 	if !wait.Connected || wait.AccountID == "" {
 		t.Fatalf("%+v", wait)
 	}
+	if wait.ProjectID != proj.ID {
+		t.Fatalf("wait projectId=%q want %q", wait.ProjectID, proj.ID)
+	}
 	acc, err := st.WeixinAccounts().Get(context.Background(), wait.AccountID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if acc.Token != "token-1" {
 		t.Fatalf("token=%q", acc.Token)
+	}
+	if acc.ProjectID != proj.ID {
+		t.Fatalf("account projectId=%q want %q", acc.ProjectID, proj.ID)
 	}
 }

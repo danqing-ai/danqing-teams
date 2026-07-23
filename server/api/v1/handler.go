@@ -109,6 +109,7 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.POST("/channels/weixin/login/start", weixinLoginStart(h))
 	api.POST("/channels/weixin/login/wait", weixinLoginWait(h))
 	api.POST("/channels/weixin/logout", weixinLogout(h))
+	api.PUT("/channels/weixin/accounts/:id", weixinUpdateAccount(h))
 	api.GET("/channels/weixin/bindings", weixinBindings(h))
 	api.GET("/sandbox/status", getSandboxStatus(h))
 	api.GET("/browser/status", getBrowserStatus(h))

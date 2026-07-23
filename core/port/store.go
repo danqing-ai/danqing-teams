@@ -19,6 +19,7 @@ type Repository interface {
 	Memories()       MemoryRepo
 	WeixinAccounts() WeixinAccountRepo
 	WeixinBindings() WeixinBindingRepo
+	AppMeta()        AppMetaRepo
 }
 
 // WeixinAccountRepo persists logged-in iLink bot accounts.
@@ -28,6 +29,13 @@ type WeixinAccountRepo interface {
 	Upsert(ctx context.Context, a domain.WeixinAccount) error
 	Delete(ctx context.Context, accountID string) error
 	UpdateSyncBuf(ctx context.Context, accountID, syncBuf string) error
+	UpdateProjectID(ctx context.Context, accountID, projectID string) error
+}
+
+// AppMetaRepo is a small key/value store for one-shot migrations / flags.
+type AppMetaRepo interface {
+	Get(ctx context.Context, key string) (string, bool, error)
+	Set(ctx context.Context, key, value string) error
 }
 
 // WeixinBindingRepo maps Weixin peer users to Teams sessions (1:1).

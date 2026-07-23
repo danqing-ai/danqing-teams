@@ -116,6 +116,7 @@ func (s *Store) MCPServers() port.MCPServerRepo     { return &mcpServerRepo{s} }
 func (s *Store) Memories() port.MemoryRepo          { return &memoryRepo{s} }
 func (s *Store) WeixinAccounts() port.WeixinAccountRepo { return &weixinAccountRepo{s} }
 func (s *Store) WeixinBindings() port.WeixinBindingRepo { return &weixinBindingRepo{s} }
+func (s *Store) AppMeta() port.AppMetaRepo              { return &appMetaRepo{s} }
 
 func (s *Store) KnowledgeDocs() []KnowledgeDoc {
 	var rows []knowledgeDocModel
@@ -711,6 +712,7 @@ func (r *weixinAccountRepo) Upsert(ctx context.Context, a domain.WeixinAccount) 
 		Token:     a.Token,
 		BaseURL:   a.BaseURL,
 		UserID:    a.UserID,
+		ProjectID: a.ProjectID,
 		SyncBuf:   a.SyncBuf,
 		CreatedAt: a.CreatedAt,
 		UpdatedAt: a.UpdatedAt,
@@ -726,6 +728,30 @@ func (r *weixinAccountRepo) UpdateSyncBuf(ctx context.Context, accountID, syncBu
 	return r.s.db.WithContext(ctx).Model(&weixinAccountModel{}).
 		Where("account_id = ?", accountID).
 		Updates(map[string]any{"sync_buf": syncBuf, "updated_at": time.Now().UTC()}).Error
+}
+
+func (r *weixinAccountRepo) UpdateProjectID(ctx context.Context, accountID, projectID string) error {
+	return r.s.db.WithContext(ctx).Model(&weixinAccountModel{}).
+		Where("account_id = ?", accountID).
+		Updates(map[string]any{"project_id": projectID, "updated_at": time.Now().UTC()}).Error
+}
+
+type appMetaRepo struct{ s *Store }
+
+func (r *appMetaRepo) Get(ctx context.Context, key string) (string, bool, error) {
+	var m appMetaModel
+	err := r.s.db.WithContext(ctx).First(&m, "`key` = ?", key).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return m.Value, true, nil
+}
+
+func (r *appMetaRepo) Set(ctx context.Context, key, value string) error {
+	return r.s.db.WithContext(ctx).Save(&appMetaModel{Key: key, Value: value}).Error
 }
 
 type weixinBindingRepo struct{ s *Store }

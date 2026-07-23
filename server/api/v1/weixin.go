@@ -24,13 +24,19 @@ func weixinStatus(h *Handler) gin.HandlerFunc {
 	}
 }
 
+type weixinLoginStartRequest struct {
+	ProjectID string `json:"projectId"`
+}
+
 func weixinLoginStart(h *Handler) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if h.Weixin == nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "weixin bridge unavailable"})
 			return
 		}
-		res, err := h.Weixin.StartLogin(c.Request.Context())
+		var req weixinLoginStartRequest
+		_ = c.ShouldBindJSON(&req)
+		res, err := h.Weixin.StartLogin(c.Request.Context(), req.ProjectID)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -40,9 +46,9 @@ func weixinLoginStart(h *Handler) gin.HandlerFunc {
 }
 
 type weixinLoginWaitRequest struct {
-	SessionKey  string `json:"sessionKey"`
-	VerifyCode  string `json:"verifyCode,omitempty"`
-	TimeoutMs   int    `json:"timeoutMs,omitempty"`
+	SessionKey string `json:"sessionKey"`
+	VerifyCode string `json:"verifyCode,omitempty"`
+	TimeoutMs  int    `json:"timeoutMs,omitempty"`
 }
 
 func weixinLoginWait(h *Handler) gin.HandlerFunc {
@@ -89,6 +95,39 @@ func weixinLogout(h *Handler) gin.HandlerFunc {
 	}
 }
 
+type weixinAccountUpdateRequest struct {
+	ProjectID *string `json:"projectId"`
+}
+
+func weixinUpdateAccount(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if h.Weixin == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "weixin bridge unavailable"})
+			return
+		}
+		accountID := c.Param("id")
+		if accountID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "account id required"})
+			return
+		}
+		var req weixinAccountUpdateRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if req.ProjectID == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "projectId required (use empty string to unbind)"})
+			return
+		}
+		acc, err := h.Weixin.SetAccountProject(c.Request.Context(), accountID, *req.ProjectID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, acc)
+	}
+}
+
 func weixinBindings(h *Handler) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if h.Weixin == nil {
@@ -132,6 +171,7 @@ func weixinConfigure(h *Handler) gin.HandlerFunc {
 		}
 		wx := cfg.Channels.Weixin
 		wx.Enabled = req.Enabled
+		wx.DefaultProjectID = "" // drop deprecated field on save
 		if req.DefaultAgentID != "" {
 			wx.DefaultAgentID = req.DefaultAgentID
 		}
@@ -152,13 +192,6 @@ func weixinConfigure(h *Handler) gin.HandlerFunc {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "defaultModelId required when enabling weixin (provider/model)"})
 				return
 			}
-			if _, err := h.Weixin.EnsureWeixinProject(c.Request.Context()); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
-			// Reload after EnsureWeixinProject may have updated project id.
-			cfg, _ = h.Config.Get(c.Request.Context())
-			wx.DefaultProjectID = cfg.Channels.Weixin.DefaultProjectID
 		}
 		sec := cfg.Channels
 		sec.Weixin = wx

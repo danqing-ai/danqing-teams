@@ -6,6 +6,7 @@ export interface WeixinAccount {
   accountId: string
   baseUrl?: string
   userId?: string
+  projectId?: string
   createdAt?: string
   updatedAt?: string
 }
@@ -13,7 +14,6 @@ export interface WeixinAccount {
 export interface WeixinStatus {
   enabled: boolean
   running: boolean
-  defaultProjectId?: string
   defaultAgentId?: string
   defaultModelId?: string
   autoApprove: boolean
@@ -39,6 +39,7 @@ export interface WeixinLoginWait {
   alreadyConnected?: boolean
   accountId?: string
   userId?: string
+  projectId?: string
   message?: string
   needsVerifyCode?: boolean
 }
@@ -88,11 +89,11 @@ export const useWeixinStore = defineStore('weixin', () => {
     }
   }
 
-  async function startLogin() {
+  async function startLogin(projectId: string) {
     loginMessage.value = ''
     const res = await fetchJSON<WeixinLoginStart>('/channels/weixin/login/start', {
       method: 'POST',
-      body: '{}',
+      body: JSON.stringify({ projectId }),
     })
     qr.value = { sessionKey: res.sessionKey, url: res.qrcodeUrl }
     return res
@@ -116,6 +117,15 @@ export const useWeixinStore = defineStore('weixin', () => {
       await refreshBindings()
     }
     return res
+  }
+
+  async function updateAccountProject(accountId: string, projectId: string) {
+    const acc = await fetchJSON<WeixinAccount>(`/channels/weixin/accounts/${encodeURIComponent(accountId)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ projectId }),
+    })
+    await refreshStatus()
+    return acc
   }
 
   async function logout(accountId?: string) {
@@ -144,6 +154,7 @@ export const useWeixinStore = defineStore('weixin', () => {
     configure,
     startLogin,
     waitLogin,
+    updateAccountProject,
     logout,
     isWeixinSession,
   }

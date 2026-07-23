@@ -234,7 +234,6 @@ export interface ConfigFile {
   channels?: {
     weixin?: {
       enabled: boolean
-      defaultProjectId?: string
       defaultAgentId?: string
       defaultModelId?: string
       autoApprove?: boolean

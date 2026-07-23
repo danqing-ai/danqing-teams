@@ -40,6 +40,7 @@ type weixinLoginSession struct {
 	SessionKey string
 	QRCode     string
 	QRCodeURL  string
+	ProjectID  string
 	StartedAt  time.Time
 	BaseURL    string
 }
@@ -73,67 +74,52 @@ func (b *WeixinBridge) loadChannelCfg(ctx context.Context) (domain.ConfigWeixinC
 	if err != nil {
 		return domain.ConfigWeixinChannel{}, err
 	}
-	wx := cfg.Channels.Weixin
-	if !wx.AutoApprove && cfg.Channels.Weixin.Enabled {
-		// default true when enabled unless explicitly set false in yaml;
-		// zero-value AutoApprove is false — treat unset as true via Sync defaults in Ensure.
-	}
-	return wx, nil
+	return cfg.Channels.Weixin, nil
 }
 
-// EnsureWeixinProject finds or creates the dedicated 「微信」 project and persists its id.
-// Never reuses a default_project_id that points at a differently named project
-// (e.g. a leftover business project from an earlier config).
-func (b *WeixinBridge) EnsureWeixinProject(ctx context.Context) (string, error) {
+const weixinMigrateMetaKey = "weixin_account_project_v1"
+
+// MigrateAccountProjectsOnce copies deprecated channels.weixin.default_project_id
+// onto accounts missing project_id, then clears the config field (idempotent).
+func (b *WeixinBridge) MigrateAccountProjectsOnce(ctx context.Context) error {
+	if _, ok, err := b.store.AppMeta().Get(ctx, weixinMigrateMetaKey); err != nil {
+		return err
+	} else if ok {
+		return nil
+	}
 	cfg, err := b.config.Get(ctx)
 	if err != nil {
-		return "", err
+		return err
 	}
-	wx := cfg.Channels.Weixin
-	if wx.DefaultProjectID != "" {
-		if p, err := b.projects.Get(ctx, wx.DefaultProjectID); err == nil {
-			if p.Name == domain.WeixinProjectName {
-				return p.ID, nil
+	legacy := strings.TrimSpace(cfg.Channels.Weixin.DefaultProjectID)
+	if legacy != "" {
+		accounts, err := b.store.WeixinAccounts().List(ctx)
+		if err != nil {
+			return err
+		}
+		for _, a := range accounts {
+			if strings.TrimSpace(a.ProjectID) != "" {
+				continue
 			}
-			// Stale id pointing at another project — fall through and fix.
-			log.Printf("[weixin] default_project_id=%s name=%q is not %q; recreating", p.ID, p.Name, domain.WeixinProjectName)
+			if err := b.store.WeixinAccounts().UpdateProjectID(ctx, a.AccountID, legacy); err != nil {
+				return err
+			}
 		}
-	}
-	projects, err := b.projects.List(ctx)
-	if err != nil {
-		return "", err
-	}
-	for _, p := range projects {
-		if p.Name == domain.WeixinProjectName {
-			return b.persistWeixinProjectID(ctx, cfg, p.ID)
+		wx := cfg.Channels.Weixin
+		wx.DefaultProjectID = ""
+		sec := cfg.Channels
+		sec.Weixin = wx
+		if _, err := b.config.Update(ctx, domain.UpdateConfigFileRequest{Channels: &sec}); err != nil {
+			return err
 		}
+		log.Printf("[weixin] migrated default_project_id=%s onto accounts", legacy)
 	}
-	p, err := b.projects.Create(ctx, domain.CreateProjectRequest{Name: domain.WeixinProjectName})
-	if err != nil {
-		return "", err
-	}
-	return b.persistWeixinProjectID(ctx, cfg, p.ID)
-}
-
-func (b *WeixinBridge) persistWeixinProjectID(ctx context.Context, cfg *domain.ConfigFile, projectID string) (string, error) {
-	wx := cfg.Channels.Weixin
-	wx.DefaultProjectID = projectID
-	if !wx.AutoApprove {
-		wx.AutoApprove = true
-	}
-	sec := cfg.Channels
-	sec.Weixin = wx
-	if _, err := b.config.Update(ctx, domain.UpdateConfigFileRequest{Channels: &sec}); err != nil {
-		return projectID, err
-	}
-	b.mu.Lock()
-	b.cfgCache = wx
-	b.mu.Unlock()
-	return projectID, nil
+	return b.store.AppMeta().Set(ctx, weixinMigrateMetaKey, "1")
 }
 
 // SyncFromConfig starts or stops the bridge based on config.
 func (b *WeixinBridge) SyncFromConfig(ctx context.Context) error {
+	_ = b.MigrateAccountProjectsOnce(ctx)
 	cfg, err := b.loadChannelCfg(ctx)
 	if err != nil {
 		return err
@@ -149,9 +135,6 @@ func (b *WeixinBridge) SyncFromConfig(ctx context.Context) error {
 		if strings.TrimSpace(cfg.DefaultModelID) == "" || !strings.Contains(cfg.DefaultModelID, "/") {
 			b.Stop()
 			return fmt.Errorf("channels.weixin.default_model_id required when enabled (provider/model)")
-		}
-		if _, err := b.EnsureWeixinProject(ctx); err != nil {
-			return err
 		}
 		// Always restart so newly logged-in accounts get a monitor goroutine.
 		b.Stop()
@@ -331,18 +314,22 @@ func (b *WeixinBridge) sessionHasRunningTurn(sessionID string) bool {
 }
 
 func (b *WeixinBridge) handleInbound(ctx context.Context, acc domain.WeixinAccount, peer, text, contextToken string) (string, error) {
+	// Reload account so project rebind/unbind takes effect without restart.
+	if fresh, err := b.store.WeixinAccounts().Get(ctx, acc.AccountID); err == nil {
+		acc = fresh
+	}
+	projectID := strings.TrimSpace(acc.ProjectID)
+	if projectID == "" {
+		return "请先在 Teams 设置 → 微信 中为该账号绑定一个项目。", nil
+	}
+	if _, err := b.projects.Get(ctx, projectID); err != nil {
+		return "绑定的项目不存在或已删除，请在设置 → 微信 中重新绑定项目。", nil
+	}
+
 	cfg := b.channelCfg()
 	if cfg.DefaultAgentID == "" {
 		return "", fmt.Errorf("未配置默认 Agent，请在设置中选择")
 	}
-	projectID, err := b.EnsureWeixinProject(ctx)
-	if err != nil {
-		return "", err
-	}
-	// Refresh cache after ensure (may have rewritten default_project_id).
-	b.refreshCfg(ctx)
-	cfg = b.channelCfg()
-
 	modelID := strings.TrimSpace(cfg.DefaultModelID)
 	if modelID == "" || !strings.Contains(modelID, "/") {
 		return "", fmt.Errorf("未配置默认模型，请在设置 → 微信中选择模型（格式 provider/model）")
@@ -355,8 +342,6 @@ func (b *WeixinBridge) handleInbound(ctx context.Context, acc domain.WeixinAccou
 
 	var sessionID string
 	if errors.Is(err, gorm.ErrRecordNotFound) || binding.SessionID == "" {
-		// Create session+first turn under subscription.
-		// Title from first message — never use opaque peer openids as the label.
 		s, cerr := b.sessions.Create(ctx, domain.CreateSessionRequest{
 			Content:       text,
 			AgentID:       cfg.DefaultAgentID,
@@ -391,7 +376,6 @@ func (b *WeixinBridge) handleInbound(ctx context.Context, acc domain.WeixinAccou
 	if b.sessionHasRunningTurn(sessionID) {
 		return weixinBusyReply, nil
 	}
-	// Persist model onto session if earlier turns were created without one.
 	if s, gerr := b.sessions.Get(ctx, sessionID); gerr == nil && strings.TrimSpace(s.ModelID) == "" {
 		_, _ = b.sessions.Update(ctx, sessionID, domain.UpdateSessionRequest{ModelID: &modelID})
 	}
@@ -421,21 +405,20 @@ func weixinSessionTitle(text string) string {
 	return title
 }
 
-// activateAfterLogin persists login state. Enabling still requires Agent + Model
-// chosen explicitly in settings (no silent defaults).
+// activateAfterLogin restarts monitors when the channel is already fully configured.
 func (b *WeixinBridge) activateAfterLogin(ctx context.Context) string {
 	cfg, err := b.config.Get(ctx)
 	if err != nil {
-		return "已连接微信。请在设置中选择 Agent 与模型并启用通道。"
+		return "已添加微信账号。请在设置中选择 Agent 与模型并启用通道。"
 	}
 	wx := cfg.Channels.Weixin
 	if wx.Enabled && wx.DefaultAgentID != "" && strings.Contains(wx.DefaultModelID, "/") {
 		if err := b.SyncFromConfig(ctx); err != nil {
-			return "已连接微信，但启动 Bridge 失败：" + err.Error()
+			return "已添加微信账号，但启动 Bridge 失败：" + err.Error()
 		}
 		return ""
 	}
-	return "已连接微信。请在设置 → 微信中选择默认 Agent 与模型并启用通道，然后给机器人发消息。"
+	return "已添加微信账号。请在设置 → 微信中选择默认 Agent 与模型并启用通道。"
 }
 
 func (b *WeixinBridge) waitLatestTurnID(sessionID string, wait time.Duration) string {
@@ -517,7 +500,14 @@ func (b *WeixinBridge) collectReplyFrom(ctx context.Context, sessionID string, c
 
 // --- Login API helpers ---
 
-func (b *WeixinBridge) StartLogin(ctx context.Context) (domain.WeixinLoginStartResult, error) {
+func (b *WeixinBridge) StartLogin(ctx context.Context, projectID string) (domain.WeixinLoginStartResult, error) {
+	projectID = strings.TrimSpace(projectID)
+	if projectID == "" {
+		return domain.WeixinLoginStartResult{}, fmt.Errorf("请先选择要关联的项目")
+	}
+	if _, err := b.projects.Get(ctx, projectID); err != nil {
+		return domain.WeixinLoginStartResult{}, fmt.Errorf("项目不存在：%s", projectID)
+	}
 	accounts, _ := b.store.WeixinAccounts().List(ctx)
 	tokens := make([]string, 0, len(accounts))
 	for i := len(accounts) - 1; i >= 0 && len(tokens) < 10; i-- {
@@ -534,7 +524,6 @@ func (b *WeixinBridge) StartLogin(ctx context.Context) (domain.WeixinLoginStartR
 	}
 	qrImage := qr.QRCodeImgContent
 	if !strings.HasPrefix(qrImage, "data:image/") {
-		// iLink often returns a liteapp URL, not a PNG — render QR locally for <img>.
 		payload := qr.QRCodeImgContent
 		if payload == "" {
 			payload = qr.QRCode
@@ -555,6 +544,7 @@ func (b *WeixinBridge) StartLogin(ctx context.Context) (domain.WeixinLoginStartR
 		SessionKey: sessionKey,
 		QRCode:     qr.QRCode,
 		QRCodeURL:  qr.QRCodeImgContent,
+		ProjectID:  projectID,
 		StartedAt:  time.Now(),
 		BaseURL:    base,
 	}
@@ -645,14 +635,23 @@ func (b *WeixinBridge) WaitLogin(ctx context.Context, sessionKey, verifyCode str
 			if base == "" {
 				base = ilink.DefaultBaseURL
 			}
+			projectID := strings.TrimSpace(login.ProjectID)
 			now := time.Now().UTC()
 			acc := domain.WeixinAccount{
 				AccountID: accountID,
 				Token:     token,
 				BaseURL:   base,
 				UserID:    status.ILinkUserID,
+				ProjectID: projectID,
 				CreatedAt: now,
 				UpdatedAt: now,
+			}
+			if existing, err := b.store.WeixinAccounts().Get(ctx, accountID); err == nil {
+				acc.SyncBuf = existing.SyncBuf
+				acc.CreatedAt = existing.CreatedAt
+				if projectID == "" {
+					acc.ProjectID = existing.ProjectID
+				}
 			}
 			if err := b.store.WeixinAccounts().Upsert(ctx, acc); err != nil {
 				return domain.WeixinLoginWaitResult{}, err
@@ -660,21 +659,16 @@ func (b *WeixinBridge) WaitLogin(ctx context.Context, sessionKey, verifyCode str
 			b.mu.Lock()
 			delete(b.logins, sessionKey)
 			b.mu.Unlock()
-			// Login implies the channel should be active: ensure agent + 「微信」 project, then start.
-			if msg := b.activateAfterLogin(ctx); msg != "" {
-				return domain.WeixinLoginWaitResult{
-					Connected: true,
-					AccountID: accountID,
-					UserID:    status.ILinkUserID,
-					Message:   msg,
-				}, nil
+			msg := b.activateAfterLogin(ctx)
+			if msg == "" {
+				msg = "已添加微信账号并绑定项目。可在微信中给机器人发消息。"
 			}
-			_ = b.SyncFromConfig(ctx)
 			return domain.WeixinLoginWaitResult{
 				Connected: true,
 				AccountID: accountID,
 				UserID:    status.ILinkUserID,
-				Message:   "已连接到微信。请在微信里给机器人发一条消息，会话会出现在「微信」项目下。",
+				ProjectID: acc.ProjectID,
+				Message:   msg,
 			}, nil
 		}
 		time.Sleep(time.Second)
@@ -682,21 +676,53 @@ func (b *WeixinBridge) WaitLogin(ctx context.Context, sessionKey, verifyCode str
 	return domain.WeixinLoginWaitResult{Connected: false, Message: "等待扫码超时，请重试。"}, nil
 }
 
+func (b *WeixinBridge) SetAccountProject(ctx context.Context, accountID, projectID string) (domain.WeixinAccount, error) {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return domain.WeixinAccount{}, fmt.Errorf("accountId required")
+	}
+	if _, err := b.store.WeixinAccounts().Get(ctx, accountID); err != nil {
+		return domain.WeixinAccount{}, err
+	}
+	projectID = strings.TrimSpace(projectID)
+	if projectID != "" {
+		if _, err := b.projects.Get(ctx, projectID); err != nil {
+			return domain.WeixinAccount{}, fmt.Errorf("项目不存在：%s", projectID)
+		}
+	}
+	if err := b.store.WeixinAccounts().UpdateProjectID(ctx, accountID, projectID); err != nil {
+		return domain.WeixinAccount{}, err
+	}
+	acc, err := b.store.WeixinAccounts().Get(ctx, accountID)
+	if err != nil {
+		return domain.WeixinAccount{}, err
+	}
+	acc.Token = ""
+	return acc, nil
+}
+
 func (b *WeixinBridge) Logout(ctx context.Context, accountID string) error {
+	stopOne := func(a domain.WeixinAccount) {
+		if strings.TrimSpace(a.Token) != "" {
+			_ = b.client.NotifyStop(ctx, b.toILinkAccount(a))
+		}
+		_ = b.store.WeixinBindings().DeleteByAccount(ctx, a.AccountID)
+		_ = b.store.WeixinAccounts().Delete(ctx, a.AccountID)
+	}
 	if accountID == "" {
 		accounts, err := b.store.WeixinAccounts().List(ctx)
 		if err != nil {
 			return err
 		}
 		for _, a := range accounts {
-			_ = b.store.WeixinBindings().DeleteByAccount(ctx, a.AccountID)
-			_ = b.store.WeixinAccounts().Delete(ctx, a.AccountID)
+			stopOne(a)
 		}
 	} else {
-		_ = b.store.WeixinBindings().DeleteByAccount(ctx, accountID)
-		if err := b.store.WeixinAccounts().Delete(ctx, accountID); err != nil {
+		a, err := b.store.WeixinAccounts().Get(ctx, accountID)
+		if err != nil {
 			return err
 		}
+		stopOne(a)
 	}
 	wasRunning := b.IsRunning()
 	b.Stop()
@@ -710,6 +736,7 @@ func (b *WeixinBridge) Logout(ctx context.Context, accountID string) error {
 }
 
 func (b *WeixinBridge) Status(ctx context.Context) (domain.WeixinStatus, error) {
+	_ = b.MigrateAccountProjectsOnce(ctx)
 	cfg, err := b.loadChannelCfg(ctx)
 	if err != nil {
 		return domain.WeixinStatus{}, err
@@ -718,7 +745,6 @@ func (b *WeixinBridge) Status(ctx context.Context) (domain.WeixinStatus, error) 
 	if err != nil {
 		return domain.WeixinStatus{}, err
 	}
-	// Strip tokens from API response
 	safe := make([]domain.WeixinAccount, 0, len(accounts))
 	for _, a := range accounts {
 		a.Token = ""
@@ -726,14 +752,13 @@ func (b *WeixinBridge) Status(ctx context.Context) (domain.WeixinStatus, error) 
 	}
 	n, _ := b.store.WeixinBindings().Count(ctx)
 	return domain.WeixinStatus{
-		Enabled:          cfg.Enabled,
-		Running:          b.IsRunning(),
-		DefaultProjectID: cfg.DefaultProjectID,
-		DefaultAgentID:   cfg.DefaultAgentID,
-		DefaultModelID:   cfg.DefaultModelID,
-		AutoApprove:      cfg.AutoApprove,
-		Accounts:         safe,
-		BindingCount:     n,
+		Enabled:        cfg.Enabled,
+		Running:        b.IsRunning(),
+		DefaultAgentID: cfg.DefaultAgentID,
+		DefaultModelID: cfg.DefaultModelID,
+		AutoApprove:    cfg.AutoApprove,
+		Accounts:       safe,
+		BindingCount:   n,
 	}, nil
 }
 
