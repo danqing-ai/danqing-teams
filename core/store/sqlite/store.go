@@ -171,7 +171,12 @@ func (r *agentRepo) Upsert(ctx context.Context, a domain.Agent) error {
 	if err != nil {
 		return r.s.db.WithContext(ctx).Create(&m).Error
 	}
-	return r.s.db.WithContext(ctx).Model(&existing).Updates(&m).Error
+	// Select all columns so zero values (steps=0 follow-global, can_delegate=false) persist.
+	// Plain Updates() skips zero fields and left legacy per-agent step caps stuck.
+	return r.s.db.WithContext(ctx).Model(&existing).Select(
+		"Name", "Description", "Persona", "Mode", "SystemPrompt", "Steps",
+		"SkillIDsJSON", "ToolsJSON", "KnowledgeJSON", "CanDelegate",
+	).Updates(&m).Error
 }
 
 func (r *agentRepo) Delete(ctx context.Context, id string) error {
