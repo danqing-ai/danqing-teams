@@ -968,12 +968,10 @@ const hasFooterActions = computed(() => {
           <Skeleton variant="card" width="100%" />
         </div>
 
-        <div v-else class="settings-form settings-form--weixin">
-          <div class="settings-form-group settings-form-group--stack">
-            <div class="settings-form-group__head">
-              <h3 class="settings-form-group__title">{{ $t('settings.weixinChannel') }}</h3>
-              <p class="settings-form-group__desc">{{ $t('settings.weixinChannelDesc') }}</p>
-            </div>
+        <div v-else class="settings-form">
+          <div class="settings-form-group">
+            <h3 class="settings-form-group__title">{{ $t('settings.weixinChannel') }}</h3>
+            <p class="settings-form-group__desc">{{ $t('settings.weixinChannelDesc') }}</p>
             <label class="settings-field settings-field--switch">
               <span class="settings-field__label">{{ $t('settings.weixinEnable') }}</span>
               <DqSwitch
@@ -1012,22 +1010,20 @@ const hasFooterActions = computed(() => {
                 @update:model-value="(v: boolean) => weixinForm.autoApprove = v"
               />
             </label>
-            <div v-if="weixin.status" class="settings-sandbox-status weixin-status">
+            <div v-if="weixin.status" class="settings-sandbox-status">
               <span class="settings-field__label">{{ $t('settings.weixinRunning') }}</span>
-              <span class="settings-sandbox-status__value">
+              <code class="settings-sandbox-status__value">
                 {{ weixin.status.running ? $t('common.yes') : $t('common.no') }}
                 · {{ $t('settings.weixinBindings') }}: {{ weixin.status.bindingCount }}
                 · {{ $t('settings.weixinProject') }}: {{ $t('settings.weixinProjectName') }}
-              </span>
+              </code>
             </div>
           </div>
 
-          <div class="settings-form-group settings-form-group--stack">
-            <div class="settings-form-group__head">
-              <h3 class="settings-form-group__title">{{ $t('settings.weixinLogin') }}</h3>
-              <p class="settings-form-group__desc">{{ $t('settings.weixinLoginDesc') }}</p>
-            </div>
-            <div class="settings-form-row weixin-login-actions">
+          <div class="settings-form-group">
+            <h3 class="settings-form-group__title">{{ $t('settings.weixinLogin') }}</h3>
+            <p class="settings-form-group__desc">{{ $t('settings.weixinLoginDesc') }}</p>
+            <div class="settings-form-row">
               <DqButton type="primary" size="small" :disabled="weixinPolling" @click="handleWeixinQr">
                 {{ weixinPolling ? $t('settings.weixinWaiting') : $t('settings.weixinScan') }}
               </DqButton>
@@ -1892,6 +1888,21 @@ const hasFooterActions = computed(() => {
   margin-top: 12px;
 }
 
+.settings-form-group > .settings-field + .settings-field {
+  margin-top: 12px;
+}
+
+.settings-form-group > .settings-field + .settings-sandbox-status {
+  margin-top: 12px;
+}
+
+.settings-form-group > .settings-form-row + .weixin-qr,
+.settings-form-group > .settings-form-row + .provider-list,
+.settings-form-group > .weixin-qr + .provider-list,
+.settings-form-group > .provider-list + .settings-form-group__desc {
+  margin-top: 12px;
+}
+
 .settings-field--half {
   flex: 1;
   min-width: 0;
@@ -2489,7 +2500,7 @@ const hasFooterActions = computed(() => {
 }
 
 .weixin-qr {
-  margin-top: 0;
+  margin-top: 12px;
   display: inline-flex;
   padding: 12px;
   border-radius: 12px;
@@ -2504,58 +2515,12 @@ const hasFooterActions = computed(() => {
   object-fit: contain;
 }
 
-.settings-form--weixin {
-  gap: 0;
-}
-
-.settings-form--weixin > .settings-form-group + .settings-form-group {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--dq-separator-light);
-}
-
-.settings-form-group--stack {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.settings-form-group--stack .settings-form-group__head {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.settings-form-group--stack .settings-form-group__title,
-.settings-form-group--stack .settings-form-group__desc,
-.settings-form-group--stack .settings-form-row {
-  margin: 0;
-}
-
-/* Avoid double spacing: stack gap already spaces siblings */
-.settings-form-group--stack .settings-field--switch + .settings-form-row,
-.settings-form-group--stack .settings-field--switch + .settings-field--switch,
-.settings-form-group--stack .settings-form-row + .settings-field--switch {
-  margin-top: 0;
-}
-
-.weixin-status {
-  margin: 0 !important;
-}
-
-.weixin-status .settings-field__label {
-  display: block;
-}
-
-.weixin-login-actions {
-  align-items: center;
-}
-
 .weixin-account-list {
-  margin: 0;
+  margin-top: 12px;
 }
 
 .weixin-login-message {
-  margin: 0 !important;
+  margin-top: 12px;
+  margin-bottom: 0;
 }
 </style>
