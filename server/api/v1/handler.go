@@ -33,6 +33,7 @@ type Handler struct {
 	MarketHandler *MarketHandler
 	TurnLogs      *service.TurnLogManager
 	MCPServers    *service.MCPManager
+	Weixin        *service.WeixinBridge
 	Sandbox       port.Sandbox
 	Browser       port.Browser
 	Store         port.Repository
@@ -103,6 +104,12 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.POST("/asks/:id/resolve", resolveAskUser(h))
 	api.GET("/config", getConfig(h))
 	api.PUT("/config", updateConfig(h))
+	api.GET("/channels/weixin/status", weixinStatus(h))
+	api.PUT("/channels/weixin", weixinConfigure(h))
+	api.POST("/channels/weixin/login/start", weixinLoginStart(h))
+	api.POST("/channels/weixin/login/wait", weixinLoginWait(h))
+	api.POST("/channels/weixin/logout", weixinLogout(h))
+	api.GET("/channels/weixin/bindings", weixinBindings(h))
 	api.GET("/sandbox/status", getSandboxStatus(h))
 	api.GET("/browser/status", getBrowserStatus(h))
 	api.GET("/model-configs", getModelConfigs(h))

@@ -50,6 +50,7 @@ type Core struct {
 	Market        *service.MarketManager
 	TurnLogs      *service.TurnLogManager
 	MCPServers    *service.MCPManager
+	Weixin        *service.WeixinBridge
 }
 
 func New(cfg Config) *Core {
@@ -183,6 +184,12 @@ func New(cfg Config) *Core {
 	eng.RegisterTool(&builtin.MemoryRead{Store: st.Memories(), TopK: memTopK})
 	eng.RecoverRunning(context.Background())
 
+	weixin := service.NewWeixinBridge(st, sessions, pm, configManager)
+	if err := weixin.SyncFromConfig(context.Background()); err != nil {
+		// Non-fatal: channel may be disabled or incomplete.
+		_ = err
+	}
+
 	return &Core{
 		Store:         st,
 		Engine:        eng,
@@ -200,12 +207,19 @@ func New(cfg Config) *Core {
 		Market:        marketMgr,
 		TurnLogs:      turnLogManager,
 		MCPServers:    mcpManager,
+		Weixin:        weixin,
 	}
 }
 
-// Close releases runtime resources (headless browser sessions).
+// Close releases runtime resources (headless browser sessions and Weixin bridge).
 func (c *Core) Close() error {
-	if c == nil || c.Browser == nil {
+	if c == nil {
+		return nil
+	}
+	if c.Weixin != nil {
+		c.Weixin.Stop()
+	}
+	if c.Browser == nil {
 		return nil
 	}
 	return c.Browser.Close(context.Background())

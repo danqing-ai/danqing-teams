@@ -36,6 +36,7 @@ func main() {
 		},
 		TurnLogs:   core.TurnLogs,
 		MCPServers: core.MCPServers,
+		Weixin:     core.Weixin,
 		Sandbox:    core.Sandbox,
 		Browser:    core.Browser,
 		Store:      core.Store,

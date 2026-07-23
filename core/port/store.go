@@ -6,17 +6,39 @@ import (
 )
 
 type Repository interface {
-	Agents()       AgentRepo
-	Skills()       SkillRepo
-	SkillFiles()   SkillFileRepo
-	Sessions()     SessionRepo
-	Projects()     ProjectRepo
-	LLMConfig()    LLMConfigRepo
-	Approvals()    ApprovalRepo
-	StreamEvents() StreamEventRepo
-	Turns()        TurnRepo
-	MCPServers()   MCPServerRepo
-	Memories()     MemoryRepo
+	Agents()         AgentRepo
+	Skills()         SkillRepo
+	SkillFiles()     SkillFileRepo
+	Sessions()       SessionRepo
+	Projects()       ProjectRepo
+	LLMConfig()      LLMConfigRepo
+	Approvals()      ApprovalRepo
+	StreamEvents()   StreamEventRepo
+	Turns()          TurnRepo
+	MCPServers()     MCPServerRepo
+	Memories()       MemoryRepo
+	WeixinAccounts() WeixinAccountRepo
+	WeixinBindings() WeixinBindingRepo
+}
+
+// WeixinAccountRepo persists logged-in iLink bot accounts.
+type WeixinAccountRepo interface {
+	List(ctx context.Context) ([]domain.WeixinAccount, error)
+	Get(ctx context.Context, accountID string) (domain.WeixinAccount, error)
+	Upsert(ctx context.Context, a domain.WeixinAccount) error
+	Delete(ctx context.Context, accountID string) error
+	UpdateSyncBuf(ctx context.Context, accountID, syncBuf string) error
+}
+
+// WeixinBindingRepo maps Weixin peer users to Teams sessions (1:1).
+type WeixinBindingRepo interface {
+	List(ctx context.Context) ([]domain.WeixinBinding, error)
+	GetByPeer(ctx context.Context, accountID, peerUserID string) (domain.WeixinBinding, error)
+	GetBySession(ctx context.Context, sessionID string) (domain.WeixinBinding, error)
+	Upsert(ctx context.Context, b domain.WeixinBinding) error
+	UpdateContextToken(ctx context.Context, accountID, peerUserID, token string) error
+	Count(ctx context.Context) (int, error)
+	DeleteByAccount(ctx context.Context, accountID string) error
 }
 
 // MemoryRepo persists agent-authored durable memories (memory_update / memory_read).

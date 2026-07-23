@@ -117,6 +117,7 @@ func newRouter(t *testing.T, core *bootstrap.Core) http.Handler {
 		SearchConfig: core.SearchConfig,
 		Agents:       core.Agents,
 		Skills:       core.Skills,
+		Weixin:       core.Weixin,
 		Store:        core.Store,
 	}
 	return apiv1.NewRouter(h, apiv1.RouterConfig{})

@@ -85,6 +85,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("search.user_agent", "")
 	v.SetDefault("search.html_fallback", true)
 	v.SetDefault("market.cache_ttl_hours", 6)
+	v.SetDefault("channels.weixin.enabled", false)
+	v.SetDefault("channels.weixin.auto_approve", true)
 }
 
 func bindEnv(v *viper.Viper) {
@@ -238,6 +240,7 @@ func (l *Loader) Save(_ context.Context, cfg *domain.ConfigFile) error {
 	root["search"] = cfg.Search
 	root["llm"] = cfg.LLM
 	root["market"] = cfg.Market
+	root["channels"] = cfg.Channels
 
 	if err := os.MkdirAll(filepath.Dir(l.path), 0755); err != nil {
 		return err

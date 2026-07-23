@@ -60,6 +60,8 @@ func (s *Store) migrate() error {
 		&streamEventModel{},
 		&turnModel{},
 		&mcpServerModel{},
+		&weixinAccountModel{},
+		&weixinBindingModel{},
 	); err != nil {
 		return err
 	}
@@ -112,6 +114,8 @@ func (s *Store) StreamEvents() port.StreamEventRepo { return &streamEventRepo{s}
 func (s *Store) Turns() port.TurnRepo               { return &turnRepo{s} }
 func (s *Store) MCPServers() port.MCPServerRepo     { return &mcpServerRepo{s} }
 func (s *Store) Memories() port.MemoryRepo          { return &memoryRepo{s} }
+func (s *Store) WeixinAccounts() port.WeixinAccountRepo { return &weixinAccountRepo{s} }
+func (s *Store) WeixinBindings() port.WeixinBindingRepo { return &weixinBindingRepo{s} }
 
 func (s *Store) KnowledgeDocs() []KnowledgeDoc {
 	var rows []knowledgeDocModel
@@ -672,4 +676,129 @@ func memoryToDomain(m memoryModel) domain.Memory {
 		Content:   m.Content,
 		UpdatedAt: m.UpdatedAt,
 	}
+}
+
+type weixinAccountRepo struct{ s *Store }
+
+func (r *weixinAccountRepo) List(ctx context.Context) ([]domain.WeixinAccount, error) {
+	var rows []weixinAccountModel
+	if err := r.s.db.WithContext(ctx).Order("updated_at desc").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.WeixinAccount, 0, len(rows))
+	for _, m := range rows {
+		out = append(out, weixinAccountToDomain(m))
+	}
+	return out, nil
+}
+
+func (r *weixinAccountRepo) Get(ctx context.Context, accountID string) (domain.WeixinAccount, error) {
+	var m weixinAccountModel
+	if err := r.s.db.WithContext(ctx).First(&m, "account_id = ?", accountID).Error; err != nil {
+		return domain.WeixinAccount{}, err
+	}
+	return weixinAccountToDomain(m), nil
+}
+
+func (r *weixinAccountRepo) Upsert(ctx context.Context, a domain.WeixinAccount) error {
+	now := time.Now().UTC()
+	if a.CreatedAt.IsZero() {
+		a.CreatedAt = now
+	}
+	a.UpdatedAt = now
+	m := weixinAccountModel{
+		AccountID: a.AccountID,
+		Token:     a.Token,
+		BaseURL:   a.BaseURL,
+		UserID:    a.UserID,
+		SyncBuf:   a.SyncBuf,
+		CreatedAt: a.CreatedAt,
+		UpdatedAt: a.UpdatedAt,
+	}
+	return r.s.db.WithContext(ctx).Save(&m).Error
+}
+
+func (r *weixinAccountRepo) Delete(ctx context.Context, accountID string) error {
+	return r.s.db.WithContext(ctx).Delete(&weixinAccountModel{}, "account_id = ?", accountID).Error
+}
+
+func (r *weixinAccountRepo) UpdateSyncBuf(ctx context.Context, accountID, syncBuf string) error {
+	return r.s.db.WithContext(ctx).Model(&weixinAccountModel{}).
+		Where("account_id = ?", accountID).
+		Updates(map[string]any{"sync_buf": syncBuf, "updated_at": time.Now().UTC()}).Error
+}
+
+type weixinBindingRepo struct{ s *Store }
+
+func (r *weixinBindingRepo) List(ctx context.Context) ([]domain.WeixinBinding, error) {
+	var rows []weixinBindingModel
+	if err := r.s.db.WithContext(ctx).Order("updated_at desc").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.WeixinBinding, 0, len(rows))
+	for _, m := range rows {
+		out = append(out, weixinBindingToDomain(m))
+	}
+	return out, nil
+}
+
+func (r *weixinBindingRepo) GetByPeer(ctx context.Context, accountID, peerUserID string) (domain.WeixinBinding, error) {
+	var m weixinBindingModel
+	if err := r.s.db.WithContext(ctx).Where("account_id = ? AND peer_user_id = ?", accountID, peerUserID).First(&m).Error; err != nil {
+		return domain.WeixinBinding{}, err
+	}
+	return weixinBindingToDomain(m), nil
+}
+
+func (r *weixinBindingRepo) GetBySession(ctx context.Context, sessionID string) (domain.WeixinBinding, error) {
+	var m weixinBindingModel
+	if err := r.s.db.WithContext(ctx).Where("session_id = ?", sessionID).First(&m).Error; err != nil {
+		return domain.WeixinBinding{}, err
+	}
+	return weixinBindingToDomain(m), nil
+}
+
+func (r *weixinBindingRepo) Upsert(ctx context.Context, b domain.WeixinBinding) error {
+	now := time.Now().UTC()
+	if b.ID == "" {
+		b.ID = fmt.Sprintf("wxbind-%d", time.Now().UnixNano())
+	}
+	if b.CreatedAt.IsZero() {
+		b.CreatedAt = now
+	}
+	b.UpdatedAt = now
+	m := weixinBindingModel{
+		ID: b.ID, AccountID: b.AccountID, PeerUserID: b.PeerUserID,
+		SessionID: b.SessionID, ContextToken: b.ContextToken,
+		CreatedAt: b.CreatedAt, UpdatedAt: b.UpdatedAt,
+	}
+	var existing weixinBindingModel
+	err := r.s.db.WithContext(ctx).Where("account_id = ? AND peer_user_id = ?", b.AccountID, b.PeerUserID).First(&existing).Error
+	if err == nil {
+		m.ID = existing.ID
+		m.CreatedAt = existing.CreatedAt
+		return r.s.db.WithContext(ctx).Save(&m).Error
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	return r.s.db.WithContext(ctx).Create(&m).Error
+}
+
+func (r *weixinBindingRepo) UpdateContextToken(ctx context.Context, accountID, peerUserID, token string) error {
+	return r.s.db.WithContext(ctx).Model(&weixinBindingModel{}).
+		Where("account_id = ? AND peer_user_id = ?", accountID, peerUserID).
+		Updates(map[string]any{"context_token": token, "updated_at": time.Now().UTC()}).Error
+}
+
+func (r *weixinBindingRepo) Count(ctx context.Context) (int, error) {
+	var n int64
+	if err := r.s.db.WithContext(ctx).Model(&weixinBindingModel{}).Count(&n).Error; err != nil {
+		return 0, err
+	}
+	return int(n), nil
+}
+
+func (r *weixinBindingRepo) DeleteByAccount(ctx context.Context, accountID string) error {
+	return r.s.db.WithContext(ctx).Delete(&weixinBindingModel{}, "account_id = ?", accountID).Error
 }

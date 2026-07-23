@@ -417,3 +417,54 @@ func unmarshalMap(raw string) map[string]string {
 	_ = json.Unmarshal([]byte(raw), &v)
 	return v
 }
+
+// ---- Weixin ----
+
+type weixinAccountModel struct {
+	AccountID string    `gorm:"column:account_id;primaryKey"`
+	Token     string    `gorm:"column:token"`
+	BaseURL   string    `gorm:"column:base_url"`
+	UserID    string    `gorm:"column:user_id"`
+	SyncBuf   string    `gorm:"column:sync_buf;type:text"`
+	CreatedAt time.Time `gorm:"column:created_at"`
+	UpdatedAt time.Time `gorm:"column:updated_at"`
+}
+
+func (weixinAccountModel) TableName() string { return "weixin_accounts" }
+
+func weixinAccountToDomain(m weixinAccountModel) domain.WeixinAccount {
+	return domain.WeixinAccount{
+		AccountID: m.AccountID,
+		Token:     m.Token,
+		BaseURL:   m.BaseURL,
+		UserID:    m.UserID,
+		SyncBuf:   m.SyncBuf,
+		CreatedAt: m.CreatedAt,
+		UpdatedAt: m.UpdatedAt,
+	}
+}
+
+type weixinBindingModel struct {
+	ID           string    `gorm:"primaryKey"`
+	AccountID    string    `gorm:"column:account_id;uniqueIndex:idx_weixin_peer"`
+	PeerUserID   string    `gorm:"column:peer_user_id;uniqueIndex:idx_weixin_peer"`
+	SessionID    string    `gorm:"column:session_id;index"`
+	ContextToken string    `gorm:"column:context_token"`
+	CreatedAt    time.Time `gorm:"column:created_at"`
+	UpdatedAt    time.Time `gorm:"column:updated_at"`
+}
+
+func (weixinBindingModel) TableName() string { return "weixin_bindings" }
+
+func weixinBindingToDomain(m weixinBindingModel) domain.WeixinBinding {
+	return domain.WeixinBinding{
+		ID:           m.ID,
+		AccountID:    m.AccountID,
+		PeerUserID:   m.PeerUserID,
+		SessionID:    m.SessionID,
+		ContextToken: m.ContextToken,
+		CreatedAt:    m.CreatedAt,
+		UpdatedAt:    m.UpdatedAt,
+	}
+}
+

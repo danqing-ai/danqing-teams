@@ -12,6 +12,7 @@ import {
 import { useResizableWidth } from '@/composables/useResizableWidth'
 import { useSessionsStore } from '@/stores/sessions'
 import { useProjectsStore } from '@/stores/projects'
+import { useWeixinStore } from '@/stores/weixin'
 import { confirm, toast } from '@/utils/feedback'
 import { formatRelativeTime } from '@/utils/time'
 import { isTauriRuntime } from '@/utils/desktop'
@@ -41,6 +42,11 @@ const railStyle = computed(() => (collapsed.value ? { width: '44px' } : { width:
 
 const sessions = useSessionsStore()
 const projects = useProjectsStore()
+const weixin = useWeixinStore()
+
+function isWeixinSession(sessionId: string): boolean {
+  return weixin.isWeixinSession(sessionId)
+}
 
 const DEFAULT_VISIBLE_TASKS = 4
 const expandedProjects = ref<Set<string>>(new Set())
@@ -516,6 +522,7 @@ watch(() => projects.projects.length, (len) => {
                         :title="sessions.runningTurnId && sessions.currentSessionId === t_.id ? $t('navigation.sessionRunning') : undefined"
                       />
                       <span class="project-tree__session-name">{{ sessionTitle(t_) }}</span>
+                      <span v-if="isWeixinSession(t_.id)" class="project-tree__weixin-badge">{{ $t('navigation.weixinBadge') }}</span>
                       <span class="project-tree__session-time">{{ formatRelativeTime(t_.updatedAt || t_.createdAt) }}</span>
                     </button>
                     <DqDropdown @command="(cmd: string) => onSessionCommand(cmd, t_.id)">
@@ -1019,6 +1026,16 @@ watch(() => projects.projects.length, (len) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.project-tree__weixin-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: var(--dq-color-primary, #07c160);
+  background: color-mix(in srgb, var(--dq-color-primary, #07c160) 14%, transparent);
 }
 
 .project-tree__session-time {

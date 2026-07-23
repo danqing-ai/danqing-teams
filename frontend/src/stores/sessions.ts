@@ -152,6 +152,12 @@ export const useSessionsStore = defineStore('sessions', () => {
   async function loadSessions() {
     try {
       sessions.value = asArray(await fetchJSON<Session[]>('/sessions'))
+      try {
+        const { useWeixinStore } = await import('@/stores/weixin')
+        await useWeixinStore().refreshBindings()
+      } catch {
+        /* weixin optional */
+      }
     } catch (e) {
       sessions.value = []
     }

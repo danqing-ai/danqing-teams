@@ -36,7 +36,10 @@ type CreateSessionRequest struct {
 	AgentID     string           `json:"agentId,omitempty"`
 	ProjectID   string           `json:"projectId,omitempty"`
 	ModelID     string           `json:"modelId,omitempty"`
-	Attachments []UserAttachment `json:"attachments,omitempty"`
+	Title       string           `json:"title,omitempty"`
+	// SkipAutoTitle disables the async LLM title generator (e.g. WeChat ingress).
+	SkipAutoTitle bool             `json:"skipAutoTitle,omitempty"`
+	Attachments   []UserAttachment `json:"attachments,omitempty"`
 }
 
 type SendMessageRequest struct {

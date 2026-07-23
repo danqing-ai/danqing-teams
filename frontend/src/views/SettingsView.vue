@@ -7,6 +7,8 @@ import { useSearchConfigStore } from '@/stores/searchConfig'
 import { useRuntimeConfigStore } from '@/stores/runtimeConfig'
 import { useMarketConfigStore } from '@/stores/marketConfig'
 import { useModelConfigStore } from '@/stores/modelLimits'
+import { useWeixinStore } from '@/stores/weixin'
+import { useSessionsStore } from '@/stores/sessions'
 import { useThemeStore, THEME_OPTIONS } from '@/stores/theme'
 import type { ThemeId } from '@/stores/theme'
 import { toast } from '@/utils/feedback'
@@ -15,7 +17,7 @@ import { useAppUpdater } from '@/composables/useAppUpdater'
 import { isTauriRuntime } from '@/utils/desktop'
 import type { LLMProviderType, LLMProviderConfig, LLMModelRef, LLMProviderPreset, SearchProvider, ModelConfig, ConfigMarketSection, MarketSourceConfig } from '@/types/mission'
 
-type SettingsTab = 'runtime' | 'models' | 'modelConfig' | 'search' | 'market' | 'appearance' | 'about'
+type SettingsTab = 'runtime' | 'models' | 'modelConfig' | 'search' | 'market' | 'weixin' | 'appearance' | 'about'
 
 const { t } = useI18n()
 const activeTab = ref<SettingsTab>('models')
@@ -24,7 +26,17 @@ const searchConfig = useSearchConfigStore()
 const runtimeConfig = useRuntimeConfigStore()
 const marketConfig = useMarketConfigStore()
 const modelConfig = useModelConfigStore()
+const weixin = useWeixinStore()
+const sessions = useSessionsStore()
 const themeStore = useThemeStore()
+
+const weixinForm = ref({
+  enabled: false,
+  defaultAgentId: '',
+  defaultModelId: '',
+  autoApprove: true,
+})
+const weixinPolling = ref(false)
 const {
   appVersion,
   status: updaterStatus,
@@ -201,6 +213,8 @@ onMounted(async () => {
     runtimeConfig.loadConfig(),
     marketConfig.loadConfig(),
     modelConfig.load(),
+    sessions.loadCatalog(),
+    weixin.refreshStatus(),
   ])
   if (searchConfig.config) {
     searchForm.value = {
@@ -224,7 +238,76 @@ onMounted(async () => {
     }
   }
   modelConfigForm.value = [...modelConfig.models]
+  if (weixin.status) {
+    weixinForm.value = {
+      enabled: weixin.status.enabled,
+      defaultAgentId: weixin.status.defaultAgentId || sessions.agents[0]?.id || '',
+      defaultModelId: weixin.status.defaultModelId || '',
+      autoApprove: weixin.status.autoApprove !== false,
+    }
+  } else if (sessions.agents.length) {
+    weixinForm.value.defaultAgentId = sessions.agents[0].id
+  }
 })
+
+async function handleSaveWeixin() {
+  if (weixinForm.value.enabled && !weixinForm.value.defaultAgentId) {
+    toast.warning(t('settings.weixinAgentRequired'))
+    return
+  }
+  if (weixinForm.value.enabled && !weixinForm.value.defaultModelId) {
+    toast.warning(t('settings.weixinModelRequired'))
+    return
+  }
+  try {
+    await weixin.configure({
+      enabled: weixinForm.value.enabled,
+      defaultAgentId: weixinForm.value.defaultAgentId,
+      defaultModelId: weixinForm.value.defaultModelId,
+      autoApprove: weixinForm.value.autoApprove,
+    })
+    toast.success(t('settings.weixinSaved'))
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('settings.weixinSaveFailed'))
+  }
+}
+
+async function handleWeixinQr() {
+  try {
+    await weixin.startLogin()
+    weixinPolling.value = true
+    toast.info(t('settings.weixinScanHint'))
+    try {
+      const res = await weixin.waitLogin(180000)
+      if (res.needsVerifyCode) {
+        toast.warning(res.message || t('settings.weixinNeedVerify'))
+        return
+      }
+      if (res.connected) {
+        toast.success(res.message || t('settings.weixinConnected'))
+      } else if (!weixin.qr) {
+        toast.warning(res.message || t('settings.weixinLoginFailed'))
+      } else {
+        toast.warning(res.message || t('settings.weixinLoginFailed'))
+      }
+    } finally {
+      weixinPolling.value = false
+    }
+  } catch (e) {
+    weixinPolling.value = false
+    weixin.qr = null
+    toast.error(e instanceof Error ? e.message : t('settings.weixinLoginFailed'))
+  }
+}
+
+async function handleWeixinLogout() {
+  try {
+    await weixin.logout()
+    toast.success(t('settings.weixinLoggedOut'))
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('settings.weixinLogoutFailed'))
+  }
+}
 
 function addMarketSource() {
   marketForm.value.sources.push(marketConfig.emptySource())
@@ -524,29 +607,15 @@ async function handleSaveModelConfig() {
 }
 
 
-const menuGroups = computed(() => [
-  {
-    label: t('settings.groupModels'),
-    items: [
-      { id: 'models' as SettingsTab, label: t('settings.models'), icon: Cpu },
-      { id: 'modelConfig' as SettingsTab, label: t('settings.modelConfig'), icon: Setting },
-      { id: 'search' as SettingsTab, label: t('settings.search'), icon: Search },
-    ],
-  },
-  {
-    label: t('settings.groupRuntime'),
-    items: [
-      { id: 'runtime' as SettingsTab, label: t('settings.runtime'), icon: Setting },
-      { id: 'market' as SettingsTab, label: t('settings.market'), icon: Search },
-    ],
-  },
-  {
-    label: t('settings.groupAppearance'),
-    items: [
-      { id: 'appearance' as SettingsTab, label: t('settings.appearance'), icon: Brush },
-      { id: 'about' as SettingsTab, label: t('settings.about'), icon: Monitor },
-    ],
-  },
+const menuItems = computed(() => [
+  { id: 'models' as SettingsTab, label: t('settings.models'), icon: Cpu },
+  { id: 'modelConfig' as SettingsTab, label: t('settings.modelConfig'), icon: Setting },
+  { id: 'search' as SettingsTab, label: t('settings.search'), icon: Search },
+  { id: 'runtime' as SettingsTab, label: t('settings.runtime'), icon: Setting },
+  { id: 'weixin' as SettingsTab, label: t('settings.weixin'), icon: Monitor },
+  { id: 'market' as SettingsTab, label: t('settings.market'), icon: Search },
+  { id: 'appearance' as SettingsTab, label: t('settings.appearance'), icon: Brush },
+  { id: 'about' as SettingsTab, label: t('settings.about'), icon: Monitor },
 ])
 
 const footerHint = computed(() => {
@@ -583,7 +652,7 @@ const updaterStatusText = computed(() => {
 })
 
 const hasFooterActions = computed(() => {
-  return ['runtime', 'search', 'market', 'models', 'modelConfig'].includes(activeTab.value)
+  return ['runtime', 'search', 'market', 'models', 'modelConfig', 'weixin'].includes(activeTab.value)
 })
 </script>
 
@@ -594,22 +663,19 @@ const hasFooterActions = computed(() => {
         <span class="settings-sidebar__title">{{ $t('settings.title') }}</span>
       </div>
       <nav class="settings-sidebar__menu" :aria-label="$t('settings.category')">
-        <div v-for="group in menuGroups" :key="group.label" class="settings-sidebar__group">
-          <div class="settings-sidebar__group-label">{{ group.label }}</div>
-          <button
-            v-for="item in group.items"
-            :key="item.id"
-            type="button"
-            class="settings-sidebar__item"
-            :class="{ 'is-active': activeTab === item.id }"
-            @click="activeTab = item.id"
-          >
-            <DqIcon :size="18">
-              <component :is="item.icon" />
-            </DqIcon>
-            <span>{{ item.label }}</span>
-          </button>
-        </div>
+        <button
+          v-for="item in menuItems"
+          :key="item.id"
+          type="button"
+          class="settings-sidebar__item"
+          :class="{ 'is-active': activeTab === item.id }"
+          @click="activeTab = item.id"
+        >
+          <DqIcon :size="18">
+            <component :is="item.icon" />
+          </DqIcon>
+          <span>{{ item.label }}</span>
+        </button>
       </nav>
     </aside>
 
@@ -888,6 +954,102 @@ const hasFooterActions = computed(() => {
             </template>
           </div>
 
+        </div>
+      </div>
+
+      <div v-else-if="activeTab === 'weixin'" class="settings-section">
+        <header class="settings-section__head">
+          <h2>{{ $t('settings.weixin') }}</h2>
+          <p>{{ $t('settings.weixinDesc') }}</p>
+        </header>
+
+        <div v-if="weixin.loading && !weixin.status" class="settings-empty settings-empty--skeleton">
+          <Skeleton variant="title" width="30%" />
+          <Skeleton variant="card" width="100%" />
+        </div>
+
+        <div v-else class="settings-form settings-form--weixin">
+          <div class="settings-form-group settings-form-group--stack">
+            <div class="settings-form-group__head">
+              <h3 class="settings-form-group__title">{{ $t('settings.weixinChannel') }}</h3>
+              <p class="settings-form-group__desc">{{ $t('settings.weixinChannelDesc') }}</p>
+            </div>
+            <label class="settings-field settings-field--switch">
+              <span class="settings-field__label">{{ $t('settings.weixinEnable') }}</span>
+              <DqSwitch
+                :model-value="weixinForm.enabled"
+                size="small"
+                @update:model-value="(v: boolean) => weixinForm.enabled = v"
+              />
+            </label>
+            <div class="settings-field">
+              <span class="settings-field__label">{{ $t('settings.weixinDefaultAgent') }}</span>
+              <DqSelect v-model="weixinForm.defaultAgentId" :placeholder="$t('settings.weixinSelectAgent')">
+                <DqOption
+                  v-for="a in sessions.agents"
+                  :key="a.id"
+                  :value="a.id"
+                  :label="a.name || a.id"
+                />
+              </DqSelect>
+            </div>
+            <div class="settings-field">
+              <span class="settings-field__label">{{ $t('settings.weixinDefaultModel') }}</span>
+              <DqSelect v-model="weixinForm.defaultModelId" :placeholder="$t('settings.weixinSelectModel')">
+                <DqOption
+                  v-for="m in llm.models"
+                  :key="m.id"
+                  :value="m.id"
+                  :label="m.id"
+                />
+              </DqSelect>
+            </div>
+            <label class="settings-field settings-field--switch">
+              <span class="settings-field__label">{{ $t('settings.weixinAutoApprove') }}</span>
+              <DqSwitch
+                :model-value="weixinForm.autoApprove"
+                size="small"
+                @update:model-value="(v: boolean) => weixinForm.autoApprove = v"
+              />
+            </label>
+            <div v-if="weixin.status" class="settings-sandbox-status weixin-status">
+              <span class="settings-field__label">{{ $t('settings.weixinRunning') }}</span>
+              <span class="settings-sandbox-status__value">
+                {{ weixin.status.running ? $t('common.yes') : $t('common.no') }}
+                · {{ $t('settings.weixinBindings') }}: {{ weixin.status.bindingCount }}
+                · {{ $t('settings.weixinProject') }}: {{ $t('settings.weixinProjectName') }}
+              </span>
+            </div>
+          </div>
+
+          <div class="settings-form-group settings-form-group--stack">
+            <div class="settings-form-group__head">
+              <h3 class="settings-form-group__title">{{ $t('settings.weixinLogin') }}</h3>
+              <p class="settings-form-group__desc">{{ $t('settings.weixinLoginDesc') }}</p>
+            </div>
+            <div class="settings-form-row weixin-login-actions">
+              <DqButton type="primary" size="small" :disabled="weixinPolling" @click="handleWeixinQr">
+                {{ weixinPolling ? $t('settings.weixinWaiting') : $t('settings.weixinScan') }}
+              </DqButton>
+              <DqButton size="small" :disabled="!(weixin.status?.accounts?.length)" @click="handleWeixinLogout">
+                {{ $t('settings.weixinLogout') }}
+              </DqButton>
+            </div>
+            <div v-if="weixin.qr?.url" class="weixin-qr">
+              <img :src="weixin.qr.url" alt="WeChat QR" width="220" height="220" />
+            </div>
+            <ul v-if="weixin.status?.accounts?.length" class="provider-list weixin-account-list">
+              <li v-for="acc in weixin.status.accounts" :key="acc.accountId" class="provider-card">
+                <div class="provider-card__info">
+                  <div class="provider-card__name">{{ acc.accountId }}</div>
+                  <div v-if="acc.userId" class="provider-card__type">{{ acc.userId }}</div>
+                </div>
+              </li>
+            </ul>
+            <p v-if="weixin.loginMessage" class="settings-form-group__desc weixin-login-message">
+              {{ weixin.loginMessage }}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -1242,6 +1404,9 @@ const hasFooterActions = computed(() => {
           <DqButton v-if="activeTab === 'runtime'" type="primary" :disabled="runtimeConfig.saving" @click="handleSaveRuntime">
             {{ runtimeConfig.saving ? $t('common.saving') : $t('common.save_') }}
           </DqButton>
+          <DqButton v-else-if="activeTab === 'weixin'" type="primary" :disabled="weixin.saving" @click="handleSaveWeixin">
+            {{ weixin.saving ? $t('common.saving') : $t('common.save_') }}
+          </DqButton>
           <DqButton v-else-if="activeTab === 'search'" type="primary" :disabled="searchConfig.saving" @click="handleSaveSearch">
             {{ searchConfig.saving ? $t('common.saving') : $t('common.save_') }}
           </DqButton>
@@ -1492,22 +1657,6 @@ const hasFooterActions = computed(() => {
   font-size: var(--dq-font-size-body);
   font-weight: 600;
   color: var(--dq-label-tertiary);
-}
-
-.settings-sidebar__group {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-bottom: 12px;
-}
-
-.settings-sidebar__group-label {
-  padding: 8px 12px 4px;
-  font-size: var(--dq-font-size-caption);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--dq-label-quaternary);
 }
 
 .settings-sidebar__menu {
@@ -2337,5 +2486,76 @@ const hasFooterActions = computed(() => {
   align-items: center;
   justify-content: center;
   box-shadow: 0 2px 8px color-mix(in srgb, var(--dq-accent) 40%, transparent);
+}
+
+.weixin-qr {
+  margin-top: 0;
+  display: inline-flex;
+  padding: 12px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid var(--dq-separator);
+}
+
+.weixin-qr img {
+  display: block;
+  width: 220px;
+  height: 220px;
+  object-fit: contain;
+}
+
+.settings-form--weixin {
+  gap: 0;
+}
+
+.settings-form--weixin > .settings-form-group + .settings-form-group {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--dq-separator-light);
+}
+
+.settings-form-group--stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-form-group--stack .settings-form-group__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-form-group--stack .settings-form-group__title,
+.settings-form-group--stack .settings-form-group__desc,
+.settings-form-group--stack .settings-form-row {
+  margin: 0;
+}
+
+/* Avoid double spacing: stack gap already spaces siblings */
+.settings-form-group--stack .settings-field--switch + .settings-form-row,
+.settings-form-group--stack .settings-field--switch + .settings-field--switch,
+.settings-form-group--stack .settings-form-row + .settings-field--switch {
+  margin-top: 0;
+}
+
+.weixin-status {
+  margin: 0 !important;
+}
+
+.weixin-status .settings-field__label {
+  display: block;
+}
+
+.weixin-login-actions {
+  align-items: center;
+}
+
+.weixin-account-list {
+  margin: 0;
+}
+
+.weixin-login-message {
+  margin: 0 !important;
 }
 </style>

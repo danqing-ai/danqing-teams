@@ -11,6 +11,7 @@ type ConfigFile struct {
 	Search    SearchConfig           `json:"search" mapstructure:"search"`
 	LLM       ConfigLLMSection       `json:"llm" mapstructure:"llm"`
 	Market    ConfigMarketSection    `json:"market" mapstructure:"market"`
+	Channels  ConfigChannelsSection  `json:"channels" mapstructure:"channels"`
 }
 
 type ConfigLLMSection struct {
@@ -79,11 +80,12 @@ type ConfigKnowledgeSection struct {
 // of the configuration file. Only sections that are non-nil are modified;
 // other sections are preserved as-is.
 type UpdateConfigFileRequest struct {
-	Data     *ConfigDataSection     `json:"data,omitempty"`
-	Server   *ConfigServerSection   `json:"server,omitempty"`
-	Instance *ConfigInstanceSection `json:"instance,omitempty"`
-	Runtime  *ConfigRuntimeSection  `json:"runtime,omitempty"`
+	Data     *ConfigDataSection         `json:"data,omitempty"`
+	Server   *ConfigServerSection       `json:"server,omitempty"`
+	Instance *ConfigInstanceSection     `json:"instance,omitempty"`
+	Runtime  *ConfigRuntimeSection      `json:"runtime,omitempty"`
 	Search   *UpsertSearchConfigRequest `json:"search,omitempty"`
-	LLM      *ConfigLLMSection      `json:"llm,omitempty"`
-	Market   *ConfigMarketSection   `json:"market,omitempty"`
+	LLM      *ConfigLLMSection          `json:"llm,omitempty"`
+	Market   *ConfigMarketSection       `json:"market,omitempty"`
+	Channels *ConfigChannelsSection     `json:"channels,omitempty"`
 }

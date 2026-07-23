@@ -231,6 +231,15 @@ export interface ConfigFile {
     models?: ModelConfig[]
   }
   market?: ConfigMarketSection
+  channels?: {
+    weixin?: {
+      enabled: boolean
+      defaultProjectId?: string
+      defaultAgentId?: string
+      defaultModelId?: string
+      autoApprove?: boolean
+    }
+  }
 }
 
 export interface MarketSourceConfig {
@@ -281,6 +290,7 @@ export interface UpdateConfigFileRequest {
   runtime?: ConfigFile['runtime']
   search?: UpsertSearchConfigRequest
   market?: ConfigMarketSection
+  channels?: ConfigFile['channels']
 }
 
 export interface RuntimeConfigForm {

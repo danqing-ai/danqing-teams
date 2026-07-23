@@ -45,6 +45,7 @@ func (m *SessionManager) Create(ctx context.Context, req domain.CreateSessionReq
 	now := time.Now().UTC()
 	s := domain.Session{
 		ID:        fmt.Sprintf("session-%d", time.Now().UnixNano()),
+		Title:     strings.TrimSpace(req.Title),
 		ProjectID: req.ProjectID,
 		AgentID:   req.AgentID,
 		ModelID:   req.ModelID,
@@ -57,7 +58,9 @@ func (m *SessionManager) Create(ctx context.Context, req domain.CreateSessionReq
 		return domain.Session{}, err
 	}
 	m.engine.StartSession(ctx, s, atts)
-	go m.generateTitle(s.ID, s.Content, s.ModelID)
+	if !req.SkipAutoTitle && s.Title == "" {
+		go m.generateTitle(s.ID, s.Content, s.ModelID)
+	}
 	return s, nil
 }
 
