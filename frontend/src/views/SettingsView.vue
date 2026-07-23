@@ -12,7 +12,7 @@ import { useSessionsStore } from '@/stores/sessions'
 import { useProjectsStore } from '@/stores/projects'
 import { useThemeStore, THEME_OPTIONS } from '@/stores/theme'
 import type { ThemeId } from '@/stores/theme'
-import { toast } from '@/utils/feedback'
+import { toast, confirm } from '@/utils/feedback'
 import Skeleton from '@/components/common/Skeleton.vue'
 import { useAppUpdater } from '@/composables/useAppUpdater'
 import { isTauriRuntime } from '@/utils/desktop'
@@ -40,6 +40,8 @@ const weixinForm = ref({
 })
 const weixinLoginProjectId = ref('')
 const weixinPolling = ref(false)
+const showWeixinAddDialog = ref(false)
+const weixinAddCancelled = ref(false)
 const {
   appVersion,
   status: updaterStatus,
@@ -284,25 +286,49 @@ function weixinProjectName(projectId?: string) {
   return projects.projects.find((p) => p.id === projectId)?.name || projectId
 }
 
+function weixinAccountLabel(accountId: string) {
+  const short = accountId.replace(/_im\.bot$/i, '').replace(/@im\.bot$/i, '')
+  return short || accountId
+}
+
+function openWeixinAddDialog() {
+  weixinAddCancelled.value = false
+  weixin.qr = null
+  weixin.loginMessage = ''
+  weixinPolling.value = false
+  if (!weixinLoginProjectId.value && projects.sortedProjects.length) {
+    weixinLoginProjectId.value = projects.sortedProjects[0].id
+  }
+  showWeixinAddDialog.value = true
+}
+
+function closeWeixinAddDialog() {
+  weixinAddCancelled.value = true
+  weixinPolling.value = false
+  weixin.qr = null
+  showWeixinAddDialog.value = false
+}
+
 async function handleWeixinQr() {
   if (!weixinLoginProjectId.value) {
     toast.warning(t('settings.weixinSelectProjectFirst'))
     return
   }
+  weixinAddCancelled.value = false
   try {
     await weixin.startLogin(weixinLoginProjectId.value)
     weixinPolling.value = true
-    toast.info(t('settings.weixinScanHint'))
     try {
       const res = await weixin.waitLogin(180000)
+      if (weixinAddCancelled.value) return
       if (res.needsVerifyCode) {
         toast.warning(res.message || t('settings.weixinNeedVerify'))
         return
       }
       if (res.connected) {
         toast.success(res.message || t('settings.weixinConnected'))
-      } else if (!weixin.qr) {
-        toast.warning(res.message || t('settings.weixinLoginFailed'))
+        showWeixinAddDialog.value = false
+        weixin.qr = null
       } else {
         toast.warning(res.message || t('settings.weixinLoginFailed'))
       }
@@ -310,6 +336,7 @@ async function handleWeixinQr() {
       weixinPolling.value = false
     }
   } catch (e) {
+    if (weixinAddCancelled.value) return
     weixinPolling.value = false
     weixin.qr = null
     toast.error(e instanceof Error ? e.message : t('settings.weixinLoginFailed'))
@@ -317,6 +344,8 @@ async function handleWeixinQr() {
 }
 
 async function handleWeixinRebind(accountId: string, projectId: string) {
+  const current = weixin.status?.accounts.find((a) => a.accountId === accountId)?.projectId || ''
+  if ((projectId || '') === current) return
   try {
     await weixin.updateAccountProject(accountId, projectId)
     toast.success(projectId ? t('settings.weixinRebound') : t('settings.weixinUnboundOk'))
@@ -325,11 +354,15 @@ async function handleWeixinRebind(accountId: string, projectId: string) {
   }
 }
 
-async function handleWeixinUnbind(accountId: string) {
-  await handleWeixinRebind(accountId, '')
-}
-
 async function handleWeixinDeleteAccount(accountId: string) {
+  try {
+    await confirm(t('settings.weixinDeleteConfirm'), t('settings.weixinDeleteAccount'), {
+      confirmButtonText: t('common.delete'),
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
   try {
     await weixin.logout(accountId)
     toast.success(t('settings.weixinAccountDeleted'))
@@ -1039,85 +1072,70 @@ const hasFooterActions = computed(() => {
                 @update:model-value="(v: boolean) => weixinForm.autoApprove = v"
               />
             </label>
-            <div v-if="weixin.status" class="settings-sandbox-status">
-              <span class="settings-field__label">{{ $t('settings.weixinRunning') }}</span>
-              <code class="settings-sandbox-status__value">
-                {{ weixin.status.running ? $t('common.yes') : $t('common.no') }}
-                · {{ $t('settings.weixinBindings') }}: {{ weixin.status.bindingCount }}
-                · {{ $t('settings.weixinAccounts') }}: {{ weixin.status.accounts?.length || 0 }}
-              </code>
-            </div>
+            <p v-if="weixin.status" class="weixin-meta">
+              <span :class="['weixin-meta__dot', weixin.status.running ? 'is-on' : 'is-off']" />
+              {{ weixin.status.running ? $t('settings.weixinRunningOn') : $t('settings.weixinRunningOff') }}
+              · {{ weixin.status.accounts?.length || 0 }} {{ $t('settings.weixinAccounts') }}
+              · {{ weixin.status.bindingCount }} {{ $t('settings.weixinBindings') }}
+            </p>
           </div>
 
           <div class="settings-form-group">
-            <h3 class="settings-form-group__title">{{ $t('settings.weixinLogin') }}</h3>
-            <p class="settings-form-group__desc">{{ $t('settings.weixinLoginDesc') }}</p>
-            <div class="settings-field">
-              <span class="settings-field__label">{{ $t('settings.weixinBindProject') }}</span>
-              <DqSelect
-                v-model="weixinLoginProjectId"
-                :placeholder="$t('settings.weixinSelectProject')"
-                :disabled="weixinPolling"
-              >
-                <DqOption
-                  v-for="p in projects.sortedProjects"
-                  :key="p.id"
-                  :value="p.id"
-                  :label="p.name"
-                />
-              </DqSelect>
-            </div>
-            <div class="settings-form-row">
-              <DqButton
-                type="primary"
-                size="small"
-                :disabled="weixinPolling || !weixinLoginProjectId"
-                @click="handleWeixinQr"
-              >
-                {{ weixinPolling ? $t('settings.weixinWaiting') : $t('settings.weixinScan') }}
+            <div class="settings-form-group__head">
+              <span class="settings-form-group__title">{{ $t('settings.weixinAccounts') }}</span>
+              <DqButton type="primary" size="small" @click="openWeixinAddDialog">
+                {{ $t('settings.weixinLogin') }}
               </DqButton>
             </div>
-            <div v-if="weixin.qr?.url" class="weixin-qr">
-              <img :src="weixin.qr.url" alt="WeChat QR" width="220" height="220" />
+            <p class="settings-form-group__desc">{{ $t('settings.weixinAccountsDesc') }}</p>
+
+            <div v-if="!weixin.status?.accounts?.length" class="settings-empty">
+              {{ $t('settings.weixinNoAccounts') }}
             </div>
-            <ul v-if="weixin.status?.accounts?.length" class="provider-list weixin-account-list">
-              <li v-for="acc in weixin.status.accounts" :key="acc.accountId" class="provider-card weixin-account-card">
-                <div class="provider-card__info">
-                  <div class="provider-card__name">{{ acc.accountId }}</div>
-                  <div class="provider-card__type">
-                    {{ $t('settings.weixinProject') }}: {{ weixinProjectName(acc.projectId) }}
-                    <template v-if="acc.userId"> · {{ acc.userId }}</template>
+
+            <div v-else class="provider-list weixin-account-list">
+              <div
+                v-for="acc in weixin.status.accounts"
+                :key="acc.accountId"
+                class="provider-card weixin-account-card"
+              >
+                <div class="provider-card__head">
+                  <div class="provider-card__info weixin-account-card__info">
+                    <span class="provider-card__name">{{ weixinAccountLabel(acc.accountId) }}</span>
+                    <span
+                      class="weixin-account-badge"
+                      :class="acc.projectId ? 'is-bound' : 'is-unbound'"
+                    >
+                      {{ acc.projectId ? weixinProjectName(acc.projectId) : $t('settings.weixinUnbound') }}
+                    </span>
+                  </div>
+                  <div class="provider-card__actions">
+                    <DqButton size="small" type="danger" @click="handleWeixinDeleteAccount(acc.accountId)">
+                      {{ $t('settings.weixinDeleteAccount') }}
+                    </DqButton>
                   </div>
                 </div>
-                <div class="weixin-account-card__actions">
-                  <DqSelect
-                    :model-value="acc.projectId || ''"
-                    :placeholder="$t('settings.weixinSelectProject')"
-                    @update:model-value="(v: string) => handleWeixinRebind(acc.accountId, v)"
-                  >
-                    <DqOption
-                      v-for="p in projects.sortedProjects"
-                      :key="p.id"
-                      :value="p.id"
-                      :label="p.name"
-                    />
-                  </DqSelect>
-                  <DqButton
-                    size="small"
-                    :disabled="!acc.projectId"
-                    @click="handleWeixinUnbind(acc.accountId)"
-                  >
-                    {{ $t('settings.weixinUnbind') }}
-                  </DqButton>
-                  <DqButton size="small" type="danger" @click="handleWeixinDeleteAccount(acc.accountId)">
-                    {{ $t('settings.weixinDeleteAccount') }}
-                  </DqButton>
+                <div class="weixin-account-card__body">
+                  <label class="settings-field weixin-account-card__project">
+                    <span class="settings-field__label">{{ $t('settings.weixinBindProject') }}</span>
+                    <DqSelect
+                      :model-value="acc.projectId || ''"
+                      :placeholder="$t('settings.weixinSelectProject')"
+                      @update:model-value="(v: string) => handleWeixinRebind(acc.accountId, v)"
+                    >
+                      <DqOption value="" :label="$t('settings.weixinUnbound')" />
+                      <DqOption
+                        v-for="p in projects.sortedProjects"
+                        :key="p.id"
+                        :value="p.id"
+                        :label="p.name"
+                      />
+                    </DqSelect>
+                  </label>
+                  <p v-if="acc.userId" class="weixin-account-card__hint">{{ acc.userId }}</p>
                 </div>
-              </li>
-            </ul>
-            <p v-if="weixin.loginMessage" class="settings-form-group__desc weixin-login-message">
-              {{ weixin.loginMessage }}
-            </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1489,6 +1507,58 @@ const hasFooterActions = computed(() => {
           </DqButton>
         </div>
       </footer>
+
+      <DqDialog
+        v-model:open="showWeixinAddDialog"
+        :title="$t('settings.weixinLogin')"
+        variant="glass"
+        width="420px"
+        :closable="true"
+        @update:open="(v: boolean) => { if (!v) closeWeixinAddDialog() }"
+      >
+        <div class="weixin-add-dialog">
+          <p class="settings-form-group__desc">{{ $t('settings.weixinLoginDesc') }}</p>
+          <label class="settings-field">
+            <span class="settings-field__label">{{ $t('settings.weixinBindProject') }}</span>
+            <DqSelect
+              v-model="weixinLoginProjectId"
+              :placeholder="$t('settings.weixinSelectProject')"
+              :disabled="weixinPolling"
+            >
+              <DqOption
+                v-for="p in projects.sortedProjects"
+                :key="p.id"
+                :value="p.id"
+                :label="p.name"
+              />
+            </DqSelect>
+          </label>
+
+          <div v-if="weixin.qr?.url" class="weixin-add-dialog__qr">
+            <div class="weixin-qr">
+              <img :src="weixin.qr.url" alt="WeChat QR" width="200" height="200" />
+            </div>
+            <p class="weixin-add-dialog__hint">
+              {{ weixinPolling ? $t('settings.weixinWaiting') : $t('settings.weixinScanHint') }}
+            </p>
+            <p v-if="weixin.loginMessage" class="weixin-add-dialog__msg">{{ weixin.loginMessage }}</p>
+          </div>
+
+          <div class="settings-actions weixin-add-dialog__actions">
+            <DqButton size="small" @click="closeWeixinAddDialog">
+              {{ $t('common.cancel') }}
+            </DqButton>
+            <DqButton
+              type="primary"
+              size="small"
+              :disabled="weixinPolling || !weixinLoginProjectId"
+              @click="handleWeixinQr"
+            >
+              {{ weixin.qr?.url ? $t('settings.weixinRescan') : $t('settings.weixinScan') }}
+            </DqButton>
+          </div>
+        </div>
+      </DqDialog>
 
       <DqDialog
         v-model:open="showAddModelDialog"
@@ -1969,9 +2039,11 @@ const hasFooterActions = computed(() => {
   margin-top: 12px;
 }
 
-.settings-form-group > .settings-form-row + .weixin-qr,
+.settings-form-group > .settings-field--switch + .weixin-meta {
+  margin-top: 12px;
+}
+
 .settings-form-group > .settings-form-row + .provider-list,
-.settings-form-group > .weixin-qr + .provider-list,
 .settings-form-group > .provider-list + .settings-form-group__desc {
   margin-top: 12px;
 }
@@ -2572,8 +2644,120 @@ const hasFooterActions = computed(() => {
   box-shadow: 0 2px 8px color-mix(in srgb, var(--dq-accent) 40%, transparent);
 }
 
-.weixin-qr {
+.weixin-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 0;
+  font-size: var(--dq-font-size-footnote);
+  color: var(--dq-label-tertiary);
+}
+
+.weixin-meta__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.weixin-meta__dot.is-on {
+  background: var(--dq-color-success, #34c759);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dq-color-success, #34c759) 22%, transparent);
+}
+
+.weixin-meta__dot.is-off {
+  background: var(--dq-label-tertiary);
+}
+
+.weixin-account-list {
+  margin-top: 4px;
+}
+
+.weixin-account-card__info {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.weixin-account-badge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 160px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: var(--dq-font-size-footnote);
+  font-weight: 500;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.weixin-account-badge.is-bound {
+  color: var(--dq-label-secondary);
+  background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
+}
+
+.weixin-account-badge.is-unbound {
+  color: var(--dq-label-tertiary);
+  background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
+}
+
+.weixin-account-card__body {
   margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.weixin-account-card__project {
+  margin: 0;
+}
+
+.weixin-account-card__hint {
+  margin: 0;
+  font-size: var(--dq-font-size-footnote);
+  color: var(--dq-label-tertiary);
+  word-break: break-all;
+}
+
+.weixin-add-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.weixin-add-dialog .settings-form-group__desc {
+  margin: 0;
+}
+
+.weixin-add-dialog__qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0 4px;
+}
+
+.weixin-add-dialog__hint {
+  margin: 0;
+  font-size: var(--dq-font-size-caption);
+  color: var(--dq-label-secondary);
+  text-align: center;
+}
+
+.weixin-add-dialog__msg {
+  margin: 0;
+  font-size: var(--dq-font-size-footnote);
+  color: var(--dq-label-tertiary);
+  text-align: center;
+}
+
+.weixin-add-dialog__actions {
+  margin-top: 4px;
+  justify-content: flex-end;
+}
+
+.weixin-qr {
   display: inline-flex;
   padding: 12px;
   border-radius: 12px;
@@ -2583,35 +2767,8 @@ const hasFooterActions = computed(() => {
 
 .weixin-qr img {
   display: block;
-  width: 220px;
-  height: 220px;
+  width: 200px;
+  height: 200px;
   object-fit: contain;
-}
-
-.weixin-account-list {
-  margin-top: 12px;
-}
-
-.weixin-account-card {
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.weixin-account-card__actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-}
-
-.weixin-account-card__actions :deep(.dq-select) {
-  min-width: 160px;
-  flex: 1;
-}
-
-.weixin-login-message {
-  margin-top: 12px;
-  margin-bottom: 0;
 }
 </style>

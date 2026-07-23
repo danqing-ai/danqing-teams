@@ -6,15 +6,20 @@
 [![License](https://img.shields.io/github/license/danqing-ai/danqing-teams)](LICENSE)
 [![Go](https://img.shields.io/github/go-mod/go-version/danqing-ai/danqing-teams?filename=go.mod)](go.mod)
 
-**Self-hosted agent workspace** for research, coding, and long-running work — like an open Cursor-style Agent UI, with multi-agent delegation you can audit.
+General-purpose **AI Work Agent** (with coding capability). Built for **long-horizon complex tasks** via multi-agent collaboration.
 
-Describe a goal. Watch tools stream. Open the result in the built-in browser. Sub-agents run in hard isolation and return a report — no hand-written LangGraph / CrewAI workflows to maintain. Chat from **WeChat** on your phone; the same session syncs to the desktop workspace.
+**Core difference:** pure LLM-driven control — multi-agent delegation on the **same thinking chain**. No fixed workflows; the model’s reasoning and chain-of-thought decide what happens next.
 
-| vs | They | DanQing Teams |
-|----|------|---------------|
-| **Orchestration** | You maintain graphs, roles, or product modes | **LLM plans the Tool Call DAG** on one Agent Loop |
-| **Sub-agents** | Parallel sessions / handoff routers | `delegate_agent` on the **same thinking chain**, hard context isolation |
-| **Memory** | Opaque product memory or extra vector DB | Explicit `memory_*` tools + visible **Memory** tab (SQLite) |
+**Design:** everything is a Tool; the model drives everything. Sub-agents are Tools (`delegate_agent`). Humans join via `ask_user` tool — **co-thinking**.
+
+**Runtime:** every Tool Call is logged — **resume**, **replay**, and **visualize** the model’s thinking through ultra-long runs. Self-hosted. MIT. **WeChat:** one account, multiple projects — chat from your phone, same history on desktop.
+
+| Pillar | What it means |
+|--------|----------------|
+| Pure LLM-driven | No hand-maintained graph / role router / mode switch — LLM plans Tool Calls on one Agent Loop |
+| Same thinking chain | `delegate_agent` with hard context isolation; child returns a Report; parent continues |
+| Everything is a Tool | Skills, knowledge, memory, files, MCP, `ask_user` — one abstraction |
+| Log is state | Persistent Turn Log → recover from any step, full replay, edit a result and continue |
 
 MIT · Web / Desktop / CLI / TUI · Anthropic & OpenAI-compatible providers
 
@@ -38,25 +43,41 @@ Add an LLM API key in the UI (or `~/.dq-teams/config.yaml`). See [Quick start](#
 
 Three-pane workspace: project sidebar · agent execution log · right panel (Plan / Files / **Memory** / Changes / Terminal / Browser).
 
+### Point at the page — don't describe it
+
+In the built-in Browser, click a DOM element, write a short note, confirm into Composer. The model gets exact HTML/CSS context and makes the change — **select → annotate → edit**, co-thinking on the rendered result.
+
+![Browser element annotate](docs/screenshots/ui-browser-annotate.png)
+
 | Research & report | Interactive demo | Mini-game |
 |-------------------|------------------|-----------|
 | ![Market report](docs/screenshots/ui-market-report.png) | ![Cooking demo](docs/screenshots/ui-cooking-demo.png) | ![Snake game](docs/screenshots/ui-snake-game.png) |
 
 - **Research & report** — web fetch, structured writing, live HTML preview
 - **Interactive demo** — step-by-step demo with playback controls
-- **Mini-game** — generate a playable Snake game and iterate via UI annotations
+- **Mini-game** — generate a playable page, then iterate via **element annotate** (above)
 
 ### WeChat channel
 
-Chat from WeChat on your phone; the same session shows up in the desktop workspace under the system project **微信**, tagged and sharing one history.
+**One WeChat account, multiple projects.** Chat about different projects from your phone; each conversation stays in its project and syncs with the desktop.
 
 | Desktop (WeChat-tagged session) | Phone (WeChat chat) |
 |---------------------------------|---------------------|
 | ![WeChat session in Teams](docs/screenshots/wx1.png) | ![DQ-Teams AI in WeChat](docs/screenshots/wx2.png) |
 
-Scan to connect via Settings → Channels → WeChat. One contact maps to one Teams session; tools run on your machine with the same Agent Loop.
+Settings → WeChat → scan to connect. Same Agent Loop; tools run on your machine.
 
-> Tip: a 20–30s screen recording (GIF/MP4) of the full loop still converts best — add it above this section when you have it.
+### Experts, skills & runtime
+
+Edit agent prompts, Agentskills (`SKILL.md`), and sandbox / delegation limits in the UI — capability units you give the model, not a hand-maintained workflow graph.
+
+| Expert prompt editor | Skill library | Runtime & sandbox |
+|----------------------|---------------|-------------------|
+| ![Explorer system prompt](docs/screenshots/ui-expert-prompts.png) | ![playable-slides skill](docs/screenshots/ui-skill-editor.png) | ![Runtime settings](docs/screenshots/ui-runtime-settings.png) |
+
+- **Experts** — local + market agents; overview / prompt / skills / tools / knowledge
+- **Skills** — built-in & custom Agentskills; instructions, files, tool bindings
+- **Runtime** — turn loop limits, max delegation depth, memory TopK, OS sandbox & network policy
 
 ## Design philosophy
 

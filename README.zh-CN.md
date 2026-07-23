@@ -6,15 +6,20 @@
 [![License](https://img.shields.io/github/license/danqing-ai/danqing-teams)](LICENSE)
 [![Go](https://img.shields.io/github/go-mod/go-version/danqing-ai/danqing-teams?filename=go.mod)](go.mod)
 
-**可自托管的 Agent 工作台**：调研、写代码、跑长任务——类似开源 Cursor 风格的 Agent UI，支持可审计的多智能体委派。
+通用型 **AI Work Agent**（兼具 Coding 能力）。引擎面向 **长程复杂任务**，靠多 Agent 协作完成。
 
-描述目标，实时看 Tool 流，结果在内置浏览器打开。子 Agent 硬隔离上下文、只回传 Report——**不用**手写 LangGraph / CrewAI 流程图。手机 **微信** 里聊，桌面工作台同步同一会话。
+**核心区别：** 纯 LLM 驱动——在**同一条思维链**上做多 Agent 委派协作。没有固化流程，把模型的推理与思维链能力用满。
 
-| 对比 | 常见做法 | DanQing Teams |
-|------|----------|---------------|
-| **编排** | 你维护 Graph / 角色路由 / 产品 Mode | **LLM 在同一条 Agent Loop 上规划 Tool Call DAG** |
-| **子 Agent** | 并行 Session / Handoff 路由 | 同一思维链上的 `delegate_agent`，**硬上下文隔离** |
-| **记忆** | 黑盒产品记忆，或另接向量库 | 显式 `memory_*` Tool + 可见 **记忆** Tab（SQLite） |
+**设计理念：** 一切皆工具，模型驱动一切。子 Agent 是 Tool（`delegate_agent`）；人通过 `ask_user` tool 参与——**人机共思**。
+
+**运行时：** Tool Call **全量日志化**——可**恢复**、可**回放**，支撑超长任务；模型思维过程**可视化**。可自托管，MIT。**微信：** 一个账号关联多个项目，手机聊、桌面同步。
+
+| 要点 | 含义 |
+|------|------|
+| 纯 LLM 驱动 | 无人工维护的 Graph / 角色路由 / Mode——LLM 在同一条 Agent Loop 上规划 Tool Call |
+| 同一思维链 | `delegate_agent` 硬隔离上下文，子 Agent 只回 Report，父 Agent 继续推理 |
+| 一切皆工具 | 技能、知识、记忆、文件、MCP、`ask_user`——一种抽象 |
+| 日志即状态 | Turn Log 持久化 → 任意步骤恢复、完整回放、改结果再继续 |
 
 MIT · Web / 桌面 / CLI / TUI · 支持 Anthropic 与 OpenAI 兼容接口
 
@@ -38,25 +43,41 @@ make dev-web   # → http://localhost:5801/app/
 
 三栏工作台：项目侧栏 · Agent 执行日志 · 右侧面板（计划 / 文件 / **记忆** / 变更 / 终端 / 浏览器）。
 
+### 点选页面，直接说改哪里
+
+在内置 **浏览器** 里点选 DOM 元素，写一句批注，确认注入 Composer。模型带着精确的 HTML/CSS 上下文去改——**点选 → 批注 → 修改**，在渲染结果上人机共思，不必口述「哪个按钮」。
+
+![网页元素批注](docs/screenshots/ui-browser-annotate.png)
+
 | 调研报告 | 交互演示 | 网页小游戏 |
 |---------|---------|-----------|
 | ![市场报告](docs/screenshots/ui-market-report.png) | ![烹饪演示](docs/screenshots/ui-cooking-demo.png) | ![贪吃蛇](docs/screenshots/ui-snake-game.png) |
 
 - **调研报告** — 网页抓取、结构化写作、HTML 实时预览
 - **交互演示** — 分步演示，含播放控制
-- **网页小游戏** — 生成可玩的贪吃蛇，并通过 UI 标注继续迭代
+- **网页小游戏** — 生成可玩页面，再用上方的 **元素批注** 迭代修改
 
 ### 微信通道
 
-手机微信里聊，桌面工作台同步同一会话；自动归入系统项目 **微信**，带「微信」标签，历史一份共享。
+**一个微信账号，关联多个项目。** 手机里按项目分开聊，会话留在对应项目里，和桌面共享历史。
 
 | 桌面端（微信会话） | 手机端（微信对话） |
 |-------------------|-------------------|
 | ![Teams 中的微信会话](docs/screenshots/wx1.png) | ![微信里的 DQ-Teams AI](docs/screenshots/wx2.png) |
 
-设置 → 通道 → 微信，扫码连接。联系人一对一映射 Teams 会话，工具在本机跑，同一套 Agent Loop。
+设置 → 微信 → 扫码连接。同一套 Agent Loop，工具在本机跑。
 
-> 提示：完整闭环的 20～30 秒录屏（GIF/MP4）转化仍最好——有素材后链到本节上方即可。
+### 专家、技能与运行时
+
+在 UI 里编辑 Agent 提示词、Agentskills（`SKILL.md`）、沙箱与委派深度——你交给模型的是**能力单元**，不是手写工作流图。
+
+| 专家提示词 | 技能库 | 运行时与沙箱 |
+|-----------|--------|-------------|
+| ![Explorer 系统提示词](docs/screenshots/ui-expert-prompts.png) | ![playable-slides 技能](docs/screenshots/ui-skill-editor.png) | ![运行时设置](docs/screenshots/ui-runtime-settings.png) |
+
+- **专家团** — 本地 + 市场 Agent；概览 / 提示词 / 技能 / 工具 / 知识库
+- **技能库** — 内置与自定义 Agentskills；指令、文件、工具绑定
+- **运行时** — Turn 循环上限、最大委派深度、记忆 TopK、OS 沙箱与网络策略
 
 ## 设计哲学
 
