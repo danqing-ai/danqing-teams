@@ -2,21 +2,51 @@
 
 [English](README.md) | [中文](README.zh-CN.md)
 
-AI agent collaboration platform. A general-purpose **Work Agent** with AI coding capabilities.
+[![Release](https://img.shields.io/github/v/release/danqing-ai/danqing-teams?label=release)](https://github.com/danqing-ai/danqing-teams/releases/latest)
+[![License](https://img.shields.io/github/license/danqing-ai/danqing-teams)](LICENSE)
+[![Go](https://img.shields.io/github/go-mod/go-version/danqing-ai/danqing-teams?filename=go.mod)](go.mod)
 
-**Core difference:** pure LLM-driven orchestration — no human-maintained workflows. On the same Agent Loop (thinking chain), the model decides when to delegate; sub-agents run with hard context isolation and return a structured report to the parent.
+**Self-hosted agent workspace** for research, coding, and long-running work — like an open Cursor-style Agent UI, with multi-agent delegation you can audit.
 
-## Product UI
+Describe a goal. Watch tools stream. Open the result in the built-in browser. Sub-agents run in hard isolation and return a report — no hand-written LangGraph / CrewAI workflows to maintain.
 
-Three-pane workspace: project sidebar · agent execution log · right panel (Plan / Files / **Memory** / Changes / Terminal / Browser). Describe a goal, watch tool calls stream in, browse durable memories, and open the result in the built-in browser.
+| vs | They | DanQing Teams |
+|----|------|---------------|
+| **Orchestration** | You maintain graphs, roles, or product modes | **LLM plans the Tool Call DAG** on one Agent Loop |
+| **Sub-agents** | Parallel sessions / handoff routers | `delegate_agent` on the **same thinking chain**, hard context isolation |
+| **Memory** | Opaque product memory or extra vector DB | Explicit `memory_*` tools + visible **Memory** tab (SQLite) |
+
+MIT · Web / Desktop / CLI / TUI · Anthropic & OpenAI-compatible providers
+
+## Try it
+
+| Platform | Download |
+|----------|----------|
+| **macOS** (Apple Silicon) | [`.dmg`](https://github.com/danqing-ai/danqing-teams/releases/latest) |
+| **Windows** | [Setup `.exe`](https://github.com/danqing-ai/danqing-teams/releases/latest) |
+| **Linux server** | [`.tar.gz`](https://github.com/danqing-ai/danqing-teams/releases/latest) |
+
+Or run from source (needs sibling [`dq-ui`](https://github.com/danqing-ai/dq-ui)):
+
+```bash
+make dev-web   # → http://localhost:5801/app/
+```
+
+Add an LLM API key in the UI (or `~/.dq-teams/config.yaml`). See [Quick start](#quick-start) for the full flow.
+
+## See it
+
+Three-pane workspace: project sidebar · agent execution log · right panel (Plan / Files / **Memory** / Changes / Terminal / Browser).
 
 | Research & report | Interactive demo | Mini-game |
 |-------------------|------------------|-----------|
 | ![Market report](docs/screenshots/ui-market-report.png) | ![Cooking demo](docs/screenshots/ui-cooking-demo.png) | ![Snake game](docs/screenshots/ui-snake-game.png) |
 
 - **Research & report** — web fetch, structured writing, live HTML preview
-- **Interactive demo** — step-by-step culinary demo with playback controls
+- **Interactive demo** — step-by-step demo with playback controls
 - **Mini-game** — generate a playable Snake game and iterate via UI annotations
+
+> Tip: a 20–30s screen recording (GIF/MP4) converts far better than stills — drop one in `docs/screenshots/` and link it above this table when you have it.
 
 ## Design philosophy
 
@@ -309,6 +339,7 @@ Tag builds are attached to the GitHub Release.
 | Doc | Description |
 |-----|-------------|
 | [docs/core-design.md](docs/core-design.md) | Core design: unified agent architecture & engine |
+| [docs/launch-posts.md](docs/launch-posts.md) | Community launch post drafts (copy-paste) |
 | [evals/dq_harbor/README.md](evals/dq_harbor/README.md) | Harbor Terminal-Bench 2.0 eval & agent compare |
 | [AGENTS.md](AGENTS.md) | Contributor / agent quick reference |
 | [config.example.yaml](config.example.yaml) | Full config reference |

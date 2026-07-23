@@ -2,21 +2,51 @@
 
 [English](README.md) | [中文](README.zh-CN.md)
 
-AI Agent 协作平台。通用型 **Work Agent**，兼具 AI Coding 能力。
+[![Release](https://img.shields.io/github/v/release/danqing-ai/danqing-teams?label=release)](https://github.com/danqing-ai/danqing-teams/releases/latest)
+[![License](https://img.shields.io/github/license/danqing-ai/danqing-teams)](LICENSE)
+[![Go](https://img.shields.io/github/go-mod/go-version/danqing-ai/danqing-teams?filename=go.mod)](go.mod)
 
-**底层核心差异：** 纯 LLM 驱动编排——没有人工维护的流程图。在同一条 Agent Loop（思维链）上，模型自主决定何时委派；子 Agent 硬隔离上下文，只向父 Agent 回传结构化 Report。
+**可自托管的 Agent 工作台**：调研、写代码、跑长任务——类似开源 Cursor 风格的 Agent UI，支持可审计的多智能体委派。
 
-## 产品 UI
+描述目标，实时看 Tool 流，结果在内置浏览器打开。子 Agent 硬隔离上下文、只回传 Report——**不用**手写 LangGraph / CrewAI 流程图。
 
-三栏工作台：项目侧栏 · Agent 执行日志 · 右侧面板（计划 / 文件 / **记忆** / 变更 / 终端 / 浏览器）。描述目标，实时查看 Tool 调用，浏览跨会话记忆，结果可在右侧浏览器直接打开。
+| 对比 | 常见做法 | DanQing Teams |
+|------|----------|---------------|
+| **编排** | 你维护 Graph / 角色路由 / 产品 Mode | **LLM 在同一条 Agent Loop 上规划 Tool Call DAG** |
+| **子 Agent** | 并行 Session / Handoff 路由 | 同一思维链上的 `delegate_agent`，**硬上下文隔离** |
+| **记忆** | 黑盒产品记忆，或另接向量库 | 显式 `memory_*` Tool + 可见 **记忆** Tab（SQLite） |
+
+MIT · Web / 桌面 / CLI / TUI · 支持 Anthropic 与 OpenAI 兼容接口
+
+## 试用
+
+| 平台 | 下载 |
+|------|------|
+| **macOS**（Apple Silicon） | [`.dmg`](https://github.com/danqing-ai/danqing-teams/releases/latest) |
+| **Windows** | [安装包 `.exe`](https://github.com/danqing-ai/danqing-teams/releases/latest) |
+| **Linux 服务端** | [`.tar.gz`](https://github.com/danqing-ai/danqing-teams/releases/latest) |
+
+或从源码跑（需同级 [`dq-ui`](https://github.com/danqing-ai/dq-ui)）：
+
+```bash
+make dev-web   # → http://localhost:5801/app/
+```
+
+在 UI 里填 LLM API Key（或编辑 `~/.dq-teams/config.yaml`）。完整步骤见 [快速开始](#快速开始)。
+
+## 界面一览
+
+三栏工作台：项目侧栏 · Agent 执行日志 · 右侧面板（计划 / 文件 / **记忆** / 变更 / 终端 / 浏览器）。
 
 | 调研报告 | 交互演示 | 网页小游戏 |
 |---------|---------|-----------|
 | ![市场报告](docs/screenshots/ui-market-report.png) | ![烹饪演示](docs/screenshots/ui-cooking-demo.png) | ![贪吃蛇](docs/screenshots/ui-snake-game.png) |
 
 - **调研报告** — 网页抓取、结构化写作、HTML 实时预览
-- **交互演示** — 分步烹饪演示，含播放控制与计时
+- **交互演示** — 分步演示，含播放控制
 - **网页小游戏** — 生成可玩的贪吃蛇，并通过 UI 标注继续迭代
+
+> 提示：20～30 秒录屏（GIF/MP4）转化远好于静图——有素材后放到 `docs/screenshots/`，链到本表上方即可。
 
 ## 设计哲学
 
@@ -309,6 +339,7 @@ Tag 触发时会将产物附加到 GitHub Release。
 | 文档 | 说明 |
 |------|------|
 | [docs/core-design.md](docs/core-design.md) | 核心设计：统一 Agent 架构与引擎 |
+| [docs/launch-posts.md](docs/launch-posts.md) | 社区发帖稿（可直接复制） |
 | [evals/dq_harbor/README.md](evals/dq_harbor/README.md) | Harbor Terminal-Bench 2.0 评测与 Agent 对比 |
 | [AGENTS.md](AGENTS.md) | 贡献者 / Agent 速查 |
 | [config.example.yaml](config.example.yaml) | 完整配置参考 |
