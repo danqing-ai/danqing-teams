@@ -69,18 +69,19 @@ func (h *Edit) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 		return domain.ToolResult{}, fmt.Errorf("oldString and newString must be different")
 	}
 
-	path, err := resolvePath(workDirFromInput(input), path)
+	relPath := path
+	resolvedPath, err := resolvePath(workDirFromInput(input), path)
 	if err != nil {
 		return domain.ToolResult{}, err
 	}
 
-	if err := requireFreshRead(input, path); err != nil {
+	if err := requireFreshRead(input, resolvedPath); err != nil {
 		return domain.ToolResult{}, err
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(resolvedPath)
 	if err != nil {
-		return domain.ToolResult{}, fmt.Errorf("cannot read file %q: %w", path, err)
+		return domain.ToolResult{}, fmt.Errorf("cannot read file %q: %w", resolvedPath, err)
 	}
 	content := string(data)
 
@@ -99,7 +100,7 @@ func (h *Edit) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 
 	if matchErr != nil {
 		if strings.Contains(matchErr.Error(), "not found") {
-			return domain.ToolResult{}, fmt.Errorf("oldString not found in %q after exact and fuzzy matching", path)
+			return domain.ToolResult{}, fmt.Errorf("oldString not found in %q after exact and fuzzy matching", relPath)
 		}
 		return domain.ToolResult{}, matchErr
 	}
@@ -108,13 +109,19 @@ func (h *Edit) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 		return domain.ToolResult{}, err
 	}
 
-	if err := os.WriteFile(path, []byte(replacement), 0644); err != nil {
-		return domain.ToolResult{}, fmt.Errorf("cannot write file %q: %w", path, err)
+	if err := os.WriteFile(resolvedPath, []byte(replacement), 0644); err != nil {
+		return domain.ToolResult{}, fmt.Errorf("cannot write file %q: %w", resolvedPath, err)
 	}
 
-	diff := generateUnifiedDiff(path, content, replacement)
+	diff := generateUnifiedDiff(relPath, content, replacement)
 	return domain.ToolResult{
-		Content: fmt.Sprintf("Edited file %q, replaced %d occurrence(s):\n%s", path, count, diff),
-		Meta:    map[string]any{"replacements": count},
+		Content: fmt.Sprintf("Edited file %q, replaced %d occurrence(s):\n%s", relPath, count, diff),
+		Meta: map[string]any{
+			"path":          relPath,
+			"op":            "update",
+			"diff":          diff,
+			"replacements":  count,
+			"bytes_written": len(replacement),
+		},
 	}, nil
 }

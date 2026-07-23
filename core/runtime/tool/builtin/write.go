@@ -66,7 +66,10 @@ func (h *Write) Execute(_ context.Context, input map[string]any) (domain.ToolRes
 		if err := os.MkdirAll(resolvedPath, 0755); err != nil {
 			return domain.ToolResult{}, fmt.Errorf("cannot create directory %q: %w", resolvedPath, err)
 		}
-		return domain.ToolResult{Content: fmt.Sprintf("Created directory %q", path)}, nil
+		return domain.ToolResult{
+			Content: fmt.Sprintf("Created directory %q", path),
+			Meta:    map[string]any{"path": path, "op": "create", "write_type": "directory"},
+		}, nil
 	}
 
 	// Check for existing file: require read-first
@@ -92,14 +95,24 @@ func (h *Write) Execute(_ context.Context, input map[string]any) (domain.ToolRes
 	}
 
 	msg := fmt.Sprintf("Wrote file %q (%d bytes)", path, len(content))
-
-	if fileExists && existingData != nil {
-		diff := generateUnifiedDiff(path, string(existingData), content)
-		msg += "\n" + diff
+	op := "create"
+	diff := ""
+	if fileExists {
+		op = "update"
+		if existingData != nil {
+			diff = generateUnifiedDiff(path, string(existingData), content)
+			msg += "\n" + diff
+		}
 	}
 
 	return domain.ToolResult{
 		Content: msg,
-		Meta:    map[string]any{"bytes_written": len(content), "overwrote": fileExists},
+		Meta: map[string]any{
+			"path":          path,
+			"op":            op,
+			"diff":          diff,
+			"bytes_written": len(content),
+			"overwrote":     fileExists,
+		},
 	}, nil
 }

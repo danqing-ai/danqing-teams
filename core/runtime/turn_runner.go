@@ -166,6 +166,7 @@ type TurnRunner struct {
 	ConfigStore         port.ConfigStore
 	Log                 func(typ string, data map[string]any)
 	FileTracker         *tool.FileTracker
+	FileChanges         FileChangeAppender
 	SandboxStatus       func() domain.SandboxStatus
 	SessionAllowNetwork func(sessionID string) bool
 	mu                  sync.Mutex
@@ -395,9 +396,9 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 				continue
 			}
 
-		p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolPending, domain.ToolPart{
-			CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolPending, Input: call.Arguments,
-		})
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolPending, domain.ToolPart{
+				CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolPending, Input: call.Arguments,
+			})
 
 			cmdStr, _ := call.Arguments["command"].(string)
 			sbStatus := domain.SandboxStatus{}
@@ -422,13 +423,13 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			})
 			decision := permResult.Decision
 			if decision == permission.DecisionDeny {
-			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolError, domain.ToolPart{
-				CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: "permission denied",
-			})
-			messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: "permission denied" + toolErrorHint})
-			p.logToolResult(call.ID, call.Name, "permission denied"+toolErrorHint)
-			processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
-			continue
+				p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolError, domain.ToolPart{
+					CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: "permission denied",
+				})
+				messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: "permission denied" + toolErrorHint})
+				p.logToolResult(call.ID, call.Name, "permission denied"+toolErrorHint)
+				processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
+				continue
 			}
 
 			allowNetworkForRun := allowNet
@@ -491,39 +492,39 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			if args == nil {
 				args = map[string]any{}
 			}
-		args["__session_id"] = tctx.SessionID
-		args["__turn_id"] = tctx.TurnID
-		args["__agent_id"] = tctx.Agent.ID
-		args["__project_id"] = tctx.ProjectID
-		args["__model_id"] = tctx.Model
-		args["__work_dir"] = tctx.WorkDir
-		args["__call_id"] = call.ID
-		args["__file_tracker"] = p.FileTracker
-		if allowNetworkForRun {
-			args["__sandbox_allow_network"] = true
-		}
+			args["__session_id"] = tctx.SessionID
+			args["__turn_id"] = tctx.TurnID
+			args["__agent_id"] = tctx.Agent.ID
+			args["__project_id"] = tctx.ProjectID
+			args["__model_id"] = tctx.Model
+			args["__work_dir"] = tctx.WorkDir
+			args["__call_id"] = call.ID
+			args["__file_tracker"] = p.FileTracker
+			if allowNetworkForRun {
+				args["__sandbox_allow_network"] = true
+			}
 
-		result, err := handler.Execute(ctx, args)
-		if err != nil {
-			errContent := err.Error() + toolErrorHint
-			errLabel := err.Error()
-			if errors.Is(err, context.Canceled) || ctx.Err() != nil {
-				errLabel = "cancelled"
-				errContent = "cancelled" + toolErrorHint
+			result, err := handler.Execute(ctx, args)
+			if err != nil {
+				errContent := err.Error() + toolErrorHint
+				errLabel := err.Error()
+				if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+					errLabel = "cancelled"
+					errContent = "cancelled" + toolErrorHint
+				}
+				// Use Background so tool.error survives a cancelled turn ctx.
+				p.Stream.Publish(context.Background(), tctx.SessionID, tctx.TurnID, domain.EventToolError, domain.ToolPart{
+					CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: errLabel,
+				})
+				messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: errContent})
+				processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
+				p.logToolResult(call.ID, call.Name, errContent)
+				if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+					messages = p.closeUnfinishedToolCalls(tctx, messages, assistantToolCalls)
+					return domain.Report{}, messages, ctx.Err()
+				}
+				continue
 			}
-			// Use Background so tool.error survives a cancelled turn ctx.
-			p.Stream.Publish(context.Background(), tctx.SessionID, tctx.TurnID, domain.EventToolError, domain.ToolPart{
-				CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: errLabel,
-			})
-			messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: errContent})
-			processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
-			p.logToolResult(call.ID, call.Name, errContent)
-			if errors.Is(err, context.Canceled) || ctx.Err() != nil {
-				messages = p.closeUnfinishedToolCalls(tctx, messages, assistantToolCalls)
-				return domain.Report{}, messages, ctx.Err()
-			}
-			continue
-		}
 
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolCompleted, domain.ToolPart{
 				CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolCompleted, Output: result.Content,
@@ -531,6 +532,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: result.Content})
 			processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
 			p.logToolResult(call.ID, call.Name, result.Content)
+			p.recordFileChanges(tctx, call.ID, call.Name, call.Arguments, result)
 		}
 		if reportCaptured {
 			break
@@ -617,6 +619,18 @@ func (p *TurnRunner) logToolResult(callID, name, output string) {
 		return
 	}
 	p.Log("tool_result", map[string]any{"call_id": callID, "name": name, "output": output})
+}
+
+func (p *TurnRunner) recordFileChanges(tctx TurnContext, callID, toolName string, args map[string]any, result domain.ToolResult) {
+	if p.FileChanges == nil || !isFileMutatingTool(toolName) {
+		return
+	}
+	for _, rec := range fileChangeRecordsFromResult(tctx.TurnID, callID, toolName, args, result) {
+		if _, err := p.FileChanges.Append(tctx.SessionID, tctx.ProjectID, rec); err != nil {
+			// Best-effort: do not fail the turn if the journal write fails.
+			continue
+		}
+	}
 }
 
 func (p *TurnRunner) trackDoom(turnID, tool, describe string, threshold int) int {

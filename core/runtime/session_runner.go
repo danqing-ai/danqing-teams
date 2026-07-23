@@ -147,6 +147,18 @@ func NewEngine(sessions *service.SessionManager, turns *service.TurnManager, pro
 	return e
 }
 
+// SetFileChangeStore wires the session file-change journal into the turn runner and compaction manager.
+func (e *Engine) SetFileChangeStore(store interface {
+	FileChangeAppender
+	FileChangeJournal
+}) {
+	if store == nil {
+		return
+	}
+	e.turnRunner.FileChanges = store
+	e.compactionMgr.SetFileChangeJournal(store)
+}
+
 // SetSandbox wires the process sandbox used for policy decisions and tool execution status.
 func (e *Engine) SetSandbox(sb port.Sandbox) {
 	e.mu.Lock()
@@ -339,14 +351,16 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) {
 		checkpoint := e.compactionMgr.Recover(turnCtx, sessionID)
 		checkpointText := ""
 		activeTodos := ""
+		fileChanges := ""
 		if checkpoint != nil {
 			if checkpoint.Summary != "" {
 				checkpointText = checkpoint.Summary
 			}
 			activeTodos = formatActiveTodos(checkpoint.Todos)
+			fileChanges = formatFileChanges(checkpoint.FileChanges)
 		}
 
-		sys := buildSystemPrompt(agentPtr.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agentPtr), agentPtr.CanDelegate, checkpointText, activeTodos, e.sandboxStatus())
+		sys := buildSystemPrompt(agentPtr.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agentPtr), agentPtr.CanDelegate, checkpointText, activeTodos, fileChanges, e.sandboxStatus())
 		messages := []Message{{Role: RoleSystem, Content: sys}}
 		if hits := e.knowledge.Search(agentPtr.KnowledgeIDs, goal, cfg.knowledgeSearchTopK); len(hits) > 0 {
 			content := ""
@@ -659,14 +673,16 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 	checkpoint := e.compactionMgr.Recover(ctx, sessionID)
 	checkpointText := ""
 	activeTodos := ""
+	fileChanges := ""
 	if checkpoint != nil {
 		if checkpoint.Summary != "" {
 			checkpointText = checkpoint.Summary
 		}
 		activeTodos = formatActiveTodos(checkpoint.Todos)
+		fileChanges = formatFileChanges(checkpoint.FileChanges)
 	}
 
-	sys := buildSystemPrompt(agent.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agent), agent.CanDelegate, checkpointText, activeTodos, e.sandboxStatus())
+	sys := buildSystemPrompt(agent.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agent), agent.CanDelegate, checkpointText, activeTodos, fileChanges, e.sandboxStatus())
 	messages := []Message{
 		{Role: RoleSystem, Content: sys},
 	}
@@ -975,7 +991,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 				e.turnRunner.Log = oldLog
 			}()
 
-			sys := buildSystemPrompt(workerAgent.SystemPrompt, e.turnRunner.SkillList, nil, workerAgent.CanDelegate, "", "", e.sandboxStatus())
+			sys := buildSystemPrompt(workerAgent.SystemPrompt, e.turnRunner.SkillList, nil, workerAgent.CanDelegate, "", "", "", e.sandboxStatus())
 			messages := []Message{
 				{Role: RoleSystem, Content: sys},
 			}
@@ -1181,7 +1197,7 @@ func (e *Engine) ResolveAskUser(askID, answer string) error {
 
 func (e *Engine) buildTurnMessages(sessionID string, agent domain.Agent, goal string, checkpointText string) []Message {
 	cfg := e.loadRunCfg(context.Background())
-	sys := buildSystemPrompt(agent.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agent), agent.CanDelegate, checkpointText, "", e.sandboxStatus())
+	sys := buildSystemPrompt(agent.SystemPrompt, e.turnRunner.SkillList, e.delegatableAgents(agent), agent.CanDelegate, checkpointText, "", "", e.sandboxStatus())
 	messages := []Message{
 		{Role: RoleSystem, Content: sys},
 	}

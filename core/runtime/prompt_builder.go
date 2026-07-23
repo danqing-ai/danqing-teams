@@ -9,7 +9,7 @@ import (
 	"danqing-teams/core/domain"
 )
 
-func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList []domain.Agent, canDelegate bool, checkpoint string, activeTodos string, sandboxStatus domain.SandboxStatus) string {
+func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList []domain.Agent, canDelegate bool, checkpoint string, activeTodos string, fileChanges string, sandboxStatus domain.SandboxStatus) string {
 	var b strings.Builder
 	b.WriteString(agentPersona)
 
@@ -35,6 +35,10 @@ func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList 
 	if activeTodos != "" {
 		b.WriteString("\n\n")
 		b.WriteString(activeTodos)
+	}
+	if fileChanges != "" {
+		b.WriteString("\n\n")
+		b.WriteString(fileChanges)
 	}
 	b.WriteString("\n\n")
 	b.WriteString(buildAskUserPolicy())

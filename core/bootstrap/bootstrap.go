@@ -148,9 +148,11 @@ func New(cfg Config) *Core {
 
 	stream := dqruntime.NewStreamEventManager(st.StreamEvents())
 	checkpointStore := turnlog.NewCheckpointStore(pm.ProjectDir)
+	fileChangeStore := turnlog.NewFileChangeStore(pm.ProjectDir)
 
 	sessions := service.NewSessionManager(st, nil, provider)
 	eng := dqruntime.NewEngine(sessions, turnManager, pm, approvalManager, turnLogManager, agents, skills, knowledge, st.Memories(), provider, stream, checkpointStore, loader, appCfg.Data.Dir)
+	eng.SetFileChangeStore(fileChangeStore)
 	sessions.SetEngine(eng)
 
 	sb := sandbox.New(appCfg.Runtime.Sandbox)

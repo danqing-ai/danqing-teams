@@ -29,6 +29,7 @@ type CompactionManager struct {
 	configStore port.ConfigStore
 	stream      port.EventStream
 	store       CompactionCheckpointStore
+	fileChanges FileChangeJournal
 	modelLimits *ModelConfigRegistry
 }
 
@@ -38,13 +39,13 @@ type CompactionCheckpointStore interface {
 }
 
 type compactionCfg struct {
-	enabled       bool
-	maxTokens     int
-	triggerRatio  float64
-	cutTokens     int
-	turnInterval  int
-	subInterval   int
-	toolTruncate  int
+	enabled      bool
+	maxTokens    int
+	triggerRatio float64
+	cutTokens    int
+	turnInterval int
+	subInterval  int
+	toolTruncate int
 }
 
 func NewCompactionManager(llm port.LLMProvider, stream port.EventStream, configStore port.ConfigStore, store CompactionCheckpointStore, modelLimits *ModelConfigRegistry) *CompactionManager {
@@ -59,6 +60,13 @@ func NewCompactionManager(llm port.LLMProvider, stream port.EventStream, configS
 		store:       store,
 		modelLimits: modelLimits,
 	}
+}
+
+// SetFileChangeJournal wires the session file-change log used during compaction.
+func (m *CompactionManager) SetFileChangeJournal(journal FileChangeJournal) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.fileChanges = journal
 }
 
 func (m *CompactionManager) loadCfg(ctx context.Context) compactionCfg {
@@ -202,6 +210,7 @@ func (m *CompactionManager) Compact(ctx context.Context, sessionID, turnID strin
 		TurnCount:     turnCount,
 		TokenEstimate: tokensBefore,
 	}
+	applyFileChangesToCheckpoint(m.fileChanges, sessionID, prevCP, cp)
 	m.setCheckpoint(sessionID, cp)
 
 	if m.stream != nil {
@@ -248,6 +257,7 @@ func (m *CompactionManager) CompactToRetain(ctx context.Context, sessionID, turn
 		RetainFromTurnID:   retainFromTurnID,
 		RetainSkipMessages: retainSkipMessages,
 	}
+	applyFileChangesToCheckpoint(m.fileChanges, sessionID, prevCP, cp)
 	m.setCheckpoint(sessionID, cp)
 	if m.stream != nil {
 		m.stream.Publish(ctx, sessionID, turnID, domain.EventContextCompacted, domain.ContextCompactedPayload{
@@ -621,6 +631,7 @@ Use any structure that helps (prose or light markdown). Do not force JSON.
 <conversation>
 %s
 </conversation>`
+
 func ToolInputKey(args map[string]any) string {
 	keys := make([]string, 0, len(args))
 	for k := range args {

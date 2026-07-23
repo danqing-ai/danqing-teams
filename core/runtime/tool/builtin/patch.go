@@ -37,8 +37,8 @@ func (h *ApplyPatch) Schema() domain.ToolSchema {
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"patch":            map[string]any{"type": "string", "description": "A unified diff patch string to apply"},
-				"fuzz":             map[string]any{"type": "integer", "description": "Maximum lines to search for context match (default: " + fmt.Sprintf("%d", defaultPatchFuzz) + ", max: " + fmt.Sprintf("%d", maxPatchFuzz) + ")"},
+				"patch":             map[string]any{"type": "string", "description": "A unified diff patch string to apply"},
+				"fuzz":              map[string]any{"type": "integer", "description": "Maximum lines to search for context match (default: " + fmt.Sprintf("%d", defaultPatchFuzz) + ", max: " + fmt.Sprintf("%d", maxPatchFuzz) + ")"},
 				"create_if_missing": map[string]any{"type": "boolean", "description": "Create the file if it doesn't exist (default: false)"},
 			},
 			"required": []string{"patch"},
@@ -64,11 +64,12 @@ type hunkLine struct {
 }
 
 type filePatch struct {
-	path      string
-	hunks     []hunk
-	isCreate  bool
-	isDelete  bool
-	oldData   []byte
+	path     string // absolute after resolve
+	relPath  string // project-relative path for Meta / tracking
+	hunks    []hunk
+	isCreate bool
+	isDelete bool
+	oldData  []byte
 }
 
 type pendingWrite struct {
@@ -105,28 +106,30 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 	// Preflight: resolve paths, detect create/delete, read files
 	var results []string
 	var writes []pendingWrite
+	var changeMeta []map[string]any
 
 	for i := range patches {
 		fp := &patches[i]
+		fp.relPath = fp.path
 
 		if fp.isCreate {
 			fp.path, err = resolvePath(workDir, fp.path)
 			if err != nil && !createIfMissing {
-				return domain.ToolResult{}, fmt.Errorf("cannot create file %q: %w", fp.path, err)
+				return domain.ToolResult{}, fmt.Errorf("cannot create file %q: %w", fp.relPath, err)
 			}
 			if createIfMissing || err == nil {
 				if _, statErr := os.Stat(fp.path); statErr == nil && len(fp.hunks) > 0 {
-					return domain.ToolResult{}, fmt.Errorf("cannot create file %q: already exists. Use create_if_missing=true to overwrite", fp.path)
+					return domain.ToolResult{}, fmt.Errorf("cannot create file %q: already exists. Use create_if_missing=true to overwrite", fp.relPath)
 				}
 				dir := filepath.Dir(fp.path)
 				if mkErr := os.MkdirAll(dir, 0755); mkErr != nil {
-					return domain.ToolResult{}, fmt.Errorf("cannot create parent dirs for %q: %w", fp.path, mkErr)
+					return domain.ToolResult{}, fmt.Errorf("cannot create parent dirs for %q: %w", fp.relPath, mkErr)
 				}
 			}
 		} else {
 			fp.path, err = resolvePath(workDir, fp.path)
 			if err != nil {
-				return domain.ToolResult{}, fmt.Errorf("cannot resolve path %q: %w", fp.path, err)
+				return domain.ToolResult{}, fmt.Errorf("cannot resolve path %q: %w", fp.relPath, err)
 			}
 		}
 	}
@@ -137,7 +140,7 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 		if fp.isDelete {
 			data, readErr := os.ReadFile(fp.path)
 			if readErr != nil {
-				return domain.ToolResult{}, fmt.Errorf("cannot read file %q for deletion: %w", fp.path, readErr)
+				return domain.ToolResult{}, fmt.Errorf("cannot read file %q for deletion: %w", fp.relPath, readErr)
 			}
 			fp.oldData = data
 			writes = append(writes, pendingWrite{path: fp.path, data: nil, oldData: data})
@@ -149,14 +152,14 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 		} else {
 			data, readErr := os.ReadFile(fp.path)
 			if readErr != nil {
-				return domain.ToolResult{}, fmt.Errorf("cannot read file %q: %w", fp.path, readErr)
+				return domain.ToolResult{}, fmt.Errorf("cannot read file %q: %w", fp.relPath, readErr)
 			}
 			fp.oldData = data
 
 			lines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
 			_, applyErr := applyHunks(lines, fp.hunks, fuzz)
 			if applyErr != nil {
-				return domain.ToolResult{}, fmt.Errorf("cannot apply patch to %q: %w", fp.path, applyErr)
+				return domain.ToolResult{}, fmt.Errorf("cannot apply patch to %q: %w", fp.relPath, applyErr)
 			}
 		}
 	}
@@ -168,9 +171,13 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 		if fp.isDelete {
 			if delErr := os.Remove(fp.path); delErr != nil {
 				h.rollbackWrites(writes)
-				return domain.ToolResult{}, fmt.Errorf("cannot delete file %q: %w", fp.path, delErr)
+				return domain.ToolResult{}, fmt.Errorf("cannot delete file %q: %w", fp.relPath, delErr)
 			}
-			results = append(results, fmt.Sprintf("Deleted %q", fp.path))
+			results = append(results, fmt.Sprintf("Deleted %q", fp.relPath))
+			diff := generateUnifiedDiff(fp.relPath, string(fp.oldData), "")
+			changeMeta = append(changeMeta, map[string]any{
+				"path": fp.relPath, "op": "delete", "diff": diff, "bytes_written": 0,
+			})
 			continue
 		}
 
@@ -192,13 +199,27 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 
 		if err := os.WriteFile(fp.path, []byte(newContent), 0644); err != nil {
 			h.rollbackWrites(writes)
-			return domain.ToolResult{}, fmt.Errorf("cannot write file %q: %w", fp.path, err)
+			return domain.ToolResult{}, fmt.Errorf("cannot write file %q: %w", fp.relPath, err)
 		}
 
-		results = append(results, fmt.Sprintf("Patched %q (%d hunks)", fp.path, len(fp.hunks)))
+		results = append(results, fmt.Sprintf("Patched %q (%d hunks)", fp.relPath, len(fp.hunks)))
+		op := "update"
+		oldStr := ""
+		if fp.isCreate {
+			op = "create"
+		} else {
+			oldStr = string(fp.oldData)
+		}
+		diff := generateUnifiedDiff(fp.relPath, oldStr, newContent)
+		changeMeta = append(changeMeta, map[string]any{
+			"path": fp.relPath, "op": op, "diff": diff, "bytes_written": len(newContent),
+		})
 	}
 
-	return domain.ToolResult{Content: strings.Join(results, "\n")}, nil
+	return domain.ToolResult{
+		Content: strings.Join(results, "\n"),
+		Meta:    map[string]any{"file_changes": changeMeta},
+	}, nil
 }
 
 func (h *ApplyPatch) rollbackWrites(writes []pendingWrite) {
