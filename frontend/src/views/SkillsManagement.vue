@@ -580,7 +580,7 @@ function formatSize(bytes: number): string {
             <strong>{{ $t('skills.templateDiverged') }}</strong>
             <span>{{ $t('skills.templateDivergedHint') }}</span>
           </div>
-          <DqButton size="small" type="primary" @click="resetSelected">
+          <DqButton size="sm" type="primary" @click="resetSelected">
             {{ $t('skills.resetToTemplate') }}
           </DqButton>
         </div>
@@ -654,7 +654,7 @@ function formatSize(bytes: number): string {
         <section v-show="activeTab === 'files'" class="resource-section">
           <div class="resource-section__toolbar">
             <DqButton
-              size="small"
+              size="sm"
               :disabled="isCreating || !selectedId"
               @click="startCreateFile"
             >
@@ -671,8 +671,8 @@ function formatSize(bytes: number): string {
                 <span class="resource-list-card__desc">{{ formatSize(file.size) }}</span>
               </div>
               <div class="resource-list-card__actions">
-                <DqButton size="small" @click="viewFileContent(file)">{{ $t('skills.view') }}</DqButton>
-                <DqButton size="small" @click="startEditFile(file)">{{ $t('skills.edit') }}</DqButton>
+                <DqButton size="sm" @click="viewFileContent(file)">{{ $t('skills.view') }}</DqButton>
+                <DqButton size="sm" @click="startEditFile(file)">{{ $t('skills.edit') }}</DqButton>
                 <button
                   type="button"
                   class="resource-list-card__action resource-list-card__action--danger"

@@ -530,7 +530,8 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
           >
             <DqSelect
               v-model="selectedBaseModelId"
-              size="small"
+              size="sm"
+              variant="ghost"
               :aria-label="t('composer.selectModel')"
             >
               <DqOption
@@ -548,7 +549,8 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
           >
             <DqSelect
               v-model="sessions.selectedEffort"
-              size="small"
+              size="sm"
+              variant="ghost"
               :aria-label="t('composer.selectEffort')"
             >
               <DqOption v-for="e in availableEfforts" :key="e" :value="e" :label="e" />
@@ -594,7 +596,8 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
         >
           <DqSelect
             v-model="sessions.selectedProjectId"
-            size="small"
+            size="sm"
+            variant="ghost"
             :aria-label="t('composer.selectProject')"
             :placeholder="t('composer.selectProject')"
           >
@@ -610,6 +613,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
         <DqSegmented
           v-if="showAgentSelect && useAgentSegmented"
           v-model="sessions.selectedAgentId"
+          size="sm"
           class="composer-agent-seg composer-agent-seg--compact"
           :options="agentOptions"
           :aria-label="t('composer.selectAgent')"
@@ -620,7 +624,8 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
         >
           <DqSelect
             v-model="sessions.selectedAgentId"
-            size="small"
+            size="sm"
+            variant="ghost"
             :aria-label="t('composer.selectAgent')"
           >
             <DqOption
@@ -636,7 +641,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
           v-if="gitDisplay"
           class="composer-git-branch"
           :class="{ 'is-error': Boolean(gitError) }"
-          :title="gitError ? gitError : t('composer.gitBranch')"
+          :title="gitDisplay"
           :aria-label="gitError ? gitError : `${t('composer.gitBranch')}: ${gitBranch}`"
         >
           <span class="composer-git-branch__icon" aria-hidden="true">⎇</span>
@@ -843,7 +848,8 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  max-width: 200px;
+  flex: 0 1 auto;
+  max-width: min(100%, 420px);
   min-width: 0;
   height: 28px;
   padding: 0 8px;
@@ -857,7 +863,6 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
 
 .composer-git-branch.is-error {
   color: var(--dq-danger, var(--dq-label-secondary));
-  max-width: 240px;
 }
 
 .composer-git-branch__icon {

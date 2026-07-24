@@ -89,7 +89,7 @@ const isEmpty = computed(() => !model.value.trim())
         <div v-if="isEmpty" class="md-editor__empty">暂无内容，切换「编辑」开始编写 Markdown。</div>
         <div
           v-else
-          class="md-editor__preview markdown-body"
+          class="md-editor__preview dq-prose"
           v-html="previewHtml"
         />
       </div>

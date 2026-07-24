@@ -1,6 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import {
+  DqPillTabs,
+  Document,
+  FolderChecked,
+  Monitor,
+  MagicStick,
+  Terminal,
+  Library,
+} from '@danqing/dq-shell'
 import PlanPanel from '@/components/center/PlanPanel.vue'
 import FileTree from '@/components/center/FileTree.vue'
 import MemoryPanel from '@/components/center/MemoryPanel.vue'
@@ -37,13 +46,23 @@ watch(rightTab, (tab) => {
   if (tab === 'memory') memoryPanelRef.value?.refresh?.()
 })
 
-const tabs = computed(() => [
-  { id: 'plan' as const, label: t('sessions.tabPlan') },
-  { id: 'files' as const, label: t('sessions.tabFiles') },
-  { id: 'memory' as const, label: t('sessions.tabMemory'), badge: memoryCount.value },
-  { id: 'changes' as const, label: t('sessions.tabChanges'), badge: props.changesCount },
-  { id: 'terminal' as const, label: t('sessions.tabTerminal') },
-  { id: 'browser' as const, label: t('sessions.tabBrowser') },
+const pillItems = computed(() => [
+  { value: 'plan', label: t('sessions.tabPlan'), icon: MagicStick },
+  { value: 'files', label: t('sessions.tabFiles'), icon: Document },
+  {
+    value: 'memory',
+    label: t('sessions.tabMemory'),
+    icon: Library,
+    badge: memoryCount.value > 0 ? memoryCount.value : undefined,
+  },
+  {
+    value: 'changes',
+    label: t('sessions.tabChanges'),
+    icon: FolderChecked,
+    badge: props.changesCount && props.changesCount > 0 ? props.changesCount : undefined,
+  },
+  { value: 'terminal', label: t('sessions.tabTerminal'), icon: Terminal },
+  { value: 'browser', label: t('sessions.tabBrowser'), icon: Monitor },
 ])
 
 defineExpose({
@@ -56,18 +75,7 @@ defineExpose({
 <template>
   <div class="right-workspace">
     <div class="right-workspace__tabs">
-      <button
-        v-for="tab in tabs"
-        :key="tab.id"
-        type="button"
-        class="right-workspace__tab"
-        :class="{ 'is-active': rightTab === tab.id }"
-        :title="tab.label"
-        @click="rightTab = tab.id"
-      >
-        <span>{{ tab.label }}</span>
-        <span v-if="tab.badge" class="right-workspace__badge">{{ tab.badge > 99 ? '99+' : tab.badge }}</span>
-      </button>
+      <DqPillTabs v-model="rightTab" size="sm" :items="pillItems" />
     </div>
 
     <div class="right-workspace__body">
@@ -119,75 +127,28 @@ defineExpose({
   min-width: 0;
   min-height: 0;
   height: 100%;
-  overflow: hidden;
+  background: var(--dq-bg-base);
 }
 
 .right-workspace__tabs {
-  display: flex;
   flex-shrink: 0;
-  gap: 2px;
   padding: 6px 8px;
-  border-bottom: 1px solid var(--dq-separator-light);
+  border-bottom: 1px solid var(--dq-border-subtle);
   overflow-x: auto;
 }
 
-.right-workspace__tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--dq-label-tertiary);
-  font-size: var(--dq-font-size-footnote);
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.right-workspace__tab:hover {
-  color: var(--dq-label-secondary);
-  background: color-mix(in srgb, var(--dq-label-primary) 5%, transparent);
-}
-
-.right-workspace__tab.is-active {
-  color: var(--dq-label-primary);
-  background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
-}
-
-.right-workspace__badge {
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 8px;
-  background: var(--dq-accent);
-  color: var(--dq-color-white);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 16px;
-  text-align: center;
-}
-
 .right-workspace__body {
-  position: relative;
-  display: flex;
-  flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow: hidden;
-}
-
-.right-workspace__body > :deep(*) {
-  flex: 1 1 auto;
-  min-height: 0;
-  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .right-workspace__empty {
-  padding: 32px 16px;
-  text-align: center;
+  padding: 24px 16px;
+  font-size: var(--dq-font-size-footnote);
   color: var(--dq-label-tertiary);
-  font-size: var(--dq-font-size-body);
+  text-align: center;
 }
 </style>

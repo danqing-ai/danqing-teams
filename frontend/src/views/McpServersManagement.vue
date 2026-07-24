@@ -283,7 +283,7 @@ function onKeydown(e: KeyboardEvent) {
         <div class="resource-section__tools">
           <div class="resource-section__tools-header">
             <span class="resource-field__label">{{ $t('mcpServers.discoveredTools') }}</span>
-            <DqButton size="small" :disabled="refreshingTools" @click="handleRefreshTools">
+            <DqButton size="sm" :disabled="refreshingTools" @click="handleRefreshTools">
               {{ refreshingTools ? $t('common.refreshing') : $t('mcpServers.refreshTools') }}
             </DqButton>
           </div>
@@ -292,7 +292,7 @@ function onKeydown(e: KeyboardEvent) {
           </div>
           <div v-else class="resource-section__tools-list">
             <label v-for="tool in discoveredTools" :key="tool.name" class="resource-tool-row">
-              <DqSwitch :model-value="tool.enabled" size="small" @update:model-value="(v: boolean) => handleToggleTool(tool.name, v)" />
+              <DqSwitch :model-value="tool.enabled" size="sm" @update:model-value="(v: boolean) => handleToggleTool(tool.name, v)" />
               <span class="resource-tool-row__name">{{ tool.name }}</span>
               <span v-if="tool.description" class="resource-tool-row__desc">{{ tool.description }}</span>
             </label>
@@ -303,7 +303,7 @@ function onKeydown(e: KeyboardEvent) {
             <span class="resource-field__label">{{ $t('mcpServers.enabled') }}</span>
             <DqSwitch
               :model-value="form.enabled"
-              size="small"
+              size="sm"
               @update:model-value="(v: boolean) => form.enabled = v"
             />
           </label>

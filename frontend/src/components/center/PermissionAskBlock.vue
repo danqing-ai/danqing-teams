@@ -1,0 +1,164 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+
+const props = defineProps<{
+  payload: unknown
+  decided: boolean
+  deciding?: boolean
+  showActions?: boolean
+  anchorSeq?: number
+}>()
+
+const emit = defineEmits<{
+  decide: [payload: { decision: 'allow' | 'deny'; scope: 'once' | 'session' }]
+}>()
+
+function asRecord(v: unknown): Record<string, unknown> | null {
+  if (v && typeof v === 'object' && !Array.isArray(v)) return v as Record<string, unknown>
+  return null
+}
+
+function approvalReason(payload: unknown): string {
+  return String(asRecord(payload)?.reason ?? '')
+}
+
+const reasonLabel = computed(() => {
+  switch (approvalReason(props.payload)) {
+    case 'network':
+      return '需要网络访问'
+    case 'dangerous_command':
+      return '危险命令'
+    case 'unsandboxed':
+      return '未隔离环境'
+    default:
+      return '需要确认'
+  }
+})
+
+const toolName = computed(() => {
+  const p = asRecord(props.payload)
+  return String(p?.tool ?? p?.name ?? '未知工具')
+})
+
+const description = computed(() => String(asRecord(props.payload)?.description ?? ''))
+
+const allowsSession = computed(() => {
+  const p = asRecord(props.payload)
+  const opts = p?.scopeOptions
+  if (Array.isArray(opts)) return opts.includes('session')
+  return approvalReason(props.payload) === 'network'
+})
+
+const pending = computed(() => Boolean(props.showActions) && !props.decided)
+</script>
+
+<template>
+  <div
+    class="permission-ask"
+    :class="{ 'is-pending': pending, 'is-decided': decided && !pending }"
+    :data-event-anchor="anchorSeq"
+  >
+    <div class="permission-ask__main">
+      <svg class="permission-ask__icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+      </svg>
+      <div class="permission-ask__text">
+        <span class="permission-ask__badge">需处理</span>
+        <span>
+          <strong>{{ reasonLabel }}</strong>：
+          <strong>{{ toolName }}</strong>
+          <template v-if="description"> — {{ description }}</template>
+        </span>
+      </div>
+    </div>
+
+    <div v-if="pending" class="permission-ask__actions">
+      <DqButton type="primary" size="sm" :disabled="deciding" @click="emit('decide', { decision: 'allow', scope: 'once' })">
+        允许一次
+      </DqButton>
+      <DqButton
+        v-if="allowsSession"
+        size="sm"
+        :disabled="deciding"
+        @click="emit('decide', { decision: 'allow', scope: 'session' })"
+      >
+        本会话允许
+      </DqButton>
+      <DqButton size="sm" :disabled="deciding" @click="emit('decide', { decision: 'deny', scope: 'once' })">
+        拒绝
+      </DqButton>
+    </div>
+    <span v-else-if="decided" class="permission-ask__resolved">已处理</span>
+  </div>
+</template>
+
+<style scoped>
+.permission-ask {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 12%, transparent);
+  background: color-mix(in srgb, var(--dq-label-primary) 3%, transparent);
+  color: var(--dq-label-primary);
+  font-size: var(--dq-font-size-body);
+  scroll-margin-bottom: 96px;
+}
+
+.permission-ask.is-pending {
+  border-color: color-mix(in srgb, var(--dq-warning, #d97706) 35%, transparent);
+  background: color-mix(in srgb, var(--dq-warning, #d97706) 6%, transparent);
+}
+
+.permission-ask__main {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.permission-ask__icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--dq-warning, #d97706);
+  opacity: 0.85;
+}
+
+.permission-ask__text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  line-height: 1.45;
+}
+
+.permission-ask__badge {
+  display: inline-flex;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: var(--dq-font-size-caption);
+  font-weight: 600;
+  color: var(--dq-warning, #d97706);
+  background: color-mix(in srgb, var(--dq-warning, #d97706) 14%, transparent);
+}
+
+.permission-ask__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.permission-ask__resolved {
+  margin-left: auto;
+  font-size: var(--dq-font-size-footnote);
+  font-weight: 500;
+  color: var(--dq-label-secondary);
+  opacity: 0.75;
+}
+</style>

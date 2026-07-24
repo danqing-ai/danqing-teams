@@ -43,19 +43,14 @@ function goSettings() {
 
     <div v-if="!hasModels" class="welcome-empty__alert">
       <p>{{ t('sessions.welcomeNeedModel') }}</p>
-      <DqButton type="primary" size="small" @click="goSettings">{{ t('sessions.welcomeConfigureModel') }}</DqButton>
+      <DqButton type="primary" size="sm" @click="goSettings">{{ t('sessions.welcomeConfigureModel') }}</DqButton>
     </div>
 
     <div v-else-if="!hasProjects" class="welcome-empty__alert">
       <p>{{ t('sessions.welcomeNeedProject') }}</p>
     </div>
 
-    <div v-else class="welcome-empty__steps">
-      <ol class="welcome-empty__list">
-        <li>{{ t('sessions.welcomeStep1') }}</li>
-        <li>{{ t('sessions.welcomeStep2') }}</li>
-        <li>{{ t('sessions.welcomeStep3') }}</li>
-      </ol>
+    <div v-else class="welcome-empty__ready">
       <div class="welcome-empty__chips">
         <button
           v-for="(p, i) in prompts"
@@ -82,29 +77,29 @@ function goSettings() {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 20px;
-  min-height: 280px;
-  padding: 40px 24px 120px;
+  gap: 28px;
+  min-height: 320px;
+  padding: 48px 24px 140px;
   text-align: center;
 }
 
 .welcome-empty__hero {
-  max-width: 420px;
+  max-width: 480px;
 }
 
 .welcome-empty__title {
   margin: 0;
-  font-size: var(--dq-font-size-title);
+  font-size: var(--dq-font-size-heading);
   font-weight: 700;
   color: var(--dq-label-primary);
   letter-spacing: -0.02em;
 }
 
 .welcome-empty__subtitle {
-  margin: 8px 0 0;
-  font-size: var(--dq-font-size-body);
+  margin: 10px 0 0;
+  font-size: var(--dq-font-size-secondary);
   color: var(--dq-label-secondary);
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 .welcome-empty__alert {
@@ -120,40 +115,31 @@ function goSettings() {
   font-size: var(--dq-font-size-body);
 }
 
-.welcome-empty__steps {
+.welcome-empty__ready {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 16px;
-  max-width: 480px;
+  max-width: 560px;
   width: 100%;
-}
-
-.welcome-empty__list {
-  margin: 0;
-  padding: 0 0 0 1.2em;
-  text-align: left;
-  color: var(--dq-label-secondary);
-  font-size: var(--dq-font-size-footnote);
-  line-height: 1.7;
 }
 
 .welcome-empty__chips {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .welcome-empty__chip {
-  max-width: 280px;
-  padding: 8px 12px;
-  border-radius: 10px;
+  max-width: 300px;
+  padding: 10px 14px;
+  border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--dq-label-primary) 12%, transparent);
   background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
   color: var(--dq-label-primary);
   font-size: var(--dq-font-size-footnote);
-  line-height: 1.4;
+  line-height: 1.45;
   text-align: left;
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease;

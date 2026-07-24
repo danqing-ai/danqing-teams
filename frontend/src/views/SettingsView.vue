@@ -859,7 +859,7 @@ const hasFooterActions = computed(() => {
               <span class="settings-field__label">{{ $t('settings.sandboxEnabled') }}</span>
               <DqSwitch
                 :model-value="runtimeForm.sandboxEnabled"
-                size="small"
+                size="sm"
                 @update:model-value="(v: boolean) => runtimeForm.sandboxEnabled = v"
               />
             </label>
@@ -911,7 +911,7 @@ const hasFooterActions = computed(() => {
               <span class="settings-field__label">{{ $t('settings.browserEnabled') }}</span>
               <DqSwitch
                 :model-value="runtimeForm.browserEnabled"
-                size="small"
+                size="sm"
                 @update:model-value="(v: boolean) => runtimeForm.browserEnabled = v"
               />
             </label>
@@ -947,7 +947,7 @@ const hasFooterActions = computed(() => {
               <span class="settings-field__label">{{ $t('settings.autoApprove') }}</span>
               <DqSwitch
                 :model-value="runtimeForm.autoApprove"
-                size="small"
+                size="sm"
                 @update:model-value="(v: boolean) => runtimeForm.autoApprove = v"
               />
             </label>
@@ -960,7 +960,7 @@ const hasFooterActions = computed(() => {
               <span class="settings-field__label">{{ $t('settings.compactionEnabled') }}</span>
               <DqSwitch
                 :model-value="runtimeForm.compactionEnabled"
-                size="small"
+                size="sm"
                 @update:model-value="(v: boolean) => runtimeForm.compactionEnabled = v"
               />
             </label>
@@ -1038,7 +1038,7 @@ const hasFooterActions = computed(() => {
               <span class="settings-field__label">{{ $t('settings.weixinEnable') }}</span>
               <DqSwitch
                 :model-value="weixinForm.enabled"
-                size="small"
+                size="sm"
                 @update:model-value="(v: boolean) => weixinForm.enabled = v"
               />
             </label>
@@ -1068,7 +1068,7 @@ const hasFooterActions = computed(() => {
               <span class="settings-field__label">{{ $t('settings.weixinAutoApprove') }}</span>
               <DqSwitch
                 :model-value="weixinForm.autoApprove"
-                size="small"
+                size="sm"
                 @update:model-value="(v: boolean) => weixinForm.autoApprove = v"
               />
             </label>
@@ -1083,7 +1083,7 @@ const hasFooterActions = computed(() => {
           <div class="settings-form-group">
             <div class="settings-form-group__head">
               <span class="settings-form-group__title">{{ $t('settings.weixinAccounts') }}</span>
-              <DqButton type="primary" size="small" @click="openWeixinAddDialog">
+              <DqButton type="primary" size="sm" @click="openWeixinAddDialog">
                 {{ $t('settings.weixinLogin') }}
               </DqButton>
             </div>
@@ -1110,7 +1110,7 @@ const hasFooterActions = computed(() => {
                     </span>
                   </div>
                   <div class="provider-card__actions">
-                    <DqButton size="small" type="danger" @click="handleWeixinDeleteAccount(acc.accountId)">
+                    <DqButton size="sm" type="danger" @click="handleWeixinDeleteAccount(acc.accountId)">
                       {{ $t('settings.weixinDeleteAccount') }}
                     </DqButton>
                   </div>
@@ -1161,8 +1161,8 @@ const hasFooterActions = computed(() => {
                   <span class="provider-card__type">{{ providerLabel(cfg.provider) }}</span>
                 </div>
                 <div class="provider-card__actions">
-                  <DqButton size="small" @click="openEditForm(cfg)">{{ $t('settings.edit') }}</DqButton>
-                  <DqButton size="small" type="danger" @click="handleDelete(cfg.id)">{{ $t('common.delete') }}</DqButton>
+                  <DqButton size="sm" @click="openEditForm(cfg)">{{ $t('settings.edit') }}</DqButton>
+                  <DqButton size="sm" type="danger" @click="handleDelete(cfg.id)">{{ $t('common.delete') }}</DqButton>
                 </div>
               </div>
               <div class="provider-card__models">
@@ -1253,7 +1253,7 @@ const hasFooterActions = computed(() => {
             <span class="settings-field__label">{{ $t('settings.htmlFallback') }}</span>
             <DqSwitch
               :model-value="searchForm.htmlFallback"
-              size="small"
+              size="sm"
               @update:model-value="(v: boolean) => searchForm.htmlFallback = v"
             />
           </label>
@@ -1282,7 +1282,7 @@ const hasFooterActions = computed(() => {
           <div class="settings-form-group">
             <div class="settings-form-group__head">
               <span class="settings-form-group__title">{{ $t('settings.marketSources') }}</span>
-              <DqButton size="small" @click="addMarketSource">{{ $t('settings.marketAddSource') }}</DqButton>
+              <DqButton size="sm" @click="addMarketSource">{{ $t('settings.marketAddSource') }}</DqButton>
             </div>
 
             <div v-if="!marketForm.sources.length" class="settings-empty">
@@ -1299,11 +1299,11 @@ const hasFooterActions = computed(() => {
                   <span class="settings-field__label">{{ $t('settings.marketEnabled') }}</span>
                   <DqSwitch
                     :model-value="src.enabled"
-                    size="small"
+                    size="sm"
                     @update:model-value="(v: boolean) => src.enabled = v"
                   />
                 </label>
-                <DqButton size="small" type="danger" @click="removeMarketSource(idx)">
+                <DqButton size="sm" type="danger" @click="removeMarketSource(idx)">
                   {{ $t('settings.marketRemoveSource') }}
                 </DqButton>
               </div>
@@ -1428,7 +1428,7 @@ const hasFooterActions = computed(() => {
               <span class="settings-field__label">{{ $t('settings.modelVision') }}</span>
               <DqSwitch
                 :model-value="!!modelConfigForm[editingModelIdx].vision"
-                @update:model-value="(v: boolean) => { modelConfigForm[editingModelIdx].vision = v }"
+                @update:model-value="(v: boolean) => { if (editingModelIdx !== null) modelConfigForm[editingModelIdx].vision = v }"
               />
               <span class="settings-field__hint">{{ $t('settings.modelVisionDesc') }}</span>
             </label>
@@ -1487,7 +1487,7 @@ const hasFooterActions = computed(() => {
       <footer v-if="hasFooterActions" class="settings-panel__footer">
         <span class="settings-panel__footer-hint">{{ footerHint }}</span>
         <div class="settings-panel__footer-actions">
-          <DqButton v-if="activeTab === 'modelConfig' && editingModelIdx !== null" type="danger" size="small" @click="removeSelectedModel">{{ $t('common.delete') }}</DqButton>
+          <DqButton v-if="activeTab === 'modelConfig' && editingModelIdx !== null" type="danger" size="sm" @click="removeSelectedModel">{{ $t('common.delete') }}</DqButton>
           <DqButton v-if="activeTab === 'runtime'" type="primary" :disabled="runtimeConfig.saving" @click="handleSaveRuntime">
             {{ runtimeConfig.saving ? $t('common.saving') : $t('common.save_') }}
           </DqButton>
@@ -1545,12 +1545,12 @@ const hasFooterActions = computed(() => {
           </div>
 
           <div class="settings-actions weixin-add-dialog__actions">
-            <DqButton size="small" @click="closeWeixinAddDialog">
+            <DqButton size="sm" @click="closeWeixinAddDialog">
               {{ $t('common.cancel') }}
             </DqButton>
             <DqButton
               type="primary"
-              size="small"
+              size="sm"
               :disabled="weixinPolling || !weixinLoginProjectId"
               @click="handleWeixinQr"
             >
@@ -1687,7 +1687,7 @@ const hasFooterActions = computed(() => {
                 :placeholder="$t('settings.manualModelPlaceholder')"
                 @keydown="onManualModelKeydown"
               />
-              <DqButton size="small" @click="addManualModel">{{ $t('settings.addManualModel') }}</DqButton>
+              <DqButton size="sm" @click="addManualModel">{{ $t('settings.addManualModel') }}</DqButton>
             </div>
             <span class="settings-field__hint">{{ $t('settings.manualModelHint') }}</span>
           </div>
@@ -1710,7 +1710,7 @@ const hasFooterActions = computed(() => {
                 <div class="model-list__actions">
                   <DqSwitch
                     :model-value="m.enabled"
-                    size="small"
+                    size="sm"
                     @update:model-value="(v: boolean) => handleToggleModel(m.name, v)"
                   />
                   <button

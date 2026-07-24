@@ -177,7 +177,7 @@ defineExpose({ refresh, totalCount })
 
       <div v-else class="changes-panel__list">
         <div class="changes-panel__filter">
-          <DqInput v-model="filterQuery" size="small" :placeholder="$t('sessions.filterChanges')" />
+          <DqInput v-model="filterQuery" size="sm" :placeholder="$t('sessions.filterChanges')" />
         </div>
         <template v-if="stagedChanges.length">
           <div class="changes-panel__group-label">{{ $t('sessions.changesStaged') }}</div>

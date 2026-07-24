@@ -219,7 +219,7 @@ const nameSummary = computed(() => {
   border-top: 1px solid color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
 }
 
-.tool-group__body :deep(.tool-card) {
+.tool-group__body :deep(.dq-tool-card) {
   border-radius: 8px;
   background: color-mix(in srgb, var(--dq-label-primary) 2.5%, transparent);
 }

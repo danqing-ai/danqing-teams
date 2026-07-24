@@ -456,7 +456,7 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
           <div class="resource-field__inline-meta">
             <span class="resource-field__label">{{ $t('teams.canDelegate') }}</span>
           </div>
-          <DqSwitch :model-value="agentForm.canDelegate" size="small" />
+          <DqSwitch :model-value="agentForm.canDelegate" size="sm" />
         </div>
       </section>
 
@@ -512,7 +512,7 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
               <span class="resource-list-card__desc">{{ tool.mcpServer ? `${tool.mcpServer} · ` : '' }}{{ tool.riskLevel || 'low' }}</span>
             </div>
             <div class="resource-list-card__actions">
-              <DqSelect v-model="tool.riskLevel" class="resource-list-card__risk-select" size="small">
+              <DqSelect v-model="tool.riskLevel" class="resource-list-card__risk-select" size="sm">
                 <DqOption value="low" label="Low" />
                 <DqOption value="medium" label="Medium" />
                 <DqOption value="high" label="High" />

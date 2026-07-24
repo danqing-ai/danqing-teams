@@ -26,8 +26,9 @@ export default defineConfig({
     dedupe: ['vue'],
   },
   optimizeDeps: {
-    include: ['reka-ui', '@danqing/dq-ui', '@danqing/dq-shell'],
-    exclude: ['@danqing/dq-tokens'],
+    // Linked file: packages — exclude so Vite loads fresh dist (avoids stale Dq* exports).
+    include: ['reka-ui'],
+    exclude: ['@danqing/dq-tokens', '@danqing/dq-ui', '@danqing/dq-shell'],
   },
   server: {
     port: Number(process.env.DQ_FRONTEND_PORT || 5801),

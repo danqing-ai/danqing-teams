@@ -1,0 +1,292 @@
+<script setup lang="ts">
+import { formatTokenCount } from '@/composables/useSessionContextUsage'
+import type { StreamTurn } from '@/composables/useStreamTurns'
+import UserMessageBlock from '@/components/center/UserMessageBlock.vue'
+
+const props = defineProps<{
+  turn: StreamTurn
+  turnIndex: number
+  collapsed: boolean
+  summary: {
+    toolCount: number
+    completedTools: number
+    errorTools: number
+    runningTools: number
+    tokensUsed: number
+  }
+  showDivider?: boolean
+}>()
+
+const emit = defineEmits<{
+  'toggle-collapse': []
+  download: []
+}>()
+
+function turnStatusLabel(status?: string) {
+  const map: Record<string, string> = {
+    running: '运行中',
+    completed: '已完成',
+    failed: '失败',
+    cancelled: '已取消',
+    timeout: '超时',
+  }
+  return status ? (map[status] ?? status) : ''
+}
+
+function turnStatusType(status?: string): 'info' | 'success' | 'danger' | 'warning' | 'neutral' {
+  if (status === 'running') return 'info'
+  if (status === 'completed') return 'success'
+  if (status === 'failed' || status === 'timeout') return 'danger'
+  if (status === 'cancelled') return 'warning'
+  return 'neutral'
+}
+
+const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
+</script>
+
+<template>
+  <section class="turn-section">
+    <div v-if="showDivider" class="turn-section__divider" />
+
+    <div class="turn-section__header" @click="emit('toggle-collapse')">
+      <div class="turn-section__header-left">
+        <button
+          type="button"
+          class="turn-section__collapse-btn"
+          :class="{ 'is-collapsed': collapsed }"
+          @click.stop="emit('toggle-collapse')"
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        <span class="turn-section__number">Turn #{{ turnIndex + 1 }}</span>
+        <DqTag v-if="turn.status" :type="turnStatusType(turn.status)" size="sm">
+          {{ turnStatusLabel(turn.status) }}
+        </DqTag>
+        <span v-if="summary.runningTools > 0" class="turn-section__live-dot" />
+      </div>
+
+      <div class="turn-section__header-right">
+        <div class="turn-section__summary-strip">
+          <template v-if="summary.toolCount > 0">
+            <span v-if="summary.completedTools > 0" class="turn-section__summary-item turn-section__summary-item--success">
+              ✓ {{ summary.completedTools }}
+            </span>
+            <span v-if="summary.errorTools > 0" class="turn-section__summary-item turn-section__summary-item--error">
+              ✗ {{ summary.errorTools }}
+            </span>
+            <span v-if="summary.runningTools > 0" class="turn-section__summary-item turn-section__summary-item--running">
+              ● {{ summary.runningTools }}
+            </span>
+          </template>
+          <span v-if="summary.tokensUsed > 0" class="turn-section__summary-item turn-section__summary-item--tokens">
+            {{ formatTokenCount(summary.tokensUsed) }} tokens
+          </span>
+        </div>
+        <button type="button" class="turn-section__download-btn" title="下载 Turn Log" @click.stop="emit('download')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div v-show="!collapsed" class="turn-section__body">
+      <UserMessageBlock
+        v-if="turn.userText || turn.userImages?.length"
+        :text="turn.userText"
+        :images="userImages()"
+      />
+
+      <div class="turn-section__agent">
+        <div class="turn-section__timeline">
+          <slot name="timeline" />
+        </div>
+      </div>
+    </div>
+  </section>
+</template>
+
+<style scoped>
+.turn-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 8px;
+}
+
+.turn-section__divider {
+  height: 1px;
+  border: none;
+  background: repeating-linear-gradient(
+    to right,
+    var(--dq-border) 0,
+    var(--dq-border) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+}
+
+.turn-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 0;
+  border-radius: 6px;
+  transition: background 0.12s ease;
+  user-select: none;
+}
+
+.turn-section__header:hover {
+  background: color-mix(in srgb, var(--dq-label-primary) 5%, transparent);
+}
+
+.turn-section__header-left,
+.turn-section__header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.turn-section__header-right {
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.turn-section__collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dq-label-tertiary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.2s ease, color 0.12s ease;
+}
+
+.turn-section__collapse-btn:hover {
+  color: var(--dq-label-primary);
+}
+
+.turn-section__collapse-btn.is-collapsed svg {
+  transform: rotate(-90deg);
+}
+
+.turn-section__live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dq-success);
+  flex-shrink: 0;
+  animation: turn-live-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes turn-live-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 color-mix(in srgb, var(--dq-success) 40%, transparent); }
+  50% { opacity: 0.6; box-shadow: 0 0 0 4px color-mix(in srgb, var(--dq-success) 0%, transparent); }
+}
+
+.turn-section__number {
+  font-size: var(--dq-font-size-caption);
+  font-weight: 600;
+  color: var(--dq-label-tertiary);
+  letter-spacing: 0.02em;
+}
+
+.turn-section__summary-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--dq-font-size-caption);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.turn-section__summary-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  line-height: 1.4;
+}
+
+.turn-section__summary-item--success {
+  color: var(--dq-success);
+  background: color-mix(in srgb, var(--dq-success) 14%, transparent);
+}
+
+.turn-section__summary-item--error {
+  color: var(--dq-danger);
+  background: color-mix(in srgb, var(--dq-danger) 14%, transparent);
+}
+
+.turn-section__summary-item--running {
+  color: var(--dq-accent);
+  background: color-mix(in srgb, var(--dq-accent) 14%, transparent);
+}
+
+.turn-section__summary-item--tokens {
+  color: var(--dq-label-secondary);
+  background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+}
+
+.turn-section__download-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dq-label-tertiary);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.turn-section__download-btn:hover {
+  background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+  color: var(--dq-label-primary);
+}
+
+.turn-section__body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.turn-section__agent {
+  display: flex;
+}
+
+.turn-section__timeline {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.turn-section__timeline :deep(.turn__event) {
+  display: flex;
+  align-items: stretch;
+}
+
+.turn-section__timeline :deep(.turn__event > *) {
+  flex: 1;
+  min-width: 0;
+}
+</style>

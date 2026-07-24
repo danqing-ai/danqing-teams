@@ -246,7 +246,8 @@ const userLabel = computed(() => t('navigation.userFallback'))
 const userInitial = computed(() => userLabel.value.slice(0, 1).toUpperCase())
 const userPlan = computed(() => 'DanQing')
 
-const resourcesCollapsed = ref(localStorage.getItem('app-resources-collapsed') === '1')
+/** Default collapsed so chats/projects stay primary; persist only after user toggles. */
+const resourcesCollapsed = ref(localStorage.getItem('app-resources-collapsed') !== '0')
 watch(resourcesCollapsed, (v) => localStorage.setItem('app-resources-collapsed', v ? '1' : '0'))
 
 const sidebarSearch = ref('')
@@ -338,6 +339,13 @@ watch(() => projects.projects.length, (len) => {
           <path d="M9 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
       </DqIconButton>
+      <div class="module-sidebar__strip-spacer" />
+      <DqIconButton :aria-label="$t('navigation.settings')" @click="navigate('settings')">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+      </DqIconButton>
     </div>
 
     <template v-else>
@@ -348,52 +356,8 @@ watch(() => projects.projects.length, (len) => {
             {{ $t('navigation.newSession') }}
           </DqButton>
 
-          <div class="module-sidebar__modules">
-            <button
-              type="button"
-              class="module-sidebar__section-toggle"
-              @click="resourcesCollapsed = !resourcesCollapsed"
-            >
-              <span>{{ $t('navigation.resources') }}</span>
-              <svg
-                viewBox="0 0 24 24"
-                width="14"
-                height="14"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                :style="{ transform: resourcesCollapsed ? 'rotate(-90deg)' : 'none' }"
-              >
-                <path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-            </button>
-            <nav v-show="!resourcesCollapsed" class="module-sidebar__menu" aria-label="模块导航">
-              <button
-                v-for="item in menuItems"
-                :key="item.module"
-                type="button"
-                class="module-sidebar__nav"
-                :class="{ 'is-active': props.activeModule === item.module }"
-                @click="navigate(item.module)"
-              >
-                <DqIcon :size="16">
-                  <component :is="item.icon" v-if="item.icon" />
-                  <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="3" width="7" height="7" rx="1.5" />
-                    <rect x="14" y="3" width="7" height="7" rx="1.5" />
-                    <rect x="3" y="14" width="7" height="7" rx="1.5" />
-                    <rect x="14" y="14" width="7" height="7" rx="1.5" />
-                  </svg>
-                </DqIcon>
-                <span>{{ item.label }}</span>
-              </button>
-            </nav>
-          </div>
-
-          <div class="module-sidebar__divider" />
-
           <div class="module-sidebar__search">
-            <DqInput v-model="sidebarSearch" size="small" :placeholder="$t('navigation.searchPlaceholder')" />
+            <DqInput v-model="sidebarSearch" size="sm" :placeholder="$t('navigation.searchPlaceholder')" />
           </div>
 
           <div class="module-sidebar__section">
@@ -474,7 +438,7 @@ watch(() => projects.projects.length, (len) => {
                   <template v-if="renamingProjectId === p.id">
                     <DqInput
                       v-model="renamingName"
-                      size="small"
+                      size="sm"
                       class="project-tree__rename-input"
                       @keydown.enter.prevent="confirmRenameProject(p.id)"
                       @keydown.escape.prevent="cancelRenameProject"
@@ -566,6 +530,50 @@ watch(() => projects.projects.length, (len) => {
               </div>
             </nav>
           </div>
+          <div class="module-sidebar__divider" />
+
+          <div class="module-sidebar__modules">
+            <button
+              type="button"
+              class="module-sidebar__section-toggle"
+              @click="resourcesCollapsed = !resourcesCollapsed"
+            >
+              <span>{{ $t('navigation.resources') }}</span>
+              <svg
+                viewBox="0 0 24 24"
+                width="14"
+                height="14"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                :style="{ transform: resourcesCollapsed ? 'rotate(-90deg)' : 'none' }"
+              >
+                <path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+            <nav v-show="!resourcesCollapsed" class="module-sidebar__menu" aria-label="模块导航">
+              <button
+                v-for="item in menuItems"
+                :key="item.module"
+                type="button"
+                class="module-sidebar__nav"
+                :class="{ 'is-active': props.activeModule === item.module }"
+                @click="navigate(item.module)"
+              >
+                <DqIcon :size="16">
+                  <component :is="item.icon" v-if="item.icon" />
+                  <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                    <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                    <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                    <rect x="14" y="14" width="7" height="7" rx="1.5" />
+                  </svg>
+                </DqIcon>
+                <span>{{ item.label }}</span>
+              </button>
+            </nav>
+          </div>
+
         </div>
 
         <footer class="module-sidebar__footer">
@@ -629,6 +637,11 @@ watch(() => projects.projects.length, (len) => {
   min-height: 0;
   padding: 10px 0;
   background: transparent;
+}
+
+.module-sidebar__strip-spacer {
+  flex: 1 1 auto;
+  min-height: 8px;
 }
 
 .module-sidebar__panel {
