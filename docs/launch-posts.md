@@ -12,7 +12,7 @@ Latest release: https://github.com/danqing-ai/danqing-teams/releases/latest
 
 核心区别：**纯 LLM 驱动**，同一思维链下多 Agent 委派协作。没有固化流程，把模型推理能力用满。
 
-一切皆工具，模型驱动一切——人也是工具（`ask_user`），人机共思。Tool Call 全量日志：可恢复、可回放、思维过程可视化。微信：一个账号关联多个项目，手机聊、桌面同步。
+一切皆工具，模型驱动一切——人也是工具（`ask_user`），人机共思。Tool Call 全量日志：可恢复、可回放、思维过程可视化。微信：一个微信账号可覆盖多个项目，手机聊、桌面同步。
 
 MIT，可自托管。https://github.com/danqing-ai/danqing-teams/releases/latest
 
@@ -27,7 +27,7 @@ MIT，可自托管。https://github.com/danqing-ai/danqing-teams/releases/latest
 - **同一思维链**上的 `delegate_agent`（硬隔离，只回 Report）
 - **一切皆工具**：子 Agent、`ask_user`、记忆、技能、MCP…
 - **Tool Call 日志化**：断点恢复、完整回放、超长任务、思维过程可视化
-- 微信通道：一个账号关联多个项目，手机聊、桌面同步
+- 微信通道：一个微信账号可覆盖多个项目；手机聊、桌面同步
 
 macOS / Windows / Linux，MIT。
 
@@ -42,7 +42,7 @@ https://github.com/danqing-ai/danqing-teams/releases/latest
 
 **DanQing Teams** — pure LLM-driven multi-agent work on one thinking chain.
 
-No fixed workflows. Everything is a Tool (incl. `delegate_agent` & `ask_user`). Tool calls are logged → resume, replay, visualize thinking through long-horizon tasks. WeChat: one account, multiple projects — phone chat, desktop sync.
+No fixed workflows. Everything is a Tool (incl. `delegate_agent` & `ask_user`). Tool calls are logged → resume, replay, visualize thinking through long-horizon tasks. WeChat: one WeChat account covers multiple projects — phone chat, desktop sync.
 
 MIT, self-hosted.
 

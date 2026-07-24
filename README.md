@@ -63,15 +63,15 @@ Chat with the same Agent Loop from IM — tools still run on your machine; Turn 
 
 | Channel | How it connects | Setup |
 |---------|-----------------|-------|
-| **WeChat** | Phone bot (iLink); scan QR in Settings | Settings → WeChat → bind **one account → one project** → enable |
-| **Feishu** | Outbound WebSocket (no public URL) | Open Platform → Bot + **long-connection** events → Settings → Feishu (App ID / Secret) |
-| **WeCom** | Outbound WebSocket AI Bot (`openws.work.weixin.qq.com`) | Admin → Smart Robot → **long connection** → Settings → WeCom (Bot ID / Secret) |
+| **WeChat** | Chat from your phone WeChat | One WeChat account can cover **multiple projects** (add links in Settings; each link maps to a project) |
+| **Feishu** | Outbound WebSocket (no public URL) | Open Platform → long-connection events → Settings → Feishu (App ID / Secret) |
+| **WeCom** | Outbound WebSocket (`openws.work.weixin.qq.com`) | Admin → Smart Robot long connection → Settings → WeCom (Bot ID / Secret) |
 
 | Desktop (WeChat-tagged session) | Phone (WeChat chat) |
 |---------------------------------|---------------------|
 | ![WeChat session in Teams](docs/screenshots/wx1.png) | ![DQ-Teams AI in WeChat](docs/screenshots/wx2.png) |
 
-**WeChat** — talk from your phone; each bot account maps to one business project; history syncs with the desktop.
+**WeChat** — use your everyday WeChat: open another chat for another project. History syncs with the desktop. Changing a link’s project does not move past conversations.
 
 **Feishu / WeCom** — intranet-friendly: the app dials out, so no callback URL or tunnel. Pick Agent, model, and project in Settings, then enable. WeCom sends a stream placeholder within ~5s, then replaces it with the final answer.
 
