@@ -12,7 +12,7 @@ General-purpose **AI Work Agent** (with coding capability). Built for **long-hor
 
 **Design:** everything is a Tool; the model drives everything. Sub-agents are Tools (`delegate_agent`). Humans join via `ask_user` tool — **co-thinking**.
 
-**Runtime:** every Tool Call is logged — **resume**, **replay**, and **visualize** the model’s thinking through ultra-long runs. Self-hosted. MIT. **Channels:** WeChat from your phone; **Feishu** via outbound WebSocket (no public URL) — same Agent Loop on your machine.
+**Runtime:** every Tool Call is logged — **resume**, **replay**, and **visualize** the model’s thinking through ultra-long runs. Self-hosted. MIT. **Channels:** WeChat, **Feishu**, and **WeCom** (outbound WebSocket, no public URL) — same Agent Loop on your machine.
 
 | Pillar | What it means |
 |--------|----------------|
@@ -57,23 +57,23 @@ In the built-in Browser, click a DOM element, write a short note, confirm into C
 - **Interactive demo** — step-by-step demo with playback controls
 - **Mini-game** — generate a playable page, then iterate via **element annotate** (above)
 
-### WeChat channel
+### Channels (WeChat · Feishu · WeCom)
 
-**One WeChat account, multiple projects.** Chat about different projects from your phone; each conversation stays in its project and syncs with the desktop.
+Chat with the same Agent Loop from IM — tools still run on your machine; Turn Log stays in Teams. Sessions are keyed by `(channel, account, peer)`, so binding multiple channels to one project does **not** mix conversations.
+
+| Channel | How it connects | Setup |
+|---------|-----------------|-------|
+| **WeChat** | Phone bot (iLink); scan QR in Settings | Settings → WeChat → bind **one account → one project** → enable |
+| **Feishu** | Outbound WebSocket (no public URL) | Open Platform → Bot + **long-connection** events → Settings → Feishu (App ID / Secret) |
+| **WeCom** | Outbound WebSocket AI Bot (`openws.work.weixin.qq.com`) | Admin → Smart Robot → **long connection** → Settings → WeCom (Bot ID / Secret) |
 
 | Desktop (WeChat-tagged session) | Phone (WeChat chat) |
 |---------------------------------|---------------------|
 | ![WeChat session in Teams](docs/screenshots/wx1.png) | ![DQ-Teams AI in WeChat](docs/screenshots/wx2.png) |
 
-Settings → WeChat → scan to connect. Same Agent Loop; tools run on your machine.
+**WeChat** — talk from your phone; each bot account maps to one business project; history syncs with the desktop.
 
-### Feishu channel
-
-**Talk to Teams from Feishu.** Outbound WebSocket long connection — works on a private network, no public callback URL or tunnel.
-
-Bind one Feishu app to a Teams project (Agent + model in Settings). On [Feishu Open Platform](https://open.feishu.cn/), enable the Bot and choose **Receive events via persistent connection**. Then: Settings → Feishu → App ID / Secret → enable.
-
-Same Agent Loop and Turn Log as desktop; tools still run on your machine. WeChat and Feishu can share the same project without conflicting sessions.
+**Feishu / WeCom** — intranet-friendly: the app dials out, so no callback URL or tunnel. Pick Agent, model, and project in Settings, then enable. WeCom sends a stream placeholder within ~5s, then replaces it with the final answer.
 
 ### Experts, skills & runtime
 

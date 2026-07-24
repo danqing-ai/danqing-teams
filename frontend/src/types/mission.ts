@@ -247,6 +247,15 @@ export interface ConfigFile {
       appId?: string
       projectId?: string
     }
+    wecom?: {
+      enabled: boolean
+      defaultAgentId?: string
+      defaultModelId?: string
+      autoApprove?: boolean
+      botId?: string
+      projectId?: string
+      wsUrl?: string
+    }
   }
 }
 

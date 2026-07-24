@@ -35,6 +35,7 @@ type Handler struct {
 	MCPServers    *service.MCPManager
 	Weixin        *service.WeixinBridge
 	Feishu        *service.FeishuBridge
+	Wecom         *service.WecomBridge
 	Channels      *service.ChannelManager
 	Sandbox       port.Sandbox
 	Browser       port.Browser
@@ -116,6 +117,8 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 
 	api.GET("/channels/feishu/status", feishuStatus(h))
 	api.PUT("/channels/feishu", feishuConfigure(h))
+	api.GET("/channels/wecom/status", wecomStatus(h))
+	api.PUT("/channels/wecom", wecomConfigure(h))
 	api.GET("/sandbox/status", getSandboxStatus(h))
 	api.GET("/browser/status", getBrowserStatus(h))
 	api.GET("/model-configs", getModelConfigs(h))

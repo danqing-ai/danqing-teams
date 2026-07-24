@@ -53,6 +53,7 @@ type Core struct {
 	MCPServers    *service.MCPManager
 	Weixin        *service.WeixinBridge
 	Feishu        *service.FeishuBridge
+	Wecom         *service.WecomBridge
 	Channels      *service.ChannelManager
 }
 
@@ -189,9 +190,11 @@ func New(cfg Config) *Core {
 
 	weixinPeer := service.NewWeixinPeerStore(st)
 	feishuPeer := service.NewFeishuPeerStore(st, configManager)
+	wecomPeer := service.NewWecomPeerStore(st, configManager)
 	peers := service.NewMultiplexPeerStore(map[port.ChannelType]port.ChannelPeerStore{
 		port.ChannelWeixin: weixinPeer,
 		port.ChannelFeishu: feishuPeer,
+		port.ChannelWecom:  wecomPeer,
 	})
 	defaults := service.NewConfigChannelDefaults(configManager)
 	ingress := service.NewChannelIngress(sessions, pm, peers, defaults)
@@ -203,6 +206,9 @@ func New(cfg Config) *Core {
 	feishuAdapter := feishu.NewAdapter(appCfg.Channels.Feishu)
 	feishuBridge := service.NewFeishuBridge(configManager, feishuAdapter, ingress)
 	channels.RegisterRuntime(feishuBridge)
+
+	wecomBridge := service.NewWecomBridge(configManager, ingress)
+	channels.RegisterRuntime(wecomBridge)
 
 	if err := channels.SyncAll(context.Background()); err != nil {
 		// Non-fatal: channels may be disabled or incomplete.
@@ -229,6 +235,7 @@ func New(cfg Config) *Core {
 		Weixin:        weixin,
 		Channels:      channels,
 		Feishu:        feishuBridge,
+		Wecom:         wecomBridge,
 	}
 }
 

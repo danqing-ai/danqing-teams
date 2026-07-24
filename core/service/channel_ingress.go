@@ -133,6 +133,8 @@ func channelDisplayName(t port.ChannelType) string {
 		return "微信"
 	case port.ChannelFeishu:
 		return "飞书"
+	case port.ChannelWecom:
+		return "企业微信"
 	default:
 		return string(t)
 	}

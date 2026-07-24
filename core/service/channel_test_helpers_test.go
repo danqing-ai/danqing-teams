@@ -10,6 +10,7 @@ func testIngress(st *sqlitestore.Store, sessions *service.SessionManager, pm *se
 	peers := service.NewMultiplexPeerStore(map[port.ChannelType]port.ChannelPeerStore{
 		port.ChannelWeixin: service.NewWeixinPeerStore(st),
 		port.ChannelFeishu: service.NewFeishuPeerStore(st, cm),
+		port.ChannelWecom:  service.NewWecomPeerStore(st, cm),
 	})
 	return service.NewChannelIngress(sessions, pm, peers, service.NewConfigChannelDefaults(cm))
 }

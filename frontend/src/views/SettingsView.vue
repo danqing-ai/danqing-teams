@@ -9,6 +9,7 @@ import { useMarketConfigStore } from '@/stores/marketConfig'
 import { useModelConfigStore } from '@/stores/modelLimits'
 import { useWeixinStore } from '@/stores/weixin'
 import { useFeishuStore } from '@/stores/feishu'
+import { useWecomStore } from '@/stores/wecom'
 import { useSessionsStore } from '@/stores/sessions'
 import { useProjectsStore } from '@/stores/projects'
 import { useThemeStore, THEME_OPTIONS } from '@/stores/theme'
@@ -19,7 +20,7 @@ import { useAppUpdater } from '@/composables/useAppUpdater'
 import { isTauriRuntime } from '@/utils/desktop'
 import type { LLMProviderType, LLMProviderConfig, LLMModelRef, LLMProviderPreset, SearchProvider, ModelConfig, ConfigMarketSection, MarketSourceConfig } from '@/types/mission'
 
-type SettingsTab = 'runtime' | 'models' | 'modelConfig' | 'search' | 'market' | 'weixin' | 'feishu' | 'appearance' | 'about'
+type SettingsTab = 'runtime' | 'models' | 'modelConfig' | 'search' | 'market' | 'weixin' | 'feishu' | 'wecom' | 'appearance' | 'about'
 
 const { t } = useI18n()
 const activeTab = ref<SettingsTab>('models')
@@ -30,6 +31,7 @@ const marketConfig = useMarketConfigStore()
 const modelConfig = useModelConfigStore()
 const weixin = useWeixinStore()
 const feishu = useFeishuStore()
+const wecom = useWecomStore()
 const sessions = useSessionsStore()
 const projects = useProjectsStore()
 const themeStore = useThemeStore()
@@ -52,6 +54,16 @@ const feishuForm = ref({
   domain: 'feishu' as 'feishu' | 'lark',
   appId: '',
   appSecret: '',
+  projectId: '',
+})
+const wecomForm = ref({
+  enabled: false,
+  defaultAgentId: '',
+  defaultModelId: '',
+  autoApprove: true,
+  botId: '',
+  secret: '',
+  wsUrl: '',
   projectId: '',
 })
 const {
@@ -234,6 +246,7 @@ onMounted(async () => {
     projects.loadProjects(),
     weixin.refreshStatus(),
     feishu.refreshStatus(),
+    wecom.refreshStatus(),
   ])
   if (!weixinLoginProjectId.value && projects.sortedProjects.length) {
     weixinLoginProjectId.value = projects.sortedProjects[0].id
@@ -285,6 +298,23 @@ onMounted(async () => {
     feishuForm.value.defaultAgentId = sessions.agents[0].id
     if (!feishuForm.value.projectId && projects.sortedProjects.length) {
       feishuForm.value.projectId = projects.sortedProjects[0].id
+    }
+  }
+  if (wecom.status) {
+    wecomForm.value = {
+      enabled: wecom.status.enabled,
+      defaultAgentId: wecom.status.defaultAgentId || sessions.agents[0]?.id || '',
+      defaultModelId: wecom.status.defaultModelId || '',
+      autoApprove: wecom.status.autoApprove !== false,
+      botId: wecom.status.botId || '',
+      secret: '',
+      wsUrl: wecom.status.wsUrl || '',
+      projectId: wecom.status.projectId || projects.sortedProjects[0]?.id || '',
+    }
+  } else if (sessions.agents.length) {
+    wecomForm.value.defaultAgentId = sessions.agents[0].id
+    if (!wecomForm.value.projectId && projects.sortedProjects.length) {
+      wecomForm.value.projectId = projects.sortedProjects[0].id
     }
   }
 })
@@ -347,6 +377,45 @@ async function handleSaveFeishu() {
     toast.success(t('settings.feishuSaved'))
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('settings.feishuSaveFailed'))
+  }
+}
+
+async function handleSaveWecom() {
+  if (wecomForm.value.enabled && !wecomForm.value.defaultAgentId) {
+    toast.warning(t('settings.wecomAgentRequired'))
+    return
+  }
+  if (wecomForm.value.enabled && !wecomForm.value.defaultModelId) {
+    toast.warning(t('settings.wecomModelRequired'))
+    return
+  }
+  if (wecomForm.value.enabled && !wecomForm.value.projectId) {
+    toast.warning(t('settings.wecomProjectRequired'))
+    return
+  }
+  if (wecomForm.value.enabled && !wecomForm.value.botId) {
+    toast.warning(t('settings.wecomBotRequired'))
+    return
+  }
+  if (wecomForm.value.enabled && !wecomForm.value.secret && !wecom.status?.hasSecret) {
+    toast.warning(t('settings.wecomSecretRequired'))
+    return
+  }
+  try {
+    await wecom.configure({
+      enabled: wecomForm.value.enabled,
+      defaultAgentId: wecomForm.value.defaultAgentId,
+      defaultModelId: wecomForm.value.defaultModelId,
+      autoApprove: wecomForm.value.autoApprove,
+      botId: wecomForm.value.botId || undefined,
+      secret: wecomForm.value.secret || undefined,
+      wsUrl: wecomForm.value.wsUrl || undefined,
+      projectId: wecomForm.value.projectId || undefined,
+    })
+    wecomForm.value.secret = ''
+    toast.success(t('settings.wecomSaved'))
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('settings.wecomSaveFailed'))
   }
 }
 
@@ -745,6 +814,7 @@ const menuItems = computed(() => [
   { id: 'runtime' as SettingsTab, label: t('settings.runtime'), icon: Setting },
   { id: 'weixin' as SettingsTab, label: t('settings.weixin'), icon: Monitor },
   { id: 'feishu' as SettingsTab, label: t('settings.feishu'), icon: Monitor },
+  { id: 'wecom' as SettingsTab, label: t('settings.wecom'), icon: Monitor },
   { id: 'market' as SettingsTab, label: t('settings.market'), icon: Search },
   { id: 'appearance' as SettingsTab, label: t('settings.appearance'), icon: Brush },
   { id: 'about' as SettingsTab, label: t('settings.about'), icon: Monitor },
@@ -784,7 +854,7 @@ const updaterStatusText = computed(() => {
 })
 
 const hasFooterActions = computed(() => {
-  return ['runtime', 'search', 'market', 'models', 'modelConfig', 'weixin', 'feishu'].includes(activeTab.value)
+  return ['runtime', 'search', 'market', 'models', 'modelConfig', 'weixin', 'feishu', 'wecom'].includes(activeTab.value)
 })
 </script>
 
@@ -1307,6 +1377,100 @@ const hasFooterActions = computed(() => {
         </div>
       </div>
 
+      <div v-else-if="activeTab === 'wecom'" class="settings-section">
+        <header class="settings-section__head">
+          <h2>{{ $t('settings.wecom') }}</h2>
+          <p>{{ $t('settings.wecomDesc') }}</p>
+        </header>
+
+        <div v-if="wecom.loading && !wecom.status" class="settings-empty settings-empty--skeleton">
+          <Skeleton variant="title" width="30%" />
+          <Skeleton variant="card" width="100%" />
+        </div>
+
+        <div v-else class="settings-form">
+          <div class="settings-form-group">
+            <h3 class="settings-form-group__title">{{ $t('settings.wecomChannel') }}</h3>
+            <p class="settings-form-group__desc">{{ $t('settings.wecomChannelDesc') }}</p>
+            <label class="settings-field settings-field--switch">
+              <span class="settings-field__label">{{ $t('settings.wecomEnable') }}</span>
+              <DqSwitch
+                :model-value="wecomForm.enabled"
+                size="small"
+                @update:model-value="(v: boolean) => wecomForm.enabled = v"
+              />
+            </label>
+            <div v-if="wecom.status" class="settings-sandbox-status">
+              <span class="settings-field__label">{{ $t('settings.wecomRunning') }}</span>
+              <span class="settings-sandbox-status__value">{{ wecom.status.running ? $t('common.yes') : $t('common.no') }}</span>
+            </div>
+            <div class="settings-field">
+              <span class="settings-field__label">{{ $t('settings.weixinDefaultAgent') }}</span>
+              <DqSelect v-model="wecomForm.defaultAgentId" :placeholder="$t('settings.weixinSelectAgent')">
+                <DqOption
+                  v-for="a in sessions.agents"
+                  :key="a.id"
+                  :value="a.id"
+                  :label="a.name || a.id"
+                />
+              </DqSelect>
+            </div>
+            <div class="settings-field">
+              <span class="settings-field__label">{{ $t('settings.weixinDefaultModel') }}</span>
+              <DqSelect v-model="wecomForm.defaultModelId" :placeholder="$t('settings.weixinSelectModel')">
+                <DqOption
+                  v-for="m in llm.models"
+                  :key="m.id"
+                  :value="m.id"
+                  :label="m.id"
+                />
+              </DqSelect>
+            </div>
+            <div class="settings-field">
+              <span class="settings-field__label">{{ $t('settings.wecomProject') }}</span>
+              <DqSelect v-model="wecomForm.projectId" :placeholder="$t('settings.weixinSelectProject')">
+                <DqOption
+                  v-for="p in projects.sortedProjects"
+                  :key="p.id"
+                  :value="p.id"
+                  :label="p.name"
+                />
+              </DqSelect>
+            </div>
+            <label class="settings-field settings-field--switch">
+              <span class="settings-field__label">{{ $t('settings.weixinAutoApprove') }}</span>
+              <DqSwitch
+                :model-value="wecomForm.autoApprove"
+                size="small"
+                @update:model-value="(v: boolean) => wecomForm.autoApprove = v"
+              />
+            </label>
+          </div>
+
+          <div class="settings-form-group">
+            <h3 class="settings-form-group__title">{{ $t('settings.wecomCredentials') }}</h3>
+            <p class="settings-form-group__desc">{{ $t('settings.wecomCredentialsDesc') }}</p>
+            <label class="settings-field">
+              <span class="settings-field__label">Bot ID</span>
+              <DqInput v-model="wecomForm.botId" placeholder="aibot_xxx" />
+            </label>
+            <label class="settings-field">
+              <span class="settings-field__label">Secret</span>
+              <DqInput
+                v-model="wecomForm.secret"
+                type="password"
+                :placeholder="wecom.status?.hasSecret ? $t('settings.wecomSecretKept') : ''"
+              />
+            </label>
+            <label class="settings-field">
+              <span class="settings-field__label">{{ $t('settings.wecomWsUrl') }}</span>
+              <DqInput v-model="wecomForm.wsUrl" :placeholder="$t('settings.wecomWsUrlPlaceholder')" />
+            </label>
+            <p class="settings-form-group__desc">{{ $t('settings.wecomWebsocketHint') }}</p>
+          </div>
+        </div>
+      </div>
+
       <div v-else-if="activeTab === 'models'" class="settings-section settings-section--wide">
         <header class="settings-section__head">
           <h2>{{ $t('settings.models') }}</h2>
@@ -1663,6 +1827,9 @@ const hasFooterActions = computed(() => {
           </DqButton>
           <DqButton v-else-if="activeTab === 'feishu'" type="primary" :disabled="feishu.saving" @click="handleSaveFeishu">
             {{ feishu.saving ? $t('common.saving') : $t('common.save_') }}
+          </DqButton>
+          <DqButton v-else-if="activeTab === 'wecom'" type="primary" :disabled="wecom.saving" @click="handleSaveWecom">
+            {{ wecom.saving ? $t('common.saving') : $t('common.save_') }}
           </DqButton>
           <DqButton v-else-if="activeTab === 'search'" type="primary" :disabled="searchConfig.saving" @click="handleSaveSearch">
             {{ searchConfig.saving ? $t('common.saving') : $t('common.save_') }}

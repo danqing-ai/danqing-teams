@@ -8,6 +8,21 @@ import (
 type ConfigChannelsSection struct {
 	Weixin ConfigWeixinChannel `json:"weixin" mapstructure:"weixin" yaml:"weixin"`
 	Feishu ConfigFeishuChannel `json:"feishu" mapstructure:"feishu" yaml:"feishu"`
+	Wecom  ConfigWecomChannel  `json:"wecom" mapstructure:"wecom" yaml:"wecom"`
+}
+
+// ConfigWecomChannel configures WeCom (企业微信) AI Bot via outbound WebSocket.
+type ConfigWecomChannel struct {
+	Enabled        bool   `json:"enabled" mapstructure:"enabled" yaml:"enabled"`
+	DefaultAgentID string `json:"defaultAgentId" mapstructure:"default_agent_id" yaml:"default_agent_id"`
+	DefaultModelID string `json:"defaultModelId" mapstructure:"default_model_id" yaml:"default_model_id"`
+	AutoApprove    bool   `json:"autoApprove" mapstructure:"auto_approve" yaml:"auto_approve"`
+	BotID          string `json:"botId" mapstructure:"bot_id" yaml:"bot_id"`
+	Secret         string `json:"secret,omitempty" mapstructure:"secret" yaml:"secret,omitempty"`
+	// WSURL overrides the default wss://openws.work.weixin.qq.com (private deploy).
+	WSURL string `json:"wsUrl,omitempty" mapstructure:"ws_url" yaml:"ws_url,omitempty"`
+	// ProjectID binds inbound WeCom peers to one Teams project.
+	ProjectID string `json:"projectId,omitempty" mapstructure:"project_id" yaml:"project_id,omitempty"`
 }
 
 // ConfigFeishuChannel configures the Feishu (Lark) channel via outbound WebSocket.

@@ -38,6 +38,7 @@ func main() {
 		MCPServers: core.MCPServers,
 		Weixin:     core.Weixin,
 		Feishu:     core.Feishu,
+		Wecom:      core.Wecom,
 		Channels:   core.Channels,
 		Sandbox:    core.Sandbox,
 		Browser:    core.Browser,

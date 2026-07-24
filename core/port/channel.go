@@ -10,6 +10,7 @@ type ChannelType string
 const (
 	ChannelWeixin ChannelType = "weixin"
 	ChannelFeishu ChannelType = "feishu"
+	ChannelWecom  ChannelType = "wecom"
 )
 
 // InboundMessage is the normalized inbound chat message (WeKnora-style).
