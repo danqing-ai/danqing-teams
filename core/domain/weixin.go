@@ -1,10 +1,27 @@
 package domain
 
-import "time"
+import (
+	"time"
+)
 
 // ConfigChannelsSection holds external chat channel settings.
 type ConfigChannelsSection struct {
 	Weixin ConfigWeixinChannel `json:"weixin" mapstructure:"weixin" yaml:"weixin"`
+	Feishu ConfigFeishuChannel `json:"feishu" mapstructure:"feishu" yaml:"feishu"`
+}
+
+// ConfigFeishuChannel configures the Feishu (Lark) channel via outbound WebSocket.
+type ConfigFeishuChannel struct {
+	Enabled        bool   `json:"enabled" mapstructure:"enabled" yaml:"enabled"`
+	DefaultAgentID string `json:"defaultAgentId" mapstructure:"default_agent_id" yaml:"default_agent_id"`
+	DefaultModelID string `json:"defaultModelId" mapstructure:"default_model_id" yaml:"default_model_id"`
+	AutoApprove    bool   `json:"autoApprove" mapstructure:"auto_approve" yaml:"auto_approve"`
+	AppID          string `json:"appId" mapstructure:"app_id" yaml:"app_id"`
+	AppSecret      string `json:"appSecret,omitempty" mapstructure:"app_secret" yaml:"app_secret,omitempty"`
+	// Domain: "feishu" (default) or "lark" for international.
+	Domain string `json:"domain,omitempty" mapstructure:"domain" yaml:"domain,omitempty"`
+	// ProjectID binds inbound Feishu peers to one Teams project.
+	ProjectID string `json:"projectId,omitempty" mapstructure:"project_id" yaml:"project_id,omitempty"`
 }
 
 // ConfigWeixinChannel configures the Weixin iLink bridge.
@@ -67,4 +84,16 @@ type WeixinStatus struct {
 	AutoApprove    bool            `json:"autoApprove"`
 	Accounts       []WeixinAccount `json:"accounts"`
 	BindingCount   int             `json:"bindingCount"`
+}
+
+// ChannelBinding is a generic peer→session map for IM channels (Feishu, …).
+type ChannelBinding struct {
+	ID          string            `json:"id"`
+	ChannelType string            `json:"channelType"`
+	AccountID   string            `json:"accountId"`
+	PeerID      string            `json:"peerId"`
+	SessionID   string            `json:"sessionId"`
+	Meta        map[string]string `json:"meta,omitempty"`
+	CreatedAt   time.Time         `json:"createdAt"`
+	UpdatedAt   time.Time         `json:"updatedAt"`
 }

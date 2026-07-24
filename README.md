@@ -12,7 +12,7 @@ General-purpose **AI Work Agent** (with coding capability). Built for **long-hor
 
 **Design:** everything is a Tool; the model drives everything. Sub-agents are Tools (`delegate_agent`). Humans join via `ask_user` tool — **co-thinking**.
 
-**Runtime:** every Tool Call is logged — **resume**, **replay**, and **visualize** the model’s thinking through ultra-long runs. Self-hosted. MIT. **WeChat:** one account, multiple projects — chat from your phone, same history on desktop.
+**Runtime:** every Tool Call is logged — **resume**, **replay**, and **visualize** the model’s thinking through ultra-long runs. Self-hosted. MIT. **Channels:** WeChat from your phone; **Feishu** via outbound WebSocket (no public URL) — same Agent Loop on your machine.
 
 | Pillar | What it means |
 |--------|----------------|
@@ -66,6 +66,14 @@ In the built-in Browser, click a DOM element, write a short note, confirm into C
 | ![WeChat session in Teams](docs/screenshots/wx1.png) | ![DQ-Teams AI in WeChat](docs/screenshots/wx2.png) |
 
 Settings → WeChat → scan to connect. Same Agent Loop; tools run on your machine.
+
+### Feishu channel
+
+**Talk to Teams from Feishu.** Outbound WebSocket long connection — works on a private network, no public callback URL or tunnel.
+
+Bind one Feishu app to a Teams project (Agent + model in Settings). On [Feishu Open Platform](https://open.feishu.cn/), enable the Bot and choose **Receive events via persistent connection**. Then: Settings → Feishu → App ID / Secret → enable.
+
+Same Agent Loop and Turn Log as desktop; tools still run on your machine. WeChat and Feishu can share the same project without conflicting sessions.
 
 ### Experts, skills & runtime
 

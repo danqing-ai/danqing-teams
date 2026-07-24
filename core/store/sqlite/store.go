@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -62,6 +63,7 @@ func (s *Store) migrate() error {
 		&mcpServerModel{},
 		&weixinAccountModel{},
 		&weixinBindingModel{},
+		&channelBindingModel{},
 	); err != nil {
 		return err
 	}
@@ -116,6 +118,7 @@ func (s *Store) MCPServers() port.MCPServerRepo     { return &mcpServerRepo{s} }
 func (s *Store) Memories() port.MemoryRepo          { return &memoryRepo{s} }
 func (s *Store) WeixinAccounts() port.WeixinAccountRepo { return &weixinAccountRepo{s} }
 func (s *Store) WeixinBindings() port.WeixinBindingRepo { return &weixinBindingRepo{s} }
+func (s *Store) ChannelBindings() port.ChannelBindingRepo { return &channelBindingRepo{s} }
 func (s *Store) AppMeta() port.AppMetaRepo              { return &appMetaRepo{s} }
 
 func (s *Store) KnowledgeDocs() []KnowledgeDoc {
@@ -828,3 +831,60 @@ func (r *weixinBindingRepo) Count(ctx context.Context) (int, error) {
 func (r *weixinBindingRepo) DeleteByAccount(ctx context.Context, accountID string) error {
 	return r.s.db.WithContext(ctx).Delete(&weixinBindingModel{}, "account_id = ?", accountID).Error
 }
+
+type channelBindingRepo struct{ s *Store }
+
+func (r *channelBindingRepo) GetByPeer(ctx context.Context, channelType, accountID, peerID string) (domain.ChannelBinding, error) {
+	var m channelBindingModel
+	err := r.s.db.WithContext(ctx).
+		Where("channel_type = ? AND account_id = ? AND peer_id = ?", channelType, accountID, peerID).
+		First(&m).Error
+	if err != nil {
+		return domain.ChannelBinding{}, err
+	}
+	return channelBindingToDomain(m), nil
+}
+
+func (r *channelBindingRepo) Upsert(ctx context.Context, b domain.ChannelBinding) error {
+	now := time.Now().UTC()
+	if b.ID == "" {
+		b.ID = fmt.Sprintf("chbind-%d", time.Now().UnixNano())
+	}
+	if b.CreatedAt.IsZero() {
+		b.CreatedAt = now
+	}
+	b.UpdatedAt = now
+	metaJSON, _ := json.Marshal(b.Meta)
+	m := channelBindingModel{
+		ID: b.ID, ChannelType: b.ChannelType, AccountID: b.AccountID, PeerID: b.PeerID,
+		SessionID: b.SessionID, MetaJSON: string(metaJSON),
+		CreatedAt: b.CreatedAt, UpdatedAt: b.UpdatedAt,
+	}
+	var existing channelBindingModel
+	err := r.s.db.WithContext(ctx).
+		Where("channel_type = ? AND account_id = ? AND peer_id = ?", b.ChannelType, b.AccountID, b.PeerID).
+		First(&existing).Error
+	if err == nil {
+		m.ID = existing.ID
+		m.CreatedAt = existing.CreatedAt
+		return r.s.db.WithContext(ctx).Save(&m).Error
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	return r.s.db.WithContext(ctx).Create(&m).Error
+}
+
+func (r *channelBindingRepo) UpdateMeta(ctx context.Context, channelType, accountID, peerID string, meta map[string]string) error {
+	metaJSON, _ := json.Marshal(meta)
+	return r.s.db.WithContext(ctx).Model(&channelBindingModel{}).
+		Where("channel_type = ? AND account_id = ? AND peer_id = ?", channelType, accountID, peerID).
+		Updates(map[string]any{"meta_json": string(metaJSON), "updated_at": time.Now().UTC()}).Error
+}
+
+func (r *channelBindingRepo) DeleteByAccount(ctx context.Context, channelType, accountID string) error {
+	return r.s.db.WithContext(ctx).
+		Where("channel_type = ? AND account_id = ?", channelType, accountID).
+		Delete(&channelBindingModel{}).Error
+}
+

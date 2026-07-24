@@ -3,8 +3,6 @@ package service
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -16,10 +14,7 @@ import (
 	"danqing-teams/core/port"
 
 	qrcode "github.com/skip2/go-qrcode"
-	"gorm.io/gorm"
 )
-
-const weixinBusyReply = "上一条消息还在处理中，请稍后再试。"
 
 type WeixinBridge struct {
 	client   *ilink.Client
@@ -27,6 +22,7 @@ type WeixinBridge struct {
 	sessions *SessionManager
 	projects *ProjectManager
 	config   *ConfigManager
+	ingress  port.ChannelIngress
 
 	mu       sync.Mutex
 	running  bool
@@ -45,16 +41,19 @@ type weixinLoginSession struct {
 	BaseURL    string
 }
 
-func NewWeixinBridge(store port.Repository, sessions *SessionManager, projects *ProjectManager, config *ConfigManager) *WeixinBridge {
+func NewWeixinBridge(store port.Repository, sessions *SessionManager, projects *ProjectManager, config *ConfigManager, ingress port.ChannelIngress) *WeixinBridge {
 	return &WeixinBridge{
 		client:   ilink.NewClient(),
 		store:    store,
 		sessions: sessions,
 		projects: projects,
 		config:   config,
+		ingress:  ingress,
 		logins:   make(map[string]*weixinLoginSession),
 	}
 }
+
+func (b *WeixinBridge) Type() port.ChannelType { return port.ChannelWeixin }
 
 // SetClient replaces the iLink HTTP client (tests).
 func (b *WeixinBridge) SetClient(c *ilink.Client) {
@@ -190,12 +189,6 @@ func (b *WeixinBridge) Stop() {
 	log.Printf("[weixin] bridge stopped")
 }
 
-func (b *WeixinBridge) channelCfg() domain.ConfigWeixinChannel {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.cfgCache
-}
-
 func (b *WeixinBridge) refreshCfg(ctx context.Context) {
 	if cfg, err := b.loadChannelCfg(ctx); err == nil {
 		b.mu.Lock()
@@ -282,10 +275,21 @@ func (b *WeixinBridge) monitorAccount(ctx context.Context, acc domain.WeixinAcco
 				_ = b.client.SendText(ctx, ilAcc, peer, "暂时只支持文本消息。", msg.ContextToken, "")
 				continue
 			}
+			meta := map[string]string{}
 			if msg.ContextToken != "" {
+				meta["context_token"] = msg.ContextToken
 				_ = b.store.WeixinBindings().UpdateContextToken(ctx, acc.AccountID, peer, msg.ContextToken)
 			}
-			reply, err := b.handleInbound(ctx, acc, peer, text, msg.ContextToken)
+			inbound := port.InboundMessage{
+				Type:      port.ChannelWeixin,
+				AccountID: acc.AccountID,
+				PeerID:    peer,
+				ChatID:    peer,
+				Text:      text,
+				MessageID: fmt.Sprintf("%v", msg.MessageID),
+				Meta:      meta,
+			}
+			reply, err := b.ingress.HandleInbound(ctx, inbound)
 			if err != nil {
 				log.Printf("[weixin] handle inbound peer=%s: %v", peer, err)
 				reply = "处理消息时出错：" + err.Error()
@@ -304,107 +308,6 @@ func (b *WeixinBridge) monitorAccount(ctx context.Context, acc domain.WeixinAcco
 	}
 }
 
-func (b *WeixinBridge) sessionHasRunningTurn(sessionID string) bool {
-	for _, t := range b.sessions.ListTurns(sessionID) {
-		if t.Status == domain.TurnRunning {
-			return true
-		}
-	}
-	return false
-}
-
-func (b *WeixinBridge) handleInbound(ctx context.Context, acc domain.WeixinAccount, peer, text, contextToken string) (string, error) {
-	// Reload account so project rebind/unbind takes effect without restart.
-	if fresh, err := b.store.WeixinAccounts().Get(ctx, acc.AccountID); err == nil {
-		acc = fresh
-	}
-	projectID := strings.TrimSpace(acc.ProjectID)
-	if projectID == "" {
-		return "请先在 Teams 设置 → 微信 中为该账号绑定一个项目。", nil
-	}
-	if _, err := b.projects.Get(ctx, projectID); err != nil {
-		return "绑定的项目不存在或已删除，请在设置 → 微信 中重新绑定项目。", nil
-	}
-
-	cfg := b.channelCfg()
-	if cfg.DefaultAgentID == "" {
-		return "", fmt.Errorf("未配置默认 Agent，请在设置中选择")
-	}
-	modelID := strings.TrimSpace(cfg.DefaultModelID)
-	if modelID == "" || !strings.Contains(modelID, "/") {
-		return "", fmt.Errorf("未配置默认模型，请在设置 → 微信中选择模型（格式 provider/model）")
-	}
-
-	binding, err := b.store.WeixinBindings().GetByPeer(ctx, acc.AccountID, peer)
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return "", err
-	}
-
-	var sessionID string
-	if errors.Is(err, gorm.ErrRecordNotFound) || binding.SessionID == "" {
-		s, cerr := b.sessions.Create(ctx, domain.CreateSessionRequest{
-			Content:       text,
-			AgentID:       cfg.DefaultAgentID,
-			ProjectID:     projectID,
-			ModelID:       modelID,
-			Title:         weixinSessionTitle(text),
-			SkipAutoTitle: true,
-		})
-		if cerr != nil {
-			return "", cerr
-		}
-		sessionID = s.ID
-		binding = domain.WeixinBinding{
-			AccountID:    acc.AccountID,
-			PeerUserID:   peer,
-			SessionID:    sessionID,
-			ContextToken: contextToken,
-		}
-		if uerr := b.store.WeixinBindings().Upsert(ctx, binding); uerr != nil {
-			return "", uerr
-		}
-		ch := b.sessions.Subscribe(sessionID)
-		defer b.sessions.Unsubscribe(sessionID, ch)
-		turnID := b.waitLatestTurnID(sessionID, 2*time.Second)
-		return b.collectReplyFrom(ctx, sessionID, ch, turnID, cfg.AutoApprove), nil
-	}
-
-	sessionID = binding.SessionID
-	if contextToken != "" && contextToken != binding.ContextToken {
-		_ = b.store.WeixinBindings().UpdateContextToken(ctx, acc.AccountID, peer, contextToken)
-	}
-	if b.sessionHasRunningTurn(sessionID) {
-		return weixinBusyReply, nil
-	}
-	if s, gerr := b.sessions.Get(ctx, sessionID); gerr == nil && strings.TrimSpace(s.ModelID) == "" {
-		_, _ = b.sessions.Update(ctx, sessionID, domain.UpdateSessionRequest{ModelID: &modelID})
-	}
-	ch := b.sessions.Subscribe(sessionID)
-	defer b.sessions.Unsubscribe(sessionID, ch)
-	turnID, serr := b.sessions.StartTurn(ctx, sessionID, domain.SendMessageRequest{
-		UserInput: text,
-		AgentID:   cfg.DefaultAgentID,
-		ModelID:   modelID,
-	})
-	if serr != nil {
-		return "", serr
-	}
-	return b.collectReplyFrom(ctx, sessionID, ch, turnID, cfg.AutoApprove), nil
-}
-
-func weixinSessionTitle(text string) string {
-	title := strings.Join(strings.Fields(strings.TrimSpace(text)), " ")
-	if title == "" {
-		return "微信会话"
-	}
-	// Rune-aware truncate for CJK titles.
-	runes := []rune(title)
-	if len(runes) > 24 {
-		return string(runes[:24]) + "…"
-	}
-	return title
-}
-
 // activateAfterLogin restarts monitors when the channel is already fully configured.
 func (b *WeixinBridge) activateAfterLogin(ctx context.Context) string {
 	cfg, err := b.config.Get(ctx)
@@ -419,83 +322,6 @@ func (b *WeixinBridge) activateAfterLogin(ctx context.Context) string {
 		return ""
 	}
 	return "已添加微信账号。请在设置 → 微信中选择默认 Agent 与模型并启用通道。"
-}
-
-func (b *WeixinBridge) waitLatestTurnID(sessionID string, wait time.Duration) string {
-	deadline := time.Now().Add(wait)
-	for time.Now().Before(deadline) {
-		turns := b.sessions.ListTurns(sessionID)
-		if len(turns) > 0 {
-			return turns[len(turns)-1].ID
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	return ""
-}
-
-func (b *WeixinBridge) applyEvent(ev domain.StreamEvent, turnID string, autoApprove bool, parts *[]string) (done bool) {
-	if turnID != "" && ev.TurnID != "" && ev.TurnID != turnID {
-		return false
-	}
-	switch ev.Type {
-	case domain.EventAgentMessage:
-		var p domain.AgentMessagePayload
-		if json.Unmarshal(ev.Payload, &p) == nil && strings.TrimSpace(p.Text) != "" {
-			*parts = append(*parts, strings.TrimSpace(p.Text))
-		}
-	case domain.EventPermissionAsk:
-		if autoApprove {
-			var p domain.PermissionAskPayload
-			if json.Unmarshal(ev.Payload, &p) == nil && p.ApprovalID != "" {
-				_ = b.sessions.DecideApproval(context.Background(), p.ApprovalID, true, "once")
-			}
-		}
-	case domain.EventAskUserPending:
-		var p domain.AskUserPayload
-		if json.Unmarshal(ev.Payload, &p) == nil && p.AskID != "" {
-			_ = b.sessions.ResolveAskUser(p.AskID, "（微信通道暂不支持交互提问，请在桌面端继续）")
-		}
-	case domain.EventTurnEnded, domain.EventTurnFailed, domain.EventError, domain.EventSessionCompleted:
-		return true
-	}
-	return false
-}
-
-func (b *WeixinBridge) collectReplyFrom(ctx context.Context, sessionID string, ch <-chan domain.StreamEvent, turnID string, autoApprove bool) string {
-	var parts []string
-	// Backfill events published before subscribe (esp. first Create turn).
-	for _, ev := range b.sessions.StreamEvents(sessionID, 0) {
-		if b.applyEvent(ev, turnID, autoApprove, &parts) {
-			return strings.Join(parts, "\n")
-		}
-	}
-	deadline := time.After(10 * time.Minute)
-	seen := make(map[int64]struct{})
-	for _, ev := range b.sessions.StreamEvents(sessionID, 0) {
-		seen[ev.Seq] = struct{}{}
-	}
-	for {
-		select {
-		case <-ctx.Done():
-			return strings.Join(parts, "\n")
-		case <-deadline:
-			if len(parts) == 0 {
-				return "处理超时，请稍后在桌面端查看。"
-			}
-			return strings.Join(parts, "\n")
-		case ev, ok := <-ch:
-			if !ok {
-				return strings.Join(parts, "\n")
-			}
-			if _, dup := seen[ev.Seq]; dup {
-				continue
-			}
-			seen[ev.Seq] = struct{}{}
-			if b.applyEvent(ev, turnID, autoApprove, &parts) {
-				return strings.Join(parts, "\n")
-			}
-		}
-	}
 }
 
 // --- Login API helpers ---

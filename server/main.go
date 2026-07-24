@@ -37,6 +37,8 @@ func main() {
 		TurnLogs:   core.TurnLogs,
 		MCPServers: core.MCPServers,
 		Weixin:     core.Weixin,
+		Feishu:     core.Feishu,
+		Channels:   core.Channels,
 		Sandbox:    core.Sandbox,
 		Browser:    core.Browser,
 		Store:      core.Store,

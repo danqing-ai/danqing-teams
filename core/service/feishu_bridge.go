@@ -1,0 +1,215 @@
+package service
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"strings"
+	"sync"
+	"time"
+
+	"danqing-teams/core/adapter/feishu"
+	"danqing-teams/core/domain"
+	"danqing-teams/core/port"
+)
+
+// FeishuPeerStore uses config project_id + generic channel_bindings table.
+type FeishuPeerStore struct {
+	store  port.Repository
+	config *ConfigManager
+}
+
+func NewFeishuPeerStore(store port.Repository, config *ConfigManager) *FeishuPeerStore {
+	return &FeishuPeerStore{store: store, config: config}
+}
+
+func (s *FeishuPeerStore) GetProjectID(ctx context.Context, channel port.ChannelType, accountID string) (string, error) {
+	if channel != port.ChannelFeishu {
+		return "", fmt.Errorf("feishu peer store: unsupported channel %s", channel)
+	}
+	cfg, err := s.config.Get(ctx)
+	if err != nil {
+		return "", err
+	}
+	return cfg.Channels.Feishu.ProjectID, nil
+}
+
+func (s *FeishuPeerStore) GetBinding(ctx context.Context, channel port.ChannelType, accountID, peerID string) (string, map[string]string, error) {
+	b, err := s.store.ChannelBindings().GetByPeer(ctx, string(channel), accountID, peerID)
+	if err != nil {
+		return "", nil, err
+	}
+	return b.SessionID, b.Meta, nil
+}
+
+func (s *FeishuPeerStore) UpsertBinding(ctx context.Context, channel port.ChannelType, accountID, peerID, sessionID string, meta map[string]string) error {
+	return s.store.ChannelBindings().Upsert(ctx, domain.ChannelBinding{
+		ChannelType: string(channel),
+		AccountID:   accountID,
+		PeerID:      peerID,
+		SessionID:   sessionID,
+		Meta:        meta,
+	})
+}
+
+func (s *FeishuPeerStore) UpdateBindingMeta(ctx context.Context, channel port.ChannelType, accountID, peerID string, meta map[string]string) error {
+	return s.store.ChannelBindings().UpdateMeta(ctx, string(channel), accountID, peerID, meta)
+}
+
+// FeishuBridge runs Feishu outbound WebSocket and routes messages through ChannelIngress.
+type FeishuBridge struct {
+	config  *ConfigManager
+	adapter *feishu.Adapter
+	ingress port.ChannelIngress
+
+	mu      sync.Mutex
+	running bool
+	cancel  context.CancelFunc
+	wg      sync.WaitGroup
+}
+
+func NewFeishuBridge(config *ConfigManager, adapter *feishu.Adapter, ingress port.ChannelIngress) *FeishuBridge {
+	return &FeishuBridge{config: config, adapter: adapter, ingress: ingress}
+}
+
+func (b *FeishuBridge) Type() port.ChannelType { return port.ChannelFeishu }
+
+func (b *FeishuBridge) Adapter() *feishu.Adapter { return b.adapter }
+
+func (b *FeishuBridge) SyncFromConfig(ctx context.Context) error {
+	cfg, err := b.config.Get(ctx)
+	if err != nil {
+		return err
+	}
+	fs := cfg.Channels.Feishu
+	b.adapter.UpdateConfig(fs)
+	if !fs.Enabled {
+		b.Stop()
+		return nil
+	}
+	if err := validateFeishuEnabled(fs); err != nil {
+		b.Stop()
+		return err
+	}
+	b.Stop()
+	return b.Start(ctx)
+}
+
+func validateFeishuEnabled(fs domain.ConfigFeishuChannel) error {
+	if fs.DefaultAgentID == "" {
+		return fmt.Errorf("channels.feishu.default_agent_id required when enabled")
+	}
+	if strings.TrimSpace(fs.DefaultModelID) == "" || !strings.Contains(fs.DefaultModelID, "/") {
+		return fmt.Errorf("channels.feishu.default_model_id required when enabled (provider/model)")
+	}
+	if strings.TrimSpace(fs.ProjectID) == "" {
+		return fmt.Errorf("channels.feishu.project_id required when enabled")
+	}
+	if fs.AppID == "" || fs.AppSecret == "" {
+		return fmt.Errorf("channels.feishu.app_id/app_secret required when enabled")
+	}
+	return nil
+}
+
+func (b *FeishuBridge) Start(ctx context.Context) error {
+	b.mu.Lock()
+	if b.running {
+		b.mu.Unlock()
+		return nil
+	}
+	cfg, err := b.config.Get(ctx)
+	if err != nil {
+		b.mu.Unlock()
+		return err
+	}
+	fs := cfg.Channels.Feishu
+	runCtx, cancel := context.WithCancel(context.Background())
+	b.cancel = cancel
+	b.running = true
+	b.mu.Unlock()
+
+	b.wg.Add(1)
+	go func() {
+		defer b.wg.Done()
+		b.runWSLoop(runCtx, fs)
+	}()
+	log.Printf("[feishu] websocket bridge started app=%s", fs.AppID)
+	return nil
+}
+
+func (b *FeishuBridge) runWSLoop(ctx context.Context, fs domain.ConfigFeishuChannel) {
+	backoff := time.Second
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		lc := feishu.NewLongConn(fs, b.handleInbound)
+		err := lc.Run(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		if err != nil {
+			log.Printf("[feishu] websocket exited: %v; reconnect in %s", err, backoff)
+		} else {
+			log.Printf("[feishu] websocket exited; reconnect in %s", backoff)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
+		}
+		if backoff < 30*time.Second {
+			backoff *= 2
+			if backoff > 30*time.Second {
+				backoff = 30 * time.Second
+			}
+		}
+		if cfg, err := b.config.Get(ctx); err == nil {
+			fs = cfg.Channels.Feishu
+			b.adapter.UpdateConfig(fs)
+			if !fs.Enabled {
+				return
+			}
+		}
+	}
+}
+
+func (b *FeishuBridge) handleInbound(ctx context.Context, msg port.InboundMessage) error {
+	if b.ingress == nil {
+		return fmt.Errorf("feishu ingress not configured")
+	}
+	reply, err := b.ingress.HandleInbound(ctx, msg)
+	if err != nil {
+		log.Printf("[feishu] handle inbound peer=%s: %v", msg.PeerID, err)
+		reply = "处理消息时出错：" + err.Error()
+	}
+	if strings.TrimSpace(reply) == "" {
+		return nil
+	}
+	if serr := b.adapter.SendReply(ctx, &msg, port.OutboundReply{Content: reply}); serr != nil {
+		log.Printf("[feishu] send reply peer=%s: %v", msg.PeerID, serr)
+		return serr
+	}
+	return nil
+}
+
+func (b *FeishuBridge) Stop() {
+	b.mu.Lock()
+	if !b.running {
+		b.mu.Unlock()
+		return
+	}
+	if b.cancel != nil {
+		b.cancel()
+	}
+	b.running = false
+	b.mu.Unlock()
+	b.wg.Wait()
+	log.Printf("[feishu] websocket bridge stopped")
+}
+
+func (b *FeishuBridge) IsRunning() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.running
+}

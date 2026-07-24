@@ -470,3 +470,31 @@ func weixinBindingToDomain(m weixinBindingModel) domain.WeixinBinding {
 	}
 }
 
+// ---- Generic channel bindings (Feishu, …) ----
+
+type channelBindingModel struct {
+	ID          string    `gorm:"primaryKey"`
+	ChannelType string    `gorm:"column:channel_type;uniqueIndex:idx_channel_peer"`
+	AccountID   string    `gorm:"column:account_id;uniqueIndex:idx_channel_peer"`
+	PeerID      string    `gorm:"column:peer_id;uniqueIndex:idx_channel_peer"`
+	SessionID   string    `gorm:"column:session_id;index"`
+	MetaJSON    string    `gorm:"column:meta_json;type:text"`
+	CreatedAt   time.Time `gorm:"column:created_at"`
+	UpdatedAt   time.Time `gorm:"column:updated_at"`
+}
+
+func (channelBindingModel) TableName() string { return "channel_bindings" }
+
+func channelBindingToDomain(m channelBindingModel) domain.ChannelBinding {
+	return domain.ChannelBinding{
+		ID:          m.ID,
+		ChannelType: m.ChannelType,
+		AccountID:   m.AccountID,
+		PeerID:      m.PeerID,
+		SessionID:   m.SessionID,
+		Meta:        unmarshalMap(m.MetaJSON),
+		CreatedAt:   m.CreatedAt,
+		UpdatedAt:   m.UpdatedAt,
+	}
+}
+

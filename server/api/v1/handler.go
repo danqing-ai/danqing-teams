@@ -34,6 +34,8 @@ type Handler struct {
 	TurnLogs      *service.TurnLogManager
 	MCPServers    *service.MCPManager
 	Weixin        *service.WeixinBridge
+	Feishu        *service.FeishuBridge
+	Channels      *service.ChannelManager
 	Sandbox       port.Sandbox
 	Browser       port.Browser
 	Store         port.Repository
@@ -111,6 +113,9 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.POST("/channels/weixin/logout", weixinLogout(h))
 	api.PUT("/channels/weixin/accounts/:id", weixinUpdateAccount(h))
 	api.GET("/channels/weixin/bindings", weixinBindings(h))
+
+	api.GET("/channels/feishu/status", feishuStatus(h))
+	api.PUT("/channels/feishu", feishuConfigure(h))
 	api.GET("/sandbox/status", getSandboxStatus(h))
 	api.GET("/browser/status", getBrowserStatus(h))
 	api.GET("/model-configs", getModelConfigs(h))

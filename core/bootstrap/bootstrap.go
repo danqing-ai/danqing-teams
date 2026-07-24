@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"danqing-teams/core/adapter/config"
+	"danqing-teams/core/adapter/feishu"
 	"danqing-teams/core/adapter/llm"
 	gitmarket "danqing-teams/core/adapter/market/git"
 	"danqing-teams/core/domain"
@@ -51,6 +52,8 @@ type Core struct {
 	TurnLogs      *service.TurnLogManager
 	MCPServers    *service.MCPManager
 	Weixin        *service.WeixinBridge
+	Feishu        *service.FeishuBridge
+	Channels      *service.ChannelManager
 }
 
 func New(cfg Config) *Core {
@@ -184,9 +187,25 @@ func New(cfg Config) *Core {
 	eng.RegisterTool(&builtin.MemoryRead{Store: st.Memories(), TopK: memTopK})
 	eng.RecoverRunning(context.Background())
 
-	weixin := service.NewWeixinBridge(st, sessions, pm, configManager)
-	if err := weixin.SyncFromConfig(context.Background()); err != nil {
-		// Non-fatal: channel may be disabled or incomplete.
+	weixinPeer := service.NewWeixinPeerStore(st)
+	feishuPeer := service.NewFeishuPeerStore(st, configManager)
+	peers := service.NewMultiplexPeerStore(map[port.ChannelType]port.ChannelPeerStore{
+		port.ChannelWeixin: weixinPeer,
+		port.ChannelFeishu: feishuPeer,
+	})
+	defaults := service.NewConfigChannelDefaults(configManager)
+	ingress := service.NewChannelIngress(sessions, pm, peers, defaults)
+	channels := service.NewChannelManager(ingress)
+
+	weixin := service.NewWeixinBridge(st, sessions, pm, configManager, ingress)
+	channels.RegisterRuntime(weixin)
+
+	feishuAdapter := feishu.NewAdapter(appCfg.Channels.Feishu)
+	feishuBridge := service.NewFeishuBridge(configManager, feishuAdapter, ingress)
+	channels.RegisterRuntime(feishuBridge)
+
+	if err := channels.SyncAll(context.Background()); err != nil {
+		// Non-fatal: channels may be disabled or incomplete.
 		_ = err
 	}
 
@@ -208,15 +227,19 @@ func New(cfg Config) *Core {
 		TurnLogs:      turnLogManager,
 		MCPServers:    mcpManager,
 		Weixin:        weixin,
+		Channels:      channels,
+		Feishu:        feishuBridge,
 	}
 }
 
-// Close releases runtime resources (headless browser sessions and Weixin bridge).
+// Close releases runtime resources (headless browser sessions and channel bridges).
 func (c *Core) Close() error {
 	if c == nil {
 		return nil
 	}
-	if c.Weixin != nil {
+	if c.Channels != nil {
+		c.Channels.StopAll()
+	} else if c.Weixin != nil {
 		c.Weixin.Stop()
 	}
 	if c.Browser == nil {

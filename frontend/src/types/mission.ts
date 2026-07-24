@@ -238,6 +238,15 @@ export interface ConfigFile {
       defaultModelId?: string
       autoApprove?: boolean
     }
+    feishu?: {
+      enabled: boolean
+      defaultAgentId?: string
+      defaultModelId?: string
+      autoApprove?: boolean
+      domain?: string
+      appId?: string
+      projectId?: string
+    }
   }
 }
 

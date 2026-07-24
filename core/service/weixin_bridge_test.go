@@ -56,7 +56,7 @@ func TestMigrateAccountProjectsOnce(t *testing.T) {
 	loader := config.NewLoader(cfgPath)
 	cm := service.NewConfigManager(loader)
 	pm := service.NewProjectManager(st, dir)
-	bridge := service.NewWeixinBridge(st, service.NewSessionManager(st, nil, nil), pm, cm)
+	bridge := testWeixinBridge(st, pm, cm)
 
 	proj, err := pm.Create(context.Background(), domain.CreateProjectRequest{Name: "Biz"})
 	if err != nil {
@@ -112,7 +112,7 @@ func TestSetAccountProject(t *testing.T) {
 	loader := config.NewLoader(filepath.Join(dir, "config.yaml"))
 	cm := service.NewConfigManager(loader)
 	pm := service.NewProjectManager(st, dir)
-	bridge := service.NewWeixinBridge(st, service.NewSessionManager(st, nil, nil), pm, cm)
+	bridge := testWeixinBridge(st, pm, cm)
 
 	proj, err := pm.Create(context.Background(), domain.CreateProjectRequest{Name: "A"})
 	if err != nil {
@@ -170,7 +170,7 @@ func TestWeixinLoginConfirmed(t *testing.T) {
 	loader := config.NewLoader(filepath.Join(dir, "config.yaml"))
 	cm := service.NewConfigManager(loader)
 	pm := service.NewProjectManager(st, dir)
-	bridge := service.NewWeixinBridge(st, service.NewSessionManager(st, nil, nil), pm, cm)
+	bridge := testWeixinBridge(st, pm, cm)
 	client := ilink.NewClient()
 	client.HTTP = srv.Client()
 	client.BaseURL = srv.URL

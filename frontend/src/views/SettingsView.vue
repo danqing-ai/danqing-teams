@@ -8,6 +8,7 @@ import { useRuntimeConfigStore } from '@/stores/runtimeConfig'
 import { useMarketConfigStore } from '@/stores/marketConfig'
 import { useModelConfigStore } from '@/stores/modelLimits'
 import { useWeixinStore } from '@/stores/weixin'
+import { useFeishuStore } from '@/stores/feishu'
 import { useSessionsStore } from '@/stores/sessions'
 import { useProjectsStore } from '@/stores/projects'
 import { useThemeStore, THEME_OPTIONS } from '@/stores/theme'
@@ -18,7 +19,7 @@ import { useAppUpdater } from '@/composables/useAppUpdater'
 import { isTauriRuntime } from '@/utils/desktop'
 import type { LLMProviderType, LLMProviderConfig, LLMModelRef, LLMProviderPreset, SearchProvider, ModelConfig, ConfigMarketSection, MarketSourceConfig } from '@/types/mission'
 
-type SettingsTab = 'runtime' | 'models' | 'modelConfig' | 'search' | 'market' | 'weixin' | 'appearance' | 'about'
+type SettingsTab = 'runtime' | 'models' | 'modelConfig' | 'search' | 'market' | 'weixin' | 'feishu' | 'appearance' | 'about'
 
 const { t } = useI18n()
 const activeTab = ref<SettingsTab>('models')
@@ -28,6 +29,7 @@ const runtimeConfig = useRuntimeConfigStore()
 const marketConfig = useMarketConfigStore()
 const modelConfig = useModelConfigStore()
 const weixin = useWeixinStore()
+const feishu = useFeishuStore()
 const sessions = useSessionsStore()
 const projects = useProjectsStore()
 const themeStore = useThemeStore()
@@ -42,6 +44,16 @@ const weixinLoginProjectId = ref('')
 const weixinPolling = ref(false)
 const showWeixinAddDialog = ref(false)
 const weixinAddCancelled = ref(false)
+const feishuForm = ref({
+  enabled: false,
+  defaultAgentId: '',
+  defaultModelId: '',
+  autoApprove: true,
+  domain: 'feishu' as 'feishu' | 'lark',
+  appId: '',
+  appSecret: '',
+  projectId: '',
+})
 const {
   appVersion,
   status: updaterStatus,
@@ -221,6 +233,7 @@ onMounted(async () => {
     sessions.loadCatalog(),
     projects.loadProjects(),
     weixin.refreshStatus(),
+    feishu.refreshStatus(),
   ])
   if (!weixinLoginProjectId.value && projects.sortedProjects.length) {
     weixinLoginProjectId.value = projects.sortedProjects[0].id
@@ -257,6 +270,23 @@ onMounted(async () => {
   } else if (sessions.agents.length) {
     weixinForm.value.defaultAgentId = sessions.agents[0].id
   }
+  if (feishu.status) {
+    feishuForm.value = {
+      enabled: feishu.status.enabled,
+      defaultAgentId: feishu.status.defaultAgentId || sessions.agents[0]?.id || '',
+      defaultModelId: feishu.status.defaultModelId || '',
+      autoApprove: feishu.status.autoApprove !== false,
+      domain: (feishu.status.domain === 'lark' ? 'lark' : 'feishu'),
+      appId: feishu.status.appId || '',
+      appSecret: '',
+      projectId: feishu.status.projectId || projects.sortedProjects[0]?.id || '',
+    }
+  } else if (sessions.agents.length) {
+    feishuForm.value.defaultAgentId = sessions.agents[0].id
+    if (!feishuForm.value.projectId && projects.sortedProjects.length) {
+      feishuForm.value.projectId = projects.sortedProjects[0].id
+    }
+  }
 })
 
 async function handleSaveWeixin() {
@@ -278,6 +308,45 @@ async function handleSaveWeixin() {
     toast.success(t('settings.weixinSaved'))
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('settings.weixinSaveFailed'))
+  }
+}
+
+async function handleSaveFeishu() {
+  if (feishuForm.value.enabled && !feishuForm.value.defaultAgentId) {
+    toast.warning(t('settings.feishuAgentRequired'))
+    return
+  }
+  if (feishuForm.value.enabled && !feishuForm.value.defaultModelId) {
+    toast.warning(t('settings.feishuModelRequired'))
+    return
+  }
+  if (feishuForm.value.enabled && !feishuForm.value.projectId) {
+    toast.warning(t('settings.feishuProjectRequired'))
+    return
+  }
+  if (feishuForm.value.enabled && !feishuForm.value.appId) {
+    toast.warning(t('settings.feishuAppRequired'))
+    return
+  }
+  if (feishuForm.value.enabled && !feishuForm.value.appSecret && !feishu.status?.hasAppSecret) {
+    toast.warning(t('settings.feishuSecretRequired'))
+    return
+  }
+  try {
+    await feishu.configure({
+      enabled: feishuForm.value.enabled,
+      defaultAgentId: feishuForm.value.defaultAgentId,
+      defaultModelId: feishuForm.value.defaultModelId,
+      autoApprove: feishuForm.value.autoApprove,
+      domain: feishuForm.value.domain,
+      appId: feishuForm.value.appId || undefined,
+      appSecret: feishuForm.value.appSecret || undefined,
+      projectId: feishuForm.value.projectId || undefined,
+    })
+    feishuForm.value.appSecret = ''
+    toast.success(t('settings.feishuSaved'))
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('settings.feishuSaveFailed'))
   }
 }
 
@@ -675,6 +744,7 @@ const menuItems = computed(() => [
   { id: 'search' as SettingsTab, label: t('settings.search'), icon: Search },
   { id: 'runtime' as SettingsTab, label: t('settings.runtime'), icon: Setting },
   { id: 'weixin' as SettingsTab, label: t('settings.weixin'), icon: Monitor },
+  { id: 'feishu' as SettingsTab, label: t('settings.feishu'), icon: Monitor },
   { id: 'market' as SettingsTab, label: t('settings.market'), icon: Search },
   { id: 'appearance' as SettingsTab, label: t('settings.appearance'), icon: Brush },
   { id: 'about' as SettingsTab, label: t('settings.about'), icon: Monitor },
@@ -714,7 +784,7 @@ const updaterStatusText = computed(() => {
 })
 
 const hasFooterActions = computed(() => {
-  return ['runtime', 'search', 'market', 'models', 'modelConfig', 'weixin'].includes(activeTab.value)
+  return ['runtime', 'search', 'market', 'models', 'modelConfig', 'weixin', 'feishu'].includes(activeTab.value)
 })
 </script>
 
@@ -1140,6 +1210,103 @@ const hasFooterActions = computed(() => {
         </div>
       </div>
 
+      <div v-else-if="activeTab === 'feishu'" class="settings-section">
+        <header class="settings-section__head">
+          <h2>{{ $t('settings.feishu') }}</h2>
+          <p>{{ $t('settings.feishuDesc') }}</p>
+        </header>
+
+        <div v-if="feishu.loading && !feishu.status" class="settings-empty settings-empty--skeleton">
+          <Skeleton variant="title" width="30%" />
+          <Skeleton variant="card" width="100%" />
+        </div>
+
+        <div v-else class="settings-form">
+          <div class="settings-form-group">
+            <h3 class="settings-form-group__title">{{ $t('settings.feishuChannel') }}</h3>
+            <p class="settings-form-group__desc">{{ $t('settings.feishuChannelDesc') }}</p>
+            <label class="settings-field settings-field--switch">
+              <span class="settings-field__label">{{ $t('settings.feishuEnable') }}</span>
+              <DqSwitch
+                :model-value="feishuForm.enabled"
+                size="small"
+                @update:model-value="(v: boolean) => feishuForm.enabled = v"
+              />
+            </label>
+            <div v-if="feishu.status" class="settings-sandbox-status">
+              <span class="settings-field__label">{{ $t('settings.feishuRunning') }}</span>
+              <span class="settings-sandbox-status__value">{{ feishu.status.running ? $t('common.yes') : $t('common.no') }}</span>
+            </div>
+            <div class="settings-field">
+              <span class="settings-field__label">{{ $t('settings.feishuDomain') }}</span>
+              <DqSelect v-model="feishuForm.domain">
+                <DqOption value="feishu" :label="$t('settings.feishuDomainFeishu')" />
+                <DqOption value="lark" :label="$t('settings.feishuDomainLark')" />
+              </DqSelect>
+            </div>
+            <div class="settings-field">
+              <span class="settings-field__label">{{ $t('settings.weixinDefaultAgent') }}</span>
+              <DqSelect v-model="feishuForm.defaultAgentId" :placeholder="$t('settings.weixinSelectAgent')">
+                <DqOption
+                  v-for="a in sessions.agents"
+                  :key="a.id"
+                  :value="a.id"
+                  :label="a.name || a.id"
+                />
+              </DqSelect>
+            </div>
+            <div class="settings-field">
+              <span class="settings-field__label">{{ $t('settings.weixinDefaultModel') }}</span>
+              <DqSelect v-model="feishuForm.defaultModelId" :placeholder="$t('settings.weixinSelectModel')">
+                <DqOption
+                  v-for="m in llm.models"
+                  :key="m.id"
+                  :value="m.id"
+                  :label="m.id"
+                />
+              </DqSelect>
+            </div>
+            <div class="settings-field">
+              <span class="settings-field__label">{{ $t('settings.feishuProject') }}</span>
+              <DqSelect v-model="feishuForm.projectId" :placeholder="$t('settings.weixinSelectProject')">
+                <DqOption
+                  v-for="p in projects.sortedProjects"
+                  :key="p.id"
+                  :value="p.id"
+                  :label="p.name"
+                />
+              </DqSelect>
+            </div>
+            <label class="settings-field settings-field--switch">
+              <span class="settings-field__label">{{ $t('settings.weixinAutoApprove') }}</span>
+              <DqSwitch
+                :model-value="feishuForm.autoApprove"
+                size="small"
+                @update:model-value="(v: boolean) => feishuForm.autoApprove = v"
+              />
+            </label>
+          </div>
+
+          <div class="settings-form-group">
+            <h3 class="settings-form-group__title">{{ $t('settings.feishuCredentials') }}</h3>
+            <p class="settings-form-group__desc">{{ $t('settings.feishuCredentialsDesc') }}</p>
+            <label class="settings-field">
+              <span class="settings-field__label">App ID</span>
+              <DqInput v-model="feishuForm.appId" placeholder="cli_xxx" />
+            </label>
+            <label class="settings-field">
+              <span class="settings-field__label">App Secret</span>
+              <DqInput
+                v-model="feishuForm.appSecret"
+                type="password"
+                :placeholder="feishu.status?.hasAppSecret ? $t('settings.feishuSecretKept') : ''"
+              />
+            </label>
+            <p class="settings-form-group__desc">{{ $t('settings.feishuWebsocketHint') }}</p>
+          </div>
+        </div>
+      </div>
+
       <div v-else-if="activeTab === 'models'" class="settings-section settings-section--wide">
         <header class="settings-section__head">
           <h2>{{ $t('settings.models') }}</h2>
@@ -1493,6 +1660,9 @@ const hasFooterActions = computed(() => {
           </DqButton>
           <DqButton v-else-if="activeTab === 'weixin'" type="primary" :disabled="weixin.saving" @click="handleSaveWeixin">
             {{ weixin.saving ? $t('common.saving') : $t('common.save_') }}
+          </DqButton>
+          <DqButton v-else-if="activeTab === 'feishu'" type="primary" :disabled="feishu.saving" @click="handleSaveFeishu">
+            {{ feishu.saving ? $t('common.saving') : $t('common.save_') }}
           </DqButton>
           <DqButton v-else-if="activeTab === 'search'" type="primary" :disabled="searchConfig.saving" @click="handleSaveSearch">
             {{ searchConfig.saving ? $t('common.saving') : $t('common.save_') }}

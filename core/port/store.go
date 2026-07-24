@@ -19,7 +19,16 @@ type Repository interface {
 	Memories()       MemoryRepo
 	WeixinAccounts() WeixinAccountRepo
 	WeixinBindings() WeixinBindingRepo
+	ChannelBindings() ChannelBindingRepo
 	AppMeta()        AppMetaRepo
+}
+
+// ChannelBindingRepo maps (channel, account, peer) → Teams session for non-Weixin channels.
+type ChannelBindingRepo interface {
+	GetByPeer(ctx context.Context, channelType, accountID, peerID string) (domain.ChannelBinding, error)
+	Upsert(ctx context.Context, b domain.ChannelBinding) error
+	UpdateMeta(ctx context.Context, channelType, accountID, peerID string, meta map[string]string) error
+	DeleteByAccount(ctx context.Context, channelType, accountID string) error
 }
 
 // WeixinAccountRepo persists logged-in iLink bot accounts.
